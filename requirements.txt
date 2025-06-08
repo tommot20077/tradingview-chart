@@ -1,0 +1,7 @@
+binance_futures_connector==4.1.0
+fastapi==0.115.12
+influxdb3_python==0.13.0
+numpy==2.3.0
+pandas==2.3.0
+python-dotenv==1.1.0
+uvicorn==0.34.3

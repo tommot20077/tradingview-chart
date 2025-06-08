@@ -1,0 +1,28 @@
+# Test your FastAPI endpoints
+
+### Get API information
+GET http://127.0.0.1:8000/
+Accept: application/json
+
+### Health check
+GET http://127.0.0.1:8000/health
+Accept: application/json
+
+### Get configuration
+GET http://127.0.0.1:8000/config
+Accept: application/json
+
+### Subscribe to BTCUSDT
+POST http://127.0.0.1:8000/symbol/btcusdt/subscribe?interval=1m
+Accept: application/json
+
+### Subscribe to ETHUSDT
+POST http://127.0.0.1:8000/symbol/ethusdt/subscribe?interval=1m
+Accept: application/json
+
+### Unsubscribe from BTCUSDT
+POST http://127.0.0.1:8000/symbol/btcusdt/unsubscribe?interval=1m
+Accept: application/json
+
+### WebSocket connection test (use a WebSocket client)
+# ws://127.0.0.1:8000/ws/price
