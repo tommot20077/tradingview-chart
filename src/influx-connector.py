@@ -7,29 +7,45 @@ import os
 from datetime import datetime
 from influxdb_client_3 import InfluxDBClient3, Point, InfluxDBError, WriteOptions, write_client_options
 from dotenv import load_dotenv
+import logging
 
-# Load environment variables
+# 設定日誌記錄
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# 載入環境變數
 load_dotenv()
 
 
-def test_influxdb_connection():
-    """Test InfluxDB connection and write sample data"""
+def test_influxdb_connection() -> bool:
+    """
+    測試 InfluxDB 連接並寫入範例數據。
 
-    # Get configuration from environment
+    此函數從環境變數中獲取 InfluxDB 配置，嘗試連接到資料庫，
+    並寫入兩個測試數據點。它還配置了寫入成功、失敗和重試的回調函數。
+
+    輸入:
+        無。
+
+    輸出:
+        bool: 如果連接和寫入測試成功則為 True，否則為 False。
+    """
+    logging.info("啟動 InfluxDB 連接測試。")
+
+    # 從環境變數獲取配置
     host = os.getenv('INFLUXDB_HOST')
     token = os.getenv('INFLUXDB_TOKEN')
     database = os.getenv('INFLUXDB_DATABASE')
 
     if not all([host, token, database]):
-        print("Error: Missing InfluxDB configuration in .env file")
-        print("Required: INFLUXDB_HOST, INFLUXDB_TOKEN, INFLUXDB_DATABASE")
+        logging.error("錯誤: .env 檔案中缺少 InfluxDB 配置。")
+        logging.error("必需: INFLUXDB_HOST, INFLUXDB_TOKEN, INFLUXDB_DATABASE")
         return False
 
-    print(f"Testing connection to InfluxDB:")
-    print(f"  Host: {host}")
-    print(f"  Database: {database}")
+    logging.info(f"正在測試連接到 InfluxDB:")
+    logging.info(f"  主機: {host}")
+    logging.info(f"  資料庫: {database}")
 
-    # Create test points
+    # 建立測試數據點
     test_points = [
         Point("crypto_price_test")
         .tag("symbol", "BTCUSDT")
@@ -54,17 +70,46 @@ def test_influxdb_connection():
         .time(datetime.now())
     ]
 
-    # Configure callbacks
-    def success_callback(self, data: str):
-        print(f"✅ Successfully wrote test data to InfluxDB ({len(data)} bytes)")
+    # 配置回調函數
+    def success_callback(data: str):
+        """
+        寫入成功時的回調函數。
 
-    def error_callback(self, data: str, exception: InfluxDBError):
-        print(f"❌ Failed to write test data: {exception}")
+        輸入:
+            data (str): 成功寫入的資料字串。
 
-    def retry_callback(self, data: str, exception: InfluxDBError):
-        print(f"🔄 Retrying write to InfluxDB: {exception}")
+        輸出:
+            無。
+        """
+        logging.info(f"✅ 成功寫入測試數據到 InfluxDB ({len(data)} 位元組)")
 
-    # Configure write options
+    def error_callback(data: str, exception: InfluxDBError):
+        """
+        寫入失敗時的回調函數。
+
+        輸入:
+            data (str): 寫入失敗的資料字串。
+            exception (InfluxDBError): 寫入失敗時的異常。
+
+        輸出:
+            無。
+        """
+        logging.error(f"❌ 寫入測試數據失敗: {exception}")
+
+    def retry_callback(data: str, exception: InfluxDBError):
+        """
+        寫入重試時的回調函數。
+
+        輸入:
+            data (str): 正在重試寫入的資料字串。
+            exception (InfluxDBError): 重試時的異常。
+
+        輸出:
+            無。
+        """
+        logging.warning(f"🔄 正在重試寫入到 InfluxDB: {exception}")
+
+    # 配置寫入選項
     write_options = WriteOptions(
         batch_size=10,
         flush_interval=1_000,
@@ -83,7 +128,7 @@ def test_influxdb_connection():
     )
 
     try:
-        # Test connection and write data
+        # 測試連接並寫入數據
         with InfluxDBClient3(
                 host=host,
                 token=token,
@@ -91,32 +136,48 @@ def test_influxdb_connection():
                 write_client_options=wco
         ) as client:
 
-            print("🔗 Connected to InfluxDB successfully")
+            logging.info("🔗 成功連接到 InfluxDB")
 
-            # Write test points
-            print("📝 Writing test data...")
+            # 寫入測試數據點
+            logging.info("📝 正在寫入測試數據...")
             client.write(test_points, write_precision='s')
 
-            print("✅ Test completed successfully!")
+            logging.info("✅ 測試完成成功！")
             return True
 
     except Exception as e:
-        print(f"❌ Error connecting to InfluxDB: {e}")
+        logging.error(f"❌ 連接到 InfluxDB 時發生錯誤: {e}")
         return False
 
 
 def query_test_data():
-    """Query and display test data from InfluxDB"""
+    """
+    查詢並顯示 InfluxDB 中的測試數據。
 
-    # Get configuration from environment
+    此函數從環境變數中獲取 InfluxDB 配置，連接到資料庫，
+    並查詢最近一小時內寫入的測試數據。
+
+    輸入:
+        無。
+
+    輸出:
+        無。
+    """
+    logging.info("啟動查詢測試數據。")
+
+    # 從環境變數獲取配置
     host = os.getenv('INFLUXDB_HOST')
     token = os.getenv('INFLUXDB_TOKEN')
     database = os.getenv('INFLUXDB_DATABASE')
 
+    if not all([host, token, database]):
+        logging.error("錯誤: 缺少 InfluxDB 配置，無法查詢數據。")
+        return
+
     try:
         with InfluxDBClient3(host=host, token=token, database=database) as client:
 
-            # Query recent test data
+            # 查詢最近的測試數據
             query = f"""
             SELECT *
             FROM crypto_price_test
@@ -125,30 +186,30 @@ def query_test_data():
             LIMIT 10
             """
 
-            print("🔍 Querying recent test data...")
+            logging.info("🔍 正在查詢最近的測試數據...")
             result = client.query(query=query, language='sql')
 
             if result:
-                print("📊 Recent test data:")
+                logging.info("📊 最近的測試數據:")
                 for row in result:
-                    print(f"  {row}")
+                    logging.info(f"  {row}")
             else:
-                print("📭 No test data found")
+                logging.info("📭 未找到測試數據。")
 
     except Exception as e:
-        print(f"❌ Error querying data: {e}")
+        logging.error(f"❌ 查詢數據時發生錯誤: {e}")
 
 
 if __name__ == "__main__":
-    print("InfluxDB Connection Test Utility")
-    print("=" * 40)
+    logging.info("InfluxDB 連接測試工具")
+    logging.info("=" * 40)
 
-    # Test connection and write
+    # 測試連接並寫入
     if test_influxdb_connection():
-        print("\n" + "=" * 40)
+        logging.info("\n" + "=" * 40)
 
-        # Query test data
+        # 查詢測試數據
         query_test_data()
 
-    print("\n" + "=" * 40)
-    print("Test completed. Check your InfluxDB dashboard for the test data.")
+    logging.info("\n" + "=" * 40)
+    logging.info("測試完成。請檢查您的 InfluxDB 儀表板以查看測試數據。")

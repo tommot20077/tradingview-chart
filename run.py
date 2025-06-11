@@ -14,22 +14,19 @@ from pathlib import Path
 def run_basic_server():
     """運行基本版本的服務器"""
     print("🚀 Starting Basic Crypto Price Stream Server...")
-    os.chdir("")
-    subprocess.run([sys.executable, "main.py"])
+    subprocess.run([sys.executable, "./src/main.py"])
 
 
 def run_enhanced_server():
     """運行增強版本的服務器"""
     print("🚀 Starting Enhanced Crypto Price Stream Server...")
-    os.chdir("")
-    subprocess.run([sys.executable, "enhanced_main.py"])
+    subprocess.run([sys.executable, "./src/enhanced_main.py"])
 
 
 def test_influxdb():
     """測試 InfluxDB 連接"""
     print("🔧 Testing InfluxDB Connection...")
-    os.chdir("")
-    subprocess.run([sys.executable, "influx-connector.py"])
+    subprocess.run([sys.executable, "./src/influx-connector.py"])
 
 
 def run_data_analyzer():
@@ -68,7 +65,7 @@ def check_environment():
         env_content = f.read()
         for var in required_env_vars:
             if f"{var}=" not in env_content or f"{var}=" in env_content and not \
-            env_content.split(f"{var}=")[1].split('\n')[0].strip():
+                    env_content.split(f"{var}=")[1].split('\n')[0].strip():
                 missing_vars.append(var)
 
     if missing_vars:

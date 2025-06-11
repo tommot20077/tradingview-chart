@@ -7,9 +7,25 @@ from typing import Optional, Callable
 from binance.websocket.um_futures.websocket_client import UMFuturesWebsocketClient
 from influxdb_client_3 import InfluxDBClient3, Point, InfluxDBError, WriteOptions, write_client_options
 
+# 設定日誌記錄
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
 
 @dataclass
 class PriceData:
+    """
+    用於儲存加密貨幣價格資料的資料類別。
+
+    屬性:
+        symbol (str): 交易對符號 (例如 'BTCUSDT')。
+        price (float): 當前價格 (通常是收盤價)。
+        timestamp (datetime): 資料的時間戳記。
+        open_price (float): K 線的開盤價。
+        high_price (float): K 線的最高價。
+        low_price (float): K 線的最低價。
+        close_price (float): K 線的收盤價。
+        volume (float): K 線的交易量。
+    """
     symbol: str
     price: float
     timestamp: datetime
@@ -21,24 +37,76 @@ class PriceData:
 
 
 class InfluxDBManager:
+    """
+    管理與 InfluxDB 資料庫的連接和資料寫入。
+    """
+
     def __init__(self, host: str, token: str, database: str):
+        """
+        初始化 InfluxDBManager 實例。
+
+        輸入:
+            host (str): InfluxDB 服務器的主機位址。
+            token (str): 用於 InfluxDB 認證的令牌。
+            database (str): 要連接的 InfluxDB 資料庫名稱。
+        """
         self.host = host
         self.token = token
         self.database = database
         self.client: Optional[InfluxDBClient3] = None
         self._setup_write_options()
+        logging.info(f"InfluxDBManager 初始化完成，主機: {self.host}, 資料庫: {self.database}")
 
     def _setup_write_options(self):
-        """Configure InfluxDB write options for optimal performance"""
+        """
+        配置 InfluxDB 寫入選項以優化性能。
+        此方法設定批次寫入、刷新間隔、重試策略等。
 
-        def success_callback(self, data: str):
-            logging.info(f"Successfully wrote batch to InfluxDB: {len(data)} bytes")
+        輸入:
+            self (InfluxDBManager): InfluxDBManager 實例本身。
 
-        def error_callback(self, data: str, exception: InfluxDBError):
-            logging.error(f"Failed writing batch to InfluxDB: {exception}")
+        輸出:
+            無。
+        """
+        logging.info("設定 InfluxDB 寫入選項...")
 
-        def retry_callback(self, data: str, exception: InfluxDBError):
-            logging.warning(f"Retrying write to InfluxDB: {exception}")
+        def success_callback(data: str):
+            """
+            批次寫入成功時的回調函數。
+
+            輸入:
+                data (str): 成功寫入的資料字串。
+
+            輸出:
+                無。
+            """
+            logging.info(f"成功寫入批次資料到 InfluxDB: {len(data)} 位元組")
+
+        def error_callback(data: str, exception: InfluxDBError):
+            """
+            批次寫入失敗時的回調函數。
+
+            輸入:
+                data (str): 寫入失敗的資料字串。
+                exception (InfluxDBError): 寫入失敗時的異常。
+
+            輸出:
+                無。
+            """
+            logging.error(f"寫入批次資料到 InfluxDB 失敗: {exception}")
+
+        def retry_callback(data: str, exception: InfluxDBError):
+            """
+            批次寫入重試時的回調函數。
+
+            輸入:
+                data (str): 正在重試寫入的資料字串。
+                exception (InfluxDBError): 重試時的異常。
+
+            輸出:
+                無。
+            """
+            logging.warning(f"重試寫入到 InfluxDB: {exception}")
 
         write_options = WriteOptions(
             batch_size=100,
@@ -56,9 +124,22 @@ class InfluxDBManager:
             retry_callback=retry_callback,
             write_options=write_options
         )
+        logging.info("InfluxDB 寫入選項設定完成。")
 
     def connect(self):
-        """Connect to InfluxDB"""
+        """
+        連接到 InfluxDB 資料庫。
+
+        輸入:
+            self (InfluxDBManager): InfluxDBManager 實例本身。
+
+        輸出:
+            無。
+
+        異常:
+            Exception: 如果連接失敗則拋出異常。
+        """
+        logging.info("嘗試連接到 InfluxDB...")
         try:
             self.client = InfluxDBClient3(
                 host=self.host,
@@ -66,22 +147,42 @@ class InfluxDBManager:
                 database=self.database,
                 write_client_options=self.write_client_options
             )
-            logging.info(f"Connected to InfluxDB at {self.host}")
+            logging.info(f"成功連接到 InfluxDB，主機: {self.host}")
         except Exception as e:
-            logging.error(f"Failed to connect to InfluxDB: {e}")
+            logging.error(f"連接到 InfluxDB 失敗: {e}")
             raise
 
     def disconnect(self):
-        """Disconnect from InfluxDB"""
+        """
+        從 InfluxDB 資料庫斷開連接。
+
+        輸入:
+            self (InfluxDBManager): InfluxDBManager 實例本身。
+
+        輸出:
+            無。
+        """
+        logging.info("嘗試從 InfluxDB 斷開連接...")
         if self.client:
             self.client.close()
             self.client = None
-            logging.info("Disconnected from InfluxDB")
+            logging.info("已從 InfluxDB 斷開連接。")
+        else:
+            logging.info("InfluxDB 客戶端未連接，無需斷開。")
 
     def write_price_data(self, price_data: PriceData):
-        """Write price data to InfluxDB"""
+        """
+        將價格資料寫入 InfluxDB。
+
+        輸入:
+            self (InfluxDBManager): InfluxDBManager 實例本身。
+            price_data (PriceData): 包含要寫入的價格資料的 PriceData 物件。
+
+        輸出:
+            無。
+        """
         if not self.client:
-            logging.error("InfluxDB client not connected")
+            logging.error("InfluxDB 客戶端未連接，無法寫入資料。")
             return
 
         try:
@@ -96,100 +197,163 @@ class InfluxDBManager:
                      .time(price_data.timestamp))
 
             self.client.write([point])
+            logging.debug(f"已將 {price_data.symbol} 的價格資料寫入 InfluxDB。")
         except Exception as e:
-            logging.error(f"Failed to write price data to InfluxDB: {e}")
+            logging.error(f"寫入價格資料到 InfluxDB 失敗: {e}")
 
 
 class CryptoPriceProvider:
+    """
+    從幣安 WebSocket 獲取加密貨幣價格資料並將其儲存到 InfluxDB。
+    """
+
     def __init__(self, influxdb_manager: InfluxDBManager,
                  message_callback: Optional[Callable[[str], None]] = None):
+        """
+        初始化 CryptoPriceProvider 實例。
+
+        輸入:
+            influxdb_manager (InfluxDBManager): 用於管理 InfluxDB 連接和寫入的實例。
+            message_callback (Optional[Callable[[str], None]]): 可選的回調函數，用於處理接收到的原始 WebSocket 訊息。
+        """
         self.influxdb_manager = influxdb_manager
         self.message_callback = message_callback
         self.binance_client: Optional[UMFuturesWebsocketClient] = None
         self.subscribed_symbols = set()
 
-        # Setup logging
-        logging.basicConfig(level=logging.INFO)
-        self.logger = logging.getLogger(__name__)
+        logging.info("CryptoPriceProvider 初始化完成。")
 
     def _parse_kline_data(self, message: str) -> Optional[PriceData]:
-        """Parse Binance kline message and extract price data"""
+        """
+        解析幣安 K 線 WebSocket 訊息並提取價格資料。
+
+        輸入:
+            message (str): 來自幣安 WebSocket 的原始 JSON 訊息字串。
+
+        輸出:
+            Optional[PriceData]: 如果解析成功則返回 PriceData 物件，否則返回 None。
+        """
         try:
             data = json.loads(message)
 
             if 'k' not in data:
+                logging.debug("接收到的訊息不包含 K 線資料。")
                 return None
 
             kline = data['k']
 
-            return PriceData(
+            price_data = PriceData(
                 symbol=kline['s'],
-                price=float(kline['c']),  # Close price as current price
-                timestamp=datetime.fromtimestamp(kline['T'] / 1000),  # Close time
+                price=float(kline['c']),  # 收盤價作為當前價格
+                timestamp=datetime.fromtimestamp(kline['T'] / 1000),  # 收盤時間
                 open_price=float(kline['o']),
                 high_price=float(kline['h']),
                 low_price=float(kline['l']),
                 close_price=float(kline['c']),
                 volume=float(kline['v'])
             )
+            logging.debug(f"成功解析 K 線資料: {price_data.symbol} @ {price_data.price}")
+            return price_data
         except (json.JSONDecodeError, KeyError, ValueError) as e:
-            self.logger.error(f"Failed to parse kline data: {e}")
+            logging.error(f"解析 K 線資料失敗: {e}，原始訊息: {message}")
             return None
 
     def _handle_binance_message(self, ws, message: str):
-        """Handle incoming Binance WebSocket messages"""
+        """
+        處理來自幣安 WebSocket 的傳入訊息。
+        此方法解析訊息，將價格資料寫入 InfluxDB，並將原始訊息轉發給回調函數（如果已提供）。
+
+        輸入:
+            ws: WebSocket 連接實例 (由 binance-connector 庫提供)。
+            message (str): 來自幣安 WebSocket 的原始訊息字串。
+
+        輸出:
+            無。
+        """
         try:
-            # Parse price data
+            # 解析價格資料
             price_data = self._parse_kline_data(message)
 
             if price_data:
-                # Store to InfluxDB
+                # 儲存到 InfluxDB
                 self.influxdb_manager.write_price_data(price_data)
+                logging.info(f"已處理 {price_data.symbol}: ${price_data.price}")
 
-                self.logger.info(f"Processed {price_data.symbol}: ${price_data.price}")
-
-            # Forward message to callback (for WebSocket broadcasting)
+            # 將訊息轉發給回調函數 (用於 WebSocket 廣播)
             if self.message_callback:
                 self.message_callback(message)
+                logging.debug("訊息已轉發給回調函數。")
 
         except Exception as e:
-            self.logger.error(f"Error handling Binance message: {e}")
+            logging.error(f"處理幣安訊息時發生錯誤: {e}，原始訊息: {message}")
 
     def start(self):
-        """Start the price provider"""
+        """
+        啟動價格提供者。
+        此方法連接到 InfluxDB 並初始化幣安 WebSocket 客戶端。
+
+        輸入:
+            self (CryptoPriceProvider): CryptoPriceProvider 實例本身。
+
+        輸出:
+            無。
+
+        異常:
+            Exception: 如果啟動失敗則拋出異常。
+        """
+        logging.info("啟動 CryptoPriceProvider...")
         try:
-            # Connect to InfluxDB
+            # 連接到 InfluxDB
             self.influxdb_manager.connect()
 
-            # Create Binance WebSocket client
+            # 建立幣安 WebSocket 客戶端
             self.binance_client = UMFuturesWebsocketClient(
                 on_message=self._handle_binance_message
             )
-
-            self.logger.info("CryptoPriceProvider started")
+            logging.info("CryptoPriceProvider 已成功啟動。")
 
         except Exception as e:
-            self.logger.error(f"Failed to start CryptoPriceProvider: {e}")
+            logging.error(f"啟動 CryptoPriceProvider 失敗: {e}")
             raise
 
     def stop(self):
-        """Stop the price provider"""
+        """
+        停止價格提供者。
+        此方法停止幣安 WebSocket 客戶端並斷開與 InfluxDB 的連接。
+
+        輸入:
+            self (CryptoPriceProvider): CryptoPriceProvider 實例本身。
+
+        輸出:
+            無。
+        """
+        logging.info("停止 CryptoPriceProvider...")
         try:
             if self.binance_client:
                 self.binance_client.stop()
                 self.binance_client = None
+                logging.info("幣安 WebSocket 客戶端已停止。")
 
             self.influxdb_manager.disconnect()
-
-            self.logger.info("CryptoPriceProvider stopped")
+            logging.info("CryptoPriceProvider 已成功停止。")
 
         except Exception as e:
-            self.logger.error(f"Error stopping CryptoPriceProvider: {e}")
+            logging.error(f"停止 CryptoPriceProvider 時發生錯誤: {e}")
 
     def subscribe_symbol(self, symbol: str, interval: str = "1m"):
-        """Subscribe to a symbol's price stream"""
+        """
+        訂閱指定交易對的價格串流。
+
+        輸入:
+            self (CryptoPriceProvider): CryptoPriceProvider 實例本身。
+            symbol (str): 要訂閱的交易對符號 (例如 'btcusdt')。
+            interval (str): K 線資料的時間間隔 (例如 '1m', '5m')。預設為 '1m'。
+
+        輸出:
+            無。
+        """
         if not self.binance_client:
-            self.logger.error("Binance client not initialized")
+            logging.error("幣安客戶端未初始化，無法訂閱。")
             return
 
         stream_name = f"{symbol.lower()}@kline_{interval}"
@@ -197,14 +361,24 @@ class CryptoPriceProvider:
         if stream_name not in self.subscribed_symbols:
             self.binance_client.subscribe(stream_name)
             self.subscribed_symbols.add(stream_name)
-            self.logger.info(f"Subscribed to {stream_name}")
+            logging.info(f"已訂閱 {stream_name}")
         else:
-            self.logger.info(f"Already subscribed to {stream_name}")
+            logging.info(f"已訂閱 {stream_name}，無需重複訂閱。")
 
     def unsubscribe_symbol(self, symbol: str, interval: str = "1m"):
-        """Unsubscribe from a symbol's price stream"""
+        """
+        取消訂閱指定交易對的價格串流。
+
+        輸入:
+            self (CryptoPriceProvider): CryptoPriceProvider 實例本身。
+            symbol (str): 要取消訂閱的交易對符號 (例如 'btcusdt')。
+            interval (str): K 線資料的時間間隔 (例如 '1m', '5m')。預設為 '1m'。
+
+        輸出:
+            無。
+        """
         if not self.binance_client:
-            self.logger.error("Binance client not initialized")
+            logging.error("幣安客戶端未初始化，無法取消訂閱。")
             return
 
         stream_name = f"{symbol.lower()}@kline_{interval}"
@@ -212,6 +386,6 @@ class CryptoPriceProvider:
         if stream_name in self.subscribed_symbols:
             self.binance_client.unsubscribe(stream_name)
             self.subscribed_symbols.remove(stream_name)
-            self.logger.info(f"Unsubscribed from {stream_name}")
+            logging.info(f"已取消訂閱 {stream_name}")
         else:
-            self.logger.info(f"Not subscribed to {stream_name}")
+            logging.info(f"未訂閱 {stream_name}，無需取消。")

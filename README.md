@@ -1,164 +1,172 @@
 # 🚀 Enhanced Crypto Price Stream Server
 
-一個強大的即時加密貨幣價格串流服務器，集成 InfluxDB 存儲、數據分析和監控功能，使用 FastAPI 和 WebSockets 建構。
+A powerful real-time cryptocurrency price streaming server integrating InfluxDB storage, data analysis, and monitoring
+capabilities, built with FastAPI and WebSockets.
 
-## ✨ 主要功能
+[查看繁體中文版本](docs/zh-tw/README.md)
 
-- **📈 即時價格串流**: 來自 Binance WebSocket 的即時加密貨幣價格數據
-- **💾 InfluxDB 整合**: 自動存儲價格數據以供歷史分析
-- **🔄 WebSocket API**: 向連接的客戶端即時廣播價格數據
-- **🌐 RESTful 端點**: 簡易的訂閱管理和健康監控
-- **📊 數據分析工具**: 內建的數據分析和統計功能
-- **🖥️ Web 監控面板**: 即時監控和可視化界面
-- **⚙️ 環境配置**: 使用 `.env` 文件的安全配置管理
-- **🏗️ 模組化架構**: 清晰的關注點分離和專用提供者
-- **📋 批次處理**: 優化的 InfluxDB 批次寫入性能
-- **📈 性能監控**: 詳細的統計和性能指標
+---
 
-## 🏗️ 項目架構
+## ✨ Key Features
+
+- **📈 Real-time Price Streaming**: Live cryptocurrency price data from Binance WebSocket
+- **💾 InfluxDB Integration**: Automatic storage of price data for historical analysis
+- **🔄 WebSocket API**: Real-time broadcasting of price data to connected clients
+- **🌐 RESTful Endpoints**: Easy subscription management and health monitoring
+- **📊 Data Analysis Tools**: Built-in data analysis and statistical functions
+- **🖥️ Web Monitoring Dashboard**: Real-time monitoring and visualization interface
+- **⚙️ Environment Configuration**: Secure configuration management using `.env` files
+- **🏗️ Modular Architecture**: Clear separation of concerns with dedicated providers
+- **📋 Batch Processing**: Optimized InfluxDB batch writing performance
+- **📈 Performance Monitoring**: Detailed statistics and performance metrics
+
+## 🏗️ Project Architecture
 
 ```
-📁 項目根目錄
-├── 📄 run.py                      # 統一運行腳本 (推薦使用)
-├── 📄 requirements.txt            # Python 依賴包
-├── 📄 .env                        # 環境變數 (不在 git 中)
-├── 📄 .env.example               # 環境變數範例
-├── 📄 README.md                  # 項目說明文件
-└── 📁 src/                       # 源代碼目錄
-    ├── 📄 main.py                # 基本版 FastAPI 應用
-    ├── 📄 enhanced_main.py       # 增強版 FastAPI 應用 (推薦)
-    ├── 📄 crypto_price_provider.py    # 基本版價格提供者
-    ├── 📄 enhanced_crypto_provider.py # 增強版價格提供者
-    ├── 📄 data_analyzer.py       # 數據分析工具
-    ├── 📄 config.py              # 配置管理
-    ├── 📄 influx-connector.py    # InfluxDB 連接測試工具
-    └── 📄 test_main.http         # API 端點測試
+📁 Project Root
+├── 📄 run.py                      # Unified run script (recommended)
+├── 📄 requirements.txt            # Python dependencies
+├── 📄 .env                        # Environment variables (not in git)
+├── 📄 .env.example               # Example environment variables
+├── 📄 README.md                  # Project documentation
+└── 📁 src/                       # Source code directory
+    ├── 📄 main.py                # Basic FastAPI application
+    ├── 📄 enhanced_main.py       # Enhanced FastAPI application (recommended)
+    ├── 📄 crypto_price_provider.py    # Basic price provider
+    ├── 📄 enhanced_crypto_provider.py # Enhanced price provider
+    ├── 📄 data_analyzer.py       # Data analysis tools
+    ├── 📄 config.py              # Configuration management
+    ├── 📄 influx-connector.py    # InfluxDB connection test utility
+    └── 📄 test_main.http         # API endpoint tests
 ```
 
-### 🔧 核心組件
+### 🔧 Core Components
 
-1. **增強版 CryptoPriceProvider**: 處理 Binance WebSocket 連接和價格數據處理，支持緩存和統計
-2. **增強版 InfluxDBManager**: 管理 InfluxDB 連接和批次數據寫入，支持背景處理
-3. **ConnectionManager**: 管理 WebSocket 客戶端連接和廣播
-4. **DataAnalyzer**: 提供歷史數據分析和統計功能
-5. **Config**: 集中式環境變數配置管理
+1. **Enhanced CryptoPriceProvider**: Handles Binance WebSocket connections and price data processing, supports caching
+   and statistics.
+2. **Enhanced InfluxDBManager**: Manages InfluxDB connections and batch data writing, supports background processing.
+3. **ConnectionManager**: Manages WebSocket client connections and broadcasting.
+4. **DataAnalyzer**: Provides historical data analysis and statistical functions.
+5. **Config**: Centralized environment variable configuration management.
 
-### 📊 版本對比
+### 📊 Version Comparison
 
-| 功能 | 基本版 | 增強版 |
-|------|--------|--------|
-| WebSocket 串流 | ✅ | ✅ |
-| InfluxDB 存儲 | ✅ | ✅ |
-| 批次寫入優化 | ❌ | ✅ |
-| 價格變化計算 | ❌ | ✅ |
-| 統計監控 | ❌ | ✅ |
-| Web 控制面板 | ❌ | ✅ |
-| 數據分析工具 | ❌ | ✅ |
-| 性能緩存 | ❌ | ✅ |
+| Feature                  | Basic Version | Enhanced Version |
+|--------------------------|---------------|------------------|
+| WebSocket Streaming      | ✅             | ✅                |
+| InfluxDB Storage         | ✅             | ✅                |
+| Batch Write Optimization | ❌             | ✅                |
+| Price Change Calculation | ❌             | ✅                |
+| Statistical Monitoring   | ❌             | ✅                |
+| Web Control Panel        | ❌             | ✅                |
+| Data Analysis Tools      | ❌             | ✅                |
+| Performance Caching      | ❌             | ✅                |
 
-## 🚀 快速開始
+## 🚀 Quick Start
 
-### 1. 安裝依賴
+### 1. Install Dependencies
 
 ```bash
-# 使用運行腳本 (推薦)
+# Using the run script (recommended)
 python run.py --install
 
-# 或手動安裝
+# Or manual installation
 pip install -r requirements.txt
 ```
 
-### 2. 配置環境
+### 2. Configure Environment
 
-複製環境變數範例文件並配置設定：
+Copy the example environment variables file and configure settings:
 
 ```bash
 cp .env.example .env
 ```
 
-編輯 `.env` 文件，填入你的實際配置：
+Edit the `.env` file with your actual configuration:
 
 ```env
-# InfluxDB 配置
+# InfluxDB Configuration
 INFLUXDB_HOST=http://your-influxdb-host:8086
 INFLUXDB_TOKEN=your-influxdb-token
 INFLUXDB_DATABASE=your-database-name
 
-# Binance 配置
+# Binance Configuration
 BINANCE_SYMBOL=btcusdt
 BINANCE_INTERVAL=1m
 
-# 服務器配置
+# Server Configuration
 API_HOST=127.0.0.1
 API_PORT=8000
 ```
 
-### 3. 測試 InfluxDB 連接
+### 3. Test InfluxDB Connection
 
-在運行主應用程式之前，測試你的 InfluxDB 連接：
+Before running the main application, test your InfluxDB connection:
 
 ```bash
-# 使用運行腳本
+# Using the run script
 python run.py --test-db
 
-# 或直接運行
+# Or run directly
 cd src && python influx-connector.py
 ```
 
-這將會：
-- 測試與 InfluxDB 實例的連接
-- 寫入樣本數據
-- 查詢並顯示測試數據
+This will:
 
-### 4. 運行服務器
+- Test connection to your InfluxDB instance
+- Write sample data
+- Query and display test data
 
-**推薦方式 - 使用運行腳本：**
+### 4. Run Server
+
+**Recommended way - using the run script:**
 
 ```bash
-# 運行增強版服務器 (推薦)
+# Run enhanced server (recommended)
 python run.py --enhanced
 
-# 或運行基本版服務器
+# Or run basic server
 python run.py --basic
 
-# 檢查項目狀態
+# Check project status
 python run.py --status
 ```
 
-**傳統方式：**
+**Traditional way:**
 
 ```bash
-# 增強版
+# Enhanced version
 cd src && python enhanced_main.py
 
-# 基本版
+# Basic version
 cd src && python main.py
 
-# 或使用 uvicorn
+# Or using uvicorn
 uvicorn src.enhanced_main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-### 5. 訪問 Web 控制面板
+### 5. Access Web Monitoring Dashboard
 
-運行增強版服務器後，在瀏覽器中訪問：
+After running the enhanced server, visit in your browser:
 
 ```
 http://localhost:8000
 ```
 
-你將看到包含以下內容的即時監控面板：
-- 📊 系統統計信息
-- 💰 即時價格顯示  
-- 🔄 連接狀態
-- 📈 性能指標
+You will see a real-time monitoring dashboard with:
 
-### 6. 運行數據分析
+- 📊 System statistics
+- 💰 Live price display
+- 🔄 Connection status
+- 📈 Performance metrics
+
+### 6. Run Data Analysis
 
 ```bash
-# 使用運行腳本
+# Using the run script
 python run.py --analyze
 
-# 或直接運行
+# Or run directly
 cd src && python data_analyzer.py
 ```
 
@@ -195,12 +203,16 @@ curl http://localhost:8000/health
 ```
 
 Response:
+
 ```json
 {
   "status": "healthy",
   "crypto_provider": "running",
   "active_websocket_connections": 2,
-  "subscribed_symbols": ["bnbusdt@kline_1m", "ethusdt@kline_1m"]
+  "subscribed_symbols": [
+    "bnbusdt@kline_1m",
+    "ethusdt@kline_1m"
+  ]
 }
 ```
 
@@ -209,16 +221,16 @@ Response:
 ```javascript
 const ws = new WebSocket('ws://localhost:8000/ws/price');
 
-ws.onopen = function(event) {
+ws.onopen = function (event) {
     console.log('Connected to price stream');
 };
 
-ws.onmessage = function(event) {
+ws.onmessage = function (event) {
     const priceData = JSON.parse(event.data);
     console.log('Price update:', priceData);
 };
 
-ws.onclose = function(event) {
+ws.onclose = function (event) {
     console.log('Disconnected from price stream');
 };
 ```
@@ -230,9 +242,11 @@ Price data is automatically stored in InfluxDB with the following schema:
 **Measurement**: `crypto_price`
 
 **Tags**:
+
 - `symbol`: Cryptocurrency symbol (e.g., "BTCUSDT")
 
 **Fields**:
+
 - `price`: Current price (close price)
 - `open`: Opening price
 - `high`: Highest price in the interval
@@ -269,11 +283,13 @@ Use the provided HTTP test file with your favorite REST client:
 ### Logging
 
 The application uses structured logging with the following levels:
+
 - `INFO`: General application flow and successful operations
 - `WARNING`: Non-critical issues (e.g., failed WebSocket broadcasts)
 - `ERROR`: Critical errors that need attention
 
 Log format:
+
 ```
 %(asctime)s - %(name)s - %(levelname)s - %(message)s
 ```
@@ -299,19 +315,19 @@ To add support for additional cryptocurrency exchanges:
 ### Common Issues
 
 1. **InfluxDB Connection Failed**
-   - Check your `INFLUXDB_HOST`, `INFLUXDB_TOKEN`, and `INFLUXDB_DATABASE` settings
-   - Ensure InfluxDB is running and accessible
-   - Run `python influx-connector.py` to test connectivity
+    - Check your `INFLUXDB_HOST`, `INFLUXDB_TOKEN`, and `INFLUXDB_DATABASE` settings
+    - Ensure InfluxDB is running and accessible
+    - Run `python influx-connector.py` to test connectivity
 
 2. **Binance WebSocket Connection Issues**
-   - Check internet connectivity
-   - Verify symbol names are valid (use lowercase)
-   - Check Binance API status
+    - Check internet connectivity
+    - Verify symbol names are valid (use lowercase)
+    - Check Binance API status
 
 3. **WebSocket Clients Not Receiving Data**
-   - Verify the WebSocket endpoint is correct: `ws://localhost:8000/ws/price`
-   - Check the server logs for connection issues
-   - Ensure the crypto provider is running (check `/health` endpoint)
+    - Verify the WebSocket endpoint is correct: `ws://localhost:8000/ws/price`
+    - Check the server logs for connection issues
+    - Ensure the crypto provider is running (check `/health` endpoint)
 
 ### Debug Mode
 
@@ -329,9 +345,9 @@ Adjust write options in `CryptoPriceProvider` for your needs:
 
 ```python
 write_options = WriteOptions(
-    batch_size=500,      # Increase for higher throughput
+    batch_size=500,  # Increase for higher throughput
     flush_interval=10_000,  # Reduce for lower latency
-    max_retries=5        # Adjust based on network reliability
+    max_retries=5  # Adjust based on network reliability
 )
 ```
 
