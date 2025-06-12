@@ -8,43 +8,106 @@ import sys
 import argparse
 import subprocess
 import os
+import logging
 from pathlib import Path
+
+# 配置日誌
+logging.basicConfig(level=logging.INFO, format='%(message)s')
 
 
 def run_basic_server():
-    """運行基本版本的服務器"""
-    print("🚀 Starting Basic Crypto Price Stream Server...")
+    """
+    運行基本版本的加密貨幣價格串流服務器。
+
+    此函數會啟動位於 `./src/main.py` 的基本服務器，該服務器負責獲取和處理加密貨幣價格數據。
+
+    輸入參數:
+        無
+
+    輸出參數:
+        無
+    """
+    logging.info("🚀 正在啟動基本版加密貨幣價格串流服務器...")
     subprocess.run([sys.executable, "./src/main.py"])
 
 
 def run_enhanced_server():
-    """運行增強版本的服務器"""
-    print("🚀 Starting Enhanced Crypto Price Stream Server...")
+    """
+    運行增強版本的加密貨幣價格串流服務器。
+
+    此函數會啟動位於 `./src/enhanced_main.py` 的增強服務器，該服務器可能包含更多功能或優化。
+
+    輸入參數:
+        無
+
+    輸出參數:
+        無
+    """
+    logging.info("🚀 正在啟動增強版加密貨幣價格串流服務器...")
     subprocess.run([sys.executable, "./src/enhanced_main.py"])
 
 
 def test_influxdb():
-    """測試 InfluxDB 連接"""
-    print("🔧 Testing InfluxDB Connection...")
+    """
+    測試與 InfluxDB 資料庫的連接。
+
+    此函數會執行 `./src/influx-connector.py` 腳本，以驗證 InfluxDB 的連接配置是否正確。
+
+    輸入參數:
+        無
+
+    輸出參數:
+        無
+    """
+    logging.info("🔧 正在測試 InfluxDB 連接...")
     subprocess.run([sys.executable, "./src/influx-connector.py"])
 
 
 def run_data_analyzer():
-    """運行數據分析器"""
-    print("📊 Running Data Analyzer...")
-    os.chdir("")
-    subprocess.run([sys.executable, "data_analyzer.py"])
+    """
+    運行數據分析器。
+
+    此函數會啟動位於 `./src/data_analyzer.py` 的數據分析腳本，用於處理和分析已收集的加密貨幣數據。
+
+    輸入參數:
+        無
+
+    輸出參數:
+        無
+    """
+    logging.info("📊 正在運行數據分析器...")
+    subprocess.run([sys.executable, "./src/data_analyzer.py"])
 
 
 def install_dependencies():
-    """安裝項目依賴"""
-    print("📦 Installing project dependencies...")
+    """
+    安裝項目所需的所有 Python 依賴包。
+
+    此函數會使用 pip 從 `requirements.txt` 文件中安裝所有列出的依賴。
+
+    輸入參數:
+        無
+
+    輸出參數:
+        無
+    """
+    logging.info("📦 正在安裝項目依賴...")
     subprocess.run([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"])
 
 
 def check_environment():
-    """檢查環境配置"""
-    print("🔍 Checking environment configuration...")
+    """
+    檢查運行環境配置，特別是 `.env` 文件中的必要環境變數。
+
+    此函數會檢查 `.env` 文件是否存在，並確保所有必要的環境變數（如 InfluxDB 和 Binance 相關變數）都已設置且非空。
+
+    輸入參數:
+        無
+
+    輸出參數:
+        bool: 如果所有必要的環境變數都已正確配置，則返回 True；否則返回 False。
+    """
+    logging.info("🔍 正在檢查環境配置...")
 
     required_env_vars = [
         'INFLUXDB_HOST',
@@ -56,7 +119,7 @@ def check_environment():
 
     env_file = Path('.env')
     if not env_file.exists():
-        print("❌ .env file not found. Please create one based on .env.example")
+        logging.error("❌ .env 文件未找到。請根據 .env.example 創建一個。")
         return False
 
     # Load and check .env file
@@ -69,18 +132,29 @@ def check_environment():
                 missing_vars.append(var)
 
     if missing_vars:
-        print(f"❌ Missing or empty environment variables: {', '.join(missing_vars)}")
-        print("Please check your .env file and ensure all required variables are set.")
+        logging.error(f"❌ 缺少或空的環境變數: {', '.join(missing_vars)}")
+        logging.error("請檢查您的 .env 文件並確保所有必要的變數都已設置。")
         return False
 
-    print("✅ Environment configuration looks good!")
+    logging.info("✅ 環境配置檢查通過")
     return True
 
 
 def show_status():
-    """顯示項目狀態"""
-    print("📋 Project Status Check")
-    print("=" * 40)
+    """
+    顯示項目的當前狀態，包括重要文件狀態、環境配置和可用命令。
+
+    此函數會列出關鍵文件的存在性，並調用 `check_environment` 函數來檢查環境變數，
+    最後提供運行腳本的常用命令示例。
+
+    輸入參數:
+        無
+
+    輸出參數:
+        無
+    """
+    logging.info("📋 項目狀態檢查")
+    logging.info("=" * 40)
 
     # Check files
     important_files = [
@@ -94,25 +168,38 @@ def show_status():
         'src/config.py'
     ]
 
-    print("📁 File Status:")
+    logging.info("📁 文件狀態:")
     for file_path in important_files:
         if Path(file_path).exists():
-            print(f"  ✅ {file_path}")
+            logging.info(f"  ✅ {file_path}")
         else:
-            print(f"  ❌ {file_path} (missing)")
+            logging.info(f"  ❌ {file_path} (缺失)")
 
-    print("\n🔧 Environment Status:")
+    logging.info("\n🔧 環境狀態:")
     check_environment()
 
-    print("\n📚 Available Commands:")
-    print("  python run.py --enhanced     # Run enhanced server")
-    print("  python run.py --basic        # Run basic server")
-    print("  python run.py --test-db      # Test InfluxDB connection")
-    print("  python run.py --analyze      # Run data analyzer")
-    print("  python run.py --install      # Install dependencies")
+    logging.info("\n📚 可用命令:")
+    logging.info("  python run.py --enhanced     # 運行增強版服務器")
+    logging.info("  python run.py --basic        # 運行基本版服務器")
+    logging.info("  python run.py --test-db      # 測試 InfluxDB 連接")
+    logging.info("  python run.py --analyze      # 運行數據分析器")
+    logging.info("  python run.py --install      # 安裝依賴包")
 
 
 def main():
+    """
+    主函數，解析命令行參數並執行相應的操作。
+
+    此函數使用 `argparse` 處理用戶提供的命令行參數，例如啟動不同版本的服務器、
+    測試資料庫連接、運行數據分析器、安裝依賴或顯示項目狀態。
+    在執行服務器或分析器之前，會先進行環境檢查。
+
+    輸入參數:
+        無 (通過命令行參數接收輸入)
+
+    輸出參數:
+        無
+    """
     parser = argparse.ArgumentParser(
         description="Crypto Price Stream 運行工具",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -150,7 +237,7 @@ def main():
     # Pre-flight checks
     if args.enhanced or args.basic or args.analyze:
         if not check_environment():
-            print("\n❌ Environment check failed. Please fix the issues above before proceeding.")
+            logging.error("\n❌ 環境檢查失敗。請在繼續之前修復上述問題。")
             return
 
     # Execute requested action
@@ -169,12 +256,12 @@ def main():
             show_status()
 
     except KeyboardInterrupt:
-        print("\n⚠️  Interrupted by user")
+        logging.info("\n⚠️  用戶中斷操作")
     except Exception as e:
-        print(f"\n❌ Error: {e}")
+        logging.error(f"\n❌ 錯誤: {e}")
 
 
 if __name__ == "__main__":
-    print("🎯 Crypto Price Stream 運行工具")
-    print("=" * 40)
+    logging.info("🎯 加密貨幣價格串流運行工具")
+    logging.info("=" * 40)
     main()

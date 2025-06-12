@@ -1,10 +1,13 @@
 import os
 from dataclasses import dataclass
+from typing import List
+
 from dotenv import load_dotenv
 import logging
 
 # 設定日誌記錄
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+log = logging.getLogger(__name__)
 
 # 從 .env 檔案載入環境變數
 load_dotenv()
@@ -38,6 +41,11 @@ class Config:
     api_host: str
     api_port: int
 
+    # Kafka 配置
+    kafka_enabled: bool
+    kafka_bootstrap_servers: List[str]
+    kafka_topic: str
+
     @classmethod
     def from_env(cls) -> 'Config':
         """
@@ -49,7 +57,7 @@ class Config:
         輸出:
             Config: 包含從環境變數載入的配置的 Config 實例。
         """
-        logging.info("從環境變數載入配置...")
+        log.info("從環境變數載入配置...")
         return cls(
             # InfluxDB 配置
             influxdb_host=os.getenv('INFLUXDB_HOST', 'http://localhost:8086'),
@@ -62,7 +70,12 @@ class Config:
 
             # 服務器配置
             api_host=os.getenv('API_HOST', '127.0.0.1'),
-            api_port=int(os.getenv('API_PORT', '8000'))
+            api_port=int(os.getenv('API_PORT', '8000')),
+
+            # Kafka 配置
+            kafka_enabled=os.getenv('KAFKA_ENABLED', 'false').lower() == 'true',
+            kafka_bootstrap_servers=os.getenv('KAFKA_BOOTSTRAP_SERVERS', 'localhost:9092').split(','),
+            kafka_topic=os.getenv('KAFKA_TOPIC', 'crypto-prices')
         )
 
     def validate(self) -> bool:
@@ -75,7 +88,7 @@ class Config:
         輸出:
             bool: 如果所有必需的配置都存在則為 True，否則為 False。
         """
-        logging.info("驗證配置...")
+        log.info("驗證配置...")
         required_fields = [
             self.influxdb_host,
             self.influxdb_token,
@@ -83,12 +96,16 @@ class Config:
         ]
 
         missing_fields = [field for field in required_fields if not field]
-
         if missing_fields:
-            logging.error(f"配置驗證失敗。缺少必需的配置: {missing_fields}")
+            log.error(f"配置驗證失敗。缺少必需的配置: {missing_fields}")
             return False
 
-        logging.info("配置驗證成功。")
+        if self.kafka_enabled:
+            if not self.kafka_bootstrap_servers or not self.kafka_topic:
+                log.error("Kafka 已啟用，但 KAFKA_BOOTSTRAP_SERVERS 或 KAFKA_TOPIC 未設定。")
+                return False
+
+        log.info("配置驗證成功。")
         return True
 
 

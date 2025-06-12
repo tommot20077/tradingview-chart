@@ -2,7 +2,9 @@
 
 一個強大的即時加密貨幣價格串流服務器，集成 InfluxDB 存儲、數據分析和監控功能，使用 FastAPI 和 WebSockets 建構。
 
-[View English Version](../../README.md)
+---
+
+[English](README.md) | 中文
 
 ---
 

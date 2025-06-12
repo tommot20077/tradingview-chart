@@ -3,7 +3,9 @@
 A powerful real-time cryptocurrency price streaming server integrating InfluxDB storage, data analysis, and monitoring
 capabilities, built with FastAPI and WebSockets.
 
-[查看繁體中文版本](docs/zh-tw/README.md)
+---
+
+English | [中文](README_zh-TW.md)
 
 ---
 
