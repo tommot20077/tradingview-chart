@@ -5,3 +5,7 @@ numpy==2.3.0
 pandas==2.3.0
 python-dotenv==1.1.0
 uvicorn==0.34.3
+starlette==0.46.2
+
+# 可選的依賴，如需使用則取消註解
+# kafka-python==2.2.11

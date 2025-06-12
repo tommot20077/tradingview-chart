@@ -2,7 +2,6 @@ import json
 import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 from queue import Queue, Empty
 from typing import Optional, Callable, Dict, List
@@ -10,73 +9,18 @@ from typing import Optional, Callable, Dict, List
 from binance.websocket.um_futures.websocket_client import UMFuturesWebsocketClient
 from influxdb_client_3 import InfluxDBClient3, Point, InfluxDBError, WriteOptions, write_client_options
 
+try:
+    from kafka import KafkaProducer
+except ImportError:
+    KafkaProducer = None
+    logging.warning("KafkaProducer 無法導入。請確保已安裝 'kafka-python' 以啟用 Kafka 功能。")
+
+from abstract_data_provider import AbstractDataProvider
+from data_models import InfluxDBStats, PriceData
+
 # 設定日誌記錄
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
-
-@dataclass
-class PriceData:
-    """
-    用於儲存加密貨幣價格資料的資料類別。
-
-    屬性:
-        symbol (str): 交易對符號 (例如 'BTCUSDT')。
-        price (float): 當前價格 (通常是收盤價)。
-        timestamp (datetime): 資料的時間戳記。
-        open_price (float): K 線的開盤價。
-        high_price (float): K 線的最高價。
-        low_price (float): K 線的最低價。
-        close_price (float): K 線的收盤價。
-        volume (float): K 線的交易量。
-        price_change (Optional[float]): 相對於前一個價格的變化量。
-        price_change_percent (Optional[float]): 相對於前一個價格的變化百分比。
-        trade_count (Optional[int]): K 線期間的交易數量。
-    """
-    symbol: str
-    price: float
-    timestamp: datetime
-    open_price: float
-    high_price: float
-    low_price: float
-    close_price: float
-    volume: float
-    price_change: Optional[float] = None
-    price_change_percent: Optional[float] = None
-    trade_count: Optional[int] = None
-
-    def to_dict(self) -> dict:
-        """
-        將 PriceData 物件轉換為字典，以便進行 JSON 序列化。
-
-        輸入:
-            self (PriceData): PriceData 實例本身。
-
-        輸出:
-            dict: 包含價格資料的字典，時間戳記已轉換為 ISO 格式字串。
-        """
-        data = asdict(self)
-        data['timestamp'] = self.timestamp.isoformat()
-        logging.debug(f"PriceData 轉換為字典: {data}")
-        return data
-
-
-@dataclass
-class InfluxDBStats:
-    """
-    InfluxDB 操作統計數據結構。
-
-    屬性:
-        total_writes (int): 總寫入點數。
-        successful_writes (int): 成功寫入的批次數。
-        failed_writes (int): 寫入失敗的批次數。
-        last_write_time (Optional[datetime]): 最後一次成功寫入的時間。
-        retry_count (int): 寫入重試的次數。
-    """
-    total_writes: int = 0
-    successful_writes: int = 0
-    failed_writes: int = 0
-    last_write_time: Optional[datetime] = None
-    retry_count: int = 0
+log = logging.getLogger(__name__)
 
 
 class EnhancedInfluxDBManager:
@@ -93,6 +37,7 @@ class EnhancedInfluxDBManager:
             token (str): 用於 InfluxDB 認證的令牌。
             database (str): 要連接的 InfluxDB 資料庫名稱。
             batch_size (int): 批次寫入的點數大小，預設為 100。
+
         """
         self.host = host
         self.token = token
@@ -104,7 +49,7 @@ class EnhancedInfluxDBManager:
         self._stop_event = threading.Event()
         self._worker_thread: Optional[threading.Thread] = None
         self._setup_write_options()
-        logging.info(
+        log.info(
             f"EnhancedInfluxDBManager 初始化完成，主機: {self.host}, 資料庫: {self.database}, 批次大小: {self.batch_size}")
 
     def _setup_write_options(self):
@@ -118,13 +63,14 @@ class EnhancedInfluxDBManager:
         輸出:
             無。
         """
-        logging.info("設定 InfluxDB 寫入選項...")
+        log.info("設定 InfluxDB 寫入選項...")
 
-        def success_callback(data: str):
+        def success_callback(conf, data: str):
             """
             批次寫入成功時的回調函數。
 
             輸入:
+                conf: 寫入配置。
                 data (str): 成功寫入的資料字串。
 
             輸出:
@@ -132,13 +78,14 @@ class EnhancedInfluxDBManager:
             """
             self.stats.successful_writes += 1
             self.stats.last_write_time = datetime.now(timezone.utc)
-            logging.debug(f"成功寫入批次資料到 InfluxDB: {len(data)} 位元組")
+            log.debug(f"成功寫入批次資料到 InfluxDB: {len(data)} 位元組")
 
-        def error_callback(data: str, exception: InfluxDBError):
+        def error_callback(conf, data: str, exception: InfluxDBError):
             """
             批次寫入失敗時的回調函數。
 
             輸入:
+                conf: 寫入配置。
                 data (str): 寫入失敗的資料字串。
                 exception (InfluxDBError): 寫入失敗時的異常。
 
@@ -146,13 +93,14 @@ class EnhancedInfluxDBManager:
                 無。
             """
             self.stats.failed_writes += 1
-            logging.error(f"寫入批次資料到 InfluxDB 失敗: {exception}")
+            log.error(f"寫入批次資料到 InfluxDB 失敗: {exception}")
 
-        def retry_callback(data: str, exception: InfluxDBError):
+        def retry_callback(conf, data: str, exception: InfluxDBError):
             """
             批次寫入重試時的回調函數。
 
             輸入:
+                conf: 寫入配置。
                 data (str): 正在重試寫入的資料字串。
                 exception (InfluxDBError): 重試時的異常。
 
@@ -160,7 +108,7 @@ class EnhancedInfluxDBManager:
                 無。
             """
             self.stats.retry_count += 1
-            logging.warning(f"重試寫入到 InfluxDB: {exception}")
+            log.warning(f"重試寫入到 InfluxDB: {exception}")
 
         write_options = WriteOptions(
             batch_size=self.batch_size,
@@ -178,7 +126,7 @@ class EnhancedInfluxDBManager:
             retry_callback=retry_callback,
             write_options=write_options
         )
-        logging.info("InfluxDB 寫入選項設定完成。")
+        log.info("InfluxDB 寫入選項設定完成。")
 
     def connect(self):
         """
@@ -193,7 +141,7 @@ class EnhancedInfluxDBManager:
         異常:
             Exception: 如果連接失敗則拋出異常。
         """
-        logging.info("嘗試連接到 InfluxDB 並啟動寫入工作執行緒...")
+        log.info("嘗試連接到 InfluxDB 並啟動寫入工作執行緒...")
         try:
             self.client = InfluxDBClient3(
                 host=self.host,
@@ -206,9 +154,9 @@ class EnhancedInfluxDBManager:
             self._worker_thread = threading.Thread(target=self._writer_worker, daemon=True)
             self._worker_thread.start()
 
-            logging.info(f"成功連接到 InfluxDB，主機: {self.host}")
+            log.info(f"成功連接到 InfluxDB，主機: {self.host}")
         except Exception as e:
-            logging.error(f"連接到 InfluxDB 失敗: {e}")
+            log.error(f"連接到 InfluxDB 失敗: {e}")
             raise
 
     def disconnect(self):
@@ -221,19 +169,19 @@ class EnhancedInfluxDBManager:
         輸出:
             無。
         """
-        logging.info("嘗試從 InfluxDB 斷開連接並停止寫入工作執行緒...")
+        log.info("嘗試從 InfluxDB 斷開連接並停止寫入工作執行緒...")
         # 停止工作執行緒
         self._stop_event.set()
         if self._worker_thread and self._worker_thread.is_alive():
             self._worker_thread.join(timeout=5)
-            logging.info("寫入工作執行緒已停止。")
+            log.info("寫入工作執行緒已停止。")
 
         if self.client:
             self.client.close()
             self.client = None
-            logging.info("已從 InfluxDB 斷開連接。")
+            log.info("已從 InfluxDB 斷開連接。")
         else:
-            logging.info("InfluxDB 客戶端未連接，無需斷開。")
+            log.info("InfluxDB 客戶端未連接，無需斷開。")
 
     def _writer_worker(self):
         """
@@ -246,7 +194,7 @@ class EnhancedInfluxDBManager:
         輸出:
             無。
         """
-        logging.info("InfluxDB 寫入工作執行緒啟動。")
+        log.info("InfluxDB 寫入工作執行緒啟動。")
         batch = []
 
         while not self._stop_event.is_set():
@@ -268,12 +216,12 @@ class EnhancedInfluxDBManager:
                     batch = []
 
             except Exception as e:
-                logging.error(f"寫入工作執行緒中發生錯誤: {e}")
+                log.error(f"寫入工作執行緒中發生錯誤: {e}")
 
         # 寫入任何剩餘的數據
         if batch:
             self._write_batch(batch)
-        logging.info("InfluxDB 寫入工作執行緒停止。")
+        log.info("InfluxDB 寫入工作執行緒停止。")
 
     def _write_batch(self, batch: List[Point]):
         """
@@ -287,15 +235,15 @@ class EnhancedInfluxDBManager:
             無。
         """
         if not self.client or not batch:
-            logging.debug("客戶端未連接或批次為空，無法寫入。")
+            log.debug("客戶端未連接或批次為空，無法寫入。")
             return
 
         try:
             self.client.write(batch)
             self.stats.total_writes += len(batch)
-            logging.debug(f"已將 {len(batch)} 個點的批次寫入 InfluxDB。")
+            log.debug(f"已將 {len(batch)} 個點的批次寫入 InfluxDB。")
         except Exception as e:
-            logging.error(f"寫入批次到 InfluxDB 失敗: {e}")
+            log.error(f"寫入批次到 InfluxDB 失敗: {e}")
 
     def write_price_data(self, price_data: PriceData):
         """
@@ -309,7 +257,7 @@ class EnhancedInfluxDBManager:
             無。
         """
         if not self.client:
-            logging.error("InfluxDB 客戶端未連接，無法將資料加入佇列。")
+            log.error("InfluxDB 客戶端未連接，無法將資料加入佇列。")
             return
 
         try:
@@ -334,10 +282,10 @@ class EnhancedInfluxDBManager:
 
             # 加入寫入佇列
             self._write_queue.put(point)
-            logging.debug(f"已將 {price_data.symbol} 的價格資料加入寫入佇列。佇列大小: {self._write_queue.qsize()}")
+            log.debug(f"已將 {price_data.symbol} 的價格資料加入寫入佇列。佇列大小: {self._write_queue.qsize()}")
 
         except Exception as e:
-            logging.error(f"將價格資料加入 InfluxDB 佇列失敗: {e}")
+            log.error(f"將價格資料加入 InfluxDB 佇列失敗: {e}")
 
     def get_stats(self) -> dict:
         """
@@ -349,7 +297,7 @@ class EnhancedInfluxDBManager:
         輸出:
             dict: 包含總寫入數、成功寫入數、失敗寫入數、重試次數、最後寫入時間和佇列大小的字典。
         """
-        logging.debug("獲取 InfluxDB 操作統計。")
+        log.debug("獲取 InfluxDB 操作統計。")
         return {
             "total_writes": self.stats.total_writes,
             "successful_writes": self.stats.successful_writes,
@@ -360,13 +308,18 @@ class EnhancedInfluxDBManager:
         }
 
 
-class EnhancedCryptoPriceProvider:
+class EnhancedCryptoPriceProvider(AbstractDataProvider):
     """
-    增強型加密貨幣價格提供者，從幣安 WebSocket 獲取數據，進行處理，並異步儲存到 InfluxDB。
+    增強型加密貨幣價格提供者，此類為 AbstractDataProvider 的實現，
+    從幣安 WebSocket 獲取數據，進行處理，並異步儲存到 InfluxDB。
+    可選地發佈到 Kafka 主題或通過回調函數處理。
     """
 
-    def __init__(self, influxdb_manager: EnhancedInfluxDBManager,
-                 message_callback: Optional[Callable[[str], None]] = None):
+    def __init__(self,
+                 influxdb_manager: EnhancedInfluxDBManager,
+                 message_callback: Optional[Callable[[str], None]] = None,
+                 kafka_producer: Optional[KafkaProducer] = None,
+                 kafka_topic: Optional[str] = None):
         """
         初始化 EnhancedCryptoPriceProvider 實例。
 
@@ -376,8 +329,10 @@ class EnhancedCryptoPriceProvider:
         """
         self.influxdb_manager = influxdb_manager
         self.message_callback = message_callback
+        self.kafka_producer = kafka_producer if KafkaProducer else None
+        self.kafka_topic = kafka_topic
         self.binance_client: Optional[UMFuturesWebsocketClient] = None
-        self.subscribed_symbols = set()
+        self._subscribed_symbols = set()
         self._price_cache: Dict[str, PriceData] = {}
         self._executor = ThreadPoolExecutor(max_workers=2)
 
@@ -386,9 +341,15 @@ class EnhancedCryptoPriceProvider:
             "messages_received": 0,
             "messages_processed": 0,
             "messages_failed": 0,
+            "kafka_messages_sent": 0,
             "start_time": None
         }
-        logging.info("EnhancedCryptoPriceProvider 初始化完成。")
+        log.info("EnhancedCryptoPriceProvider 初始化完成。")
+
+        if self.kafka_producer:
+            log.info(f"Kafka 模式已啟用，將發佈到主題: {self.kafka_topic}")
+        else:
+            log.info("Kafka 模式已禁用，將使用直接回調。")
 
     def _parse_kline_data(self, message: str) -> Optional[PriceData]:
         """
@@ -404,10 +365,10 @@ class EnhancedCryptoPriceProvider:
         try:
             data = json.loads(message)
             self.stats["messages_received"] += 1
-            logging.debug(f"接收到訊息，總數: {self.stats['messages_received']}")
+            log.debug(f"接收到訊息，總數: {self.stats['messages_received']}")
 
             if 'k' not in data:
-                logging.debug("接收到的訊息不包含 K 線資料。")
+                log.debug("接收到的訊息不包含 K 線資料。")
                 return None
 
             kline = data['k']
@@ -423,7 +384,7 @@ class EnhancedCryptoPriceProvider:
                 price_change = current_price - previous_price
                 if previous_price > 0:
                     price_change_percent = (price_change / previous_price) * 100
-                logging.debug(f"{symbol} 價格變化: {price_change:.4f}, 百分比: {price_change_percent:.2f}%")
+                log.debug(f"{symbol} 價格變化: {price_change:.4f}, 百分比: {price_change_percent:.2f}%")
 
             price_data = PriceData(
                 symbol=symbol,
@@ -443,13 +404,13 @@ class EnhancedCryptoPriceProvider:
             self._price_cache[symbol] = price_data
 
             self.stats["messages_processed"] += 1
-            logging.debug(
+            log.debug(
                 f"成功解析 K 線資料: {price_data.symbol} @ {price_data.price}。已處理訊息總數: {self.stats['messages_processed']}")
             return price_data
 
         except (json.JSONDecodeError, KeyError, ValueError) as e:
             self.stats["messages_failed"] += 1
-            logging.error(f"解析 K 線資料失敗: {e}，原始訊息: {message}。失敗訊息總數: {self.stats['messages_failed']}")
+            log.error(f"解析 K 線資料失敗: {e}，原始訊息: {message}。失敗訊息總數: {self.stats['messages_failed']}")
             return None
 
     def _handle_binance_message(self, ws, message: str):
@@ -471,7 +432,7 @@ class EnhancedCryptoPriceProvider:
             if price_data:
                 # 異步儲存到 InfluxDB
                 self._executor.submit(self.influxdb_manager.write_price_data, price_data)
-                logging.debug(f"已將 {price_data.symbol} 的價格資料提交給 InfluxDB 寫入。")
+                log.debug(f"已將 {price_data.symbol} 的價格資料提交給 InfluxDB 寫入。")
 
                 # 建立用於廣播的增強訊息
                 enhanced_message = json.dumps({
@@ -480,13 +441,16 @@ class EnhancedCryptoPriceProvider:
                     "timestamp": datetime.now(timezone.utc).isoformat()
                 })
 
-                # 將增強訊息轉發給回調函數 (用於 WebSocket 廣播)
-                if self.message_callback:
+                if self.kafka_producer and self.kafka_topic:
+                    self.kafka_producer.send(self.kafka_topic, value=enhanced_message)
+                    self.stats["kafka_messages_sent"] += 1
+                    log.debug(f"增強訊息已發送到 Kafka 主題 {self.kafka_topic}。")
+                elif self.message_callback:
                     self.message_callback(enhanced_message)
-                    logging.debug("增強訊息已轉發給回調函數。")
+                    log.debug("增強訊息已轉發給回調函數。")
 
         except Exception as e:
-            logging.error(f"處理幣安訊息時發生錯誤: {e}，原始訊息: {message}")
+            log.error(f"處理幣安訊息時發生錯誤: {e}，原始訊息: {message}")
 
     def start(self):
         """
@@ -502,7 +466,7 @@ class EnhancedCryptoPriceProvider:
         異常:
             Exception: 如果啟動失敗則拋出異常。
         """
-        logging.info("啟動 Enhanced CryptoPriceProvider...")
+        log.info("啟動 Enhanced CryptoPriceProvider...")
         try:
             # 連接到 InfluxDB
             self.influxdb_manager.connect()
@@ -513,10 +477,10 @@ class EnhancedCryptoPriceProvider:
             )
 
             self.stats["start_time"] = datetime.now(timezone.utc)
-            logging.info("Enhanced CryptoPriceProvider 已成功啟動。")
+            log.info("Enhanced CryptoPriceProvider 已成功啟動。")
 
         except Exception as e:
-            logging.error(f"啟動 Enhanced CryptoPriceProvider 失敗: {e}")
+            log.error(f"啟動 Enhanced CryptoPriceProvider 失敗: {e}")
             raise
 
     def stop(self):
@@ -530,24 +494,30 @@ class EnhancedCryptoPriceProvider:
         輸出:
             無。
         """
-        logging.info("停止 Enhanced CryptoPriceProvider...")
+        log.info("停止 Enhanced CryptoPriceProvider...")
         try:
             if self.binance_client:
                 self.binance_client.stop()
                 self.binance_client = None
-                logging.info("幣安 WebSocket 客戶端已停止。")
+                log.info("幣安 WebSocket 客戶端已停止。")
+
+            if self.kafka_producer:
+                log.info("正在刷新並關閉 Kafka 生產者...")
+                self.kafka_producer.flush()
+                self.kafka_producer.close()
+                log.info("Kafka 生產者已關閉。")
 
             # 關閉執行緒池
             self._executor.shutdown(wait=True)
-            logging.info("執行緒池已關閉。")
+            log.info("執行緒池已關閉。")
 
             self.influxdb_manager.disconnect()
-            logging.info("Enhanced CryptoPriceProvider 已成功停止。")
+            log.info("Enhanced CryptoPriceProvider 已成功停止。")
 
         except Exception as e:
-            logging.error(f"停止 Enhanced CryptoPriceProvider 時發生錯誤: {e}")
+            log.error(f"停止 Enhanced CryptoPriceProvider 時發生錯誤: {e}")
 
-    def subscribe_symbol(self, symbol: str, interval: str = "1m"):
+    def subscribe(self, symbol: str, **kwargs):
         """
         訂閱指定交易對的價格串流。
 
@@ -560,19 +530,20 @@ class EnhancedCryptoPriceProvider:
             無。
         """
         if not self.binance_client:
-            logging.error("幣安客戶端未初始化，無法訂閱。")
+            log.error("幣安客戶端未初始化，無法訂閱。")
             return
 
+        interval = kwargs.get("interval", "1m")
         stream_name = f"{symbol.lower()}@kline_{interval}"
 
-        if stream_name not in self.subscribed_symbols:
+        if stream_name not in self._subscribed_symbols:
             self.binance_client.subscribe(stream_name)
-            self.subscribed_symbols.add(stream_name)
-            logging.info(f"已訂閱 {stream_name}")
+            self._subscribed_symbols.add(stream_name)
+            log.info(f"已訂閱 {stream_name}")
         else:
-            logging.info(f"已訂閱 {stream_name}，無需重複訂閱。")
+            log.info(f"已訂閱 {stream_name}，無需重複訂閱。")
 
-    def unsubscribe_symbol(self, symbol: str, interval: str = "1m"):
+    def unsubscribe(self, symbol: str, **kwargs):
         """
         取消訂閱指定交易對的價格串流。
 
@@ -585,17 +556,18 @@ class EnhancedCryptoPriceProvider:
             無。
         """
         if not self.binance_client:
-            logging.error("幣安客戶端未初始化，無法取消訂閱。")
+            log.error("幣安客戶端未初始化，無法取消訂閱。")
             return
 
+        interval = kwargs.get("interval", "1m")
         stream_name = f"{symbol.lower()}@kline_{interval}"
 
-        if stream_name in self.subscribed_symbols:
+        if stream_name in self._subscribed_symbols:
             self.binance_client.unsubscribe(stream_name)
-            self.subscribed_symbols.remove(stream_name)
-            logging.info(f"已取消訂閱 {stream_name}")
+            self._subscribed_symbols.remove(stream_name)
+            log.info(f"已取消訂閱 {stream_name}")
         else:
-            logging.info(f"未訂閱 {stream_name}，無需取消。")
+            log.info(f"未訂閱 {stream_name}，無需取消。")
 
     def get_stats(self) -> dict:
         """
@@ -607,7 +579,7 @@ class EnhancedCryptoPriceProvider:
         輸出:
             dict: 包含接收訊息數、處理訊息數、失敗訊息數、運行時間、已訂閱符號、快取符號和 InfluxDB 統計數據的字典。
         """
-        logging.debug("獲取價格提供者統計數據。")
+        log.debug("獲取價格提供者統計數據。")
         current_time = datetime.now(timezone.utc)
         uptime = None
         if self.stats["start_time"]:
@@ -616,7 +588,7 @@ class EnhancedCryptoPriceProvider:
         return {
             **self.stats,
             "uptime_seconds": uptime,
-            "subscribed_symbols": list(self.subscribed_symbols),
+            "subscribed_symbols": list(self._subscribed_symbols),
             "cached_symbols": list(self._price_cache.keys()),
             "influxdb_stats": self.influxdb_manager.get_stats()
         }
@@ -631,5 +603,9 @@ class EnhancedCryptoPriceProvider:
         輸出:
             Dict[str, dict]: 鍵為符號，值為 PriceData 物件的字典表示形式。
         """
-        logging.debug("獲取所有已快取符號的最新價格。")
+        log.debug("獲取所有已快取符號的最新價格。")
         return {symbol: data.to_dict() for symbol, data in self._price_cache.items()}
+
+    @property
+    def subscribed_symbols(self) -> List[str]:
+        return list(self._subscribed_symbols)

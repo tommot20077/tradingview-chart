@@ -1,6 +1,5 @@
 """
-InfluxDB connection test utility
-This file can be used to test InfluxDB connectivity and data writing
+InfluxDB 連接測試工具
 """
 
 import os
@@ -11,6 +10,7 @@ import logging
 
 # 設定日誌記錄
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+log = logging.getLogger(__name__)
 
 # 載入環境變數
 load_dotenv()
@@ -29,7 +29,7 @@ def test_influxdb_connection() -> bool:
     輸出:
         bool: 如果連接和寫入測試成功則為 True，否則為 False。
     """
-    logging.info("啟動 InfluxDB 連接測試。")
+    log.info("啟動 InfluxDB 連接測試。")
 
     # 從環境變數獲取配置
     host = os.getenv('INFLUXDB_HOST')
@@ -37,13 +37,13 @@ def test_influxdb_connection() -> bool:
     database = os.getenv('INFLUXDB_DATABASE')
 
     if not all([host, token, database]):
-        logging.error("錯誤: .env 檔案中缺少 InfluxDB 配置。")
-        logging.error("必需: INFLUXDB_HOST, INFLUXDB_TOKEN, INFLUXDB_DATABASE")
+        log.error("錯誤: .env 檔案中缺少 InfluxDB 配置。")
+        log.error("必需: INFLUXDB_HOST, INFLUXDB_TOKEN, INFLUXDB_DATABASE")
         return False
 
-    logging.info(f"正在測試連接到 InfluxDB:")
-    logging.info(f"  主機: {host}")
-    logging.info(f"  資料庫: {database}")
+    log.info(f"正在測試連接到 InfluxDB:")
+    log.info(f"  主機: {host}")
+    log.info(f"  資料庫: {database}")
 
     # 建立測試數據點
     test_points = [
@@ -81,7 +81,7 @@ def test_influxdb_connection() -> bool:
         輸出:
             無。
         """
-        logging.info(f"✅ 成功寫入測試數據到 InfluxDB ({len(data)} 位元組)")
+        log.info(f"✅ 成功寫入測試數據到 InfluxDB ({len(data)} 位元組)")
 
     def error_callback(data: str, exception: InfluxDBError):
         """
@@ -94,7 +94,7 @@ def test_influxdb_connection() -> bool:
         輸出:
             無。
         """
-        logging.error(f"❌ 寫入測試數據失敗: {exception}")
+        log.error(f"❌ 寫入測試數據失敗: {exception}")
 
     def retry_callback(data: str, exception: InfluxDBError):
         """
@@ -107,7 +107,7 @@ def test_influxdb_connection() -> bool:
         輸出:
             無。
         """
-        logging.warning(f"🔄 正在重試寫入到 InfluxDB: {exception}")
+        log.warning(f"🔄 正在重試寫入到 InfluxDB: {exception}")
 
     # 配置寫入選項
     write_options = WriteOptions(
@@ -136,17 +136,17 @@ def test_influxdb_connection() -> bool:
                 write_client_options=wco
         ) as client:
 
-            logging.info("🔗 成功連接到 InfluxDB")
+            log.info("🔗 成功連接到 InfluxDB")
 
             # 寫入測試數據點
-            logging.info("📝 正在寫入測試數據...")
+            log.info("📝 正在寫入測試數據...")
             client.write(test_points, write_precision='s')
 
-            logging.info("✅ 測試完成成功！")
+            log.info("✅ 測試完成成功！")
             return True
 
     except Exception as e:
-        logging.error(f"❌ 連接到 InfluxDB 時發生錯誤: {e}")
+        log.error(f"❌ 連接到 InfluxDB 時發生錯誤: {e}")
         return False
 
 
@@ -163,7 +163,7 @@ def query_test_data():
     輸出:
         無。
     """
-    logging.info("啟動查詢測試數據。")
+    log.info("啟動查詢測試數據。")
 
     # 從環境變數獲取配置
     host = os.getenv('INFLUXDB_HOST')
@@ -171,7 +171,7 @@ def query_test_data():
     database = os.getenv('INFLUXDB_DATABASE')
 
     if not all([host, token, database]):
-        logging.error("錯誤: 缺少 InfluxDB 配置，無法查詢數據。")
+        log.error("錯誤: 缺少 InfluxDB 配置，無法查詢數據。")
         return
 
     try:
@@ -186,30 +186,30 @@ def query_test_data():
             LIMIT 10
             """
 
-            logging.info("🔍 正在查詢最近的測試數據...")
+            log.info("🔍 正在查詢最近的測試數據...")
             result = client.query(query=query, language='sql')
 
             if result:
-                logging.info("📊 最近的測試數據:")
+                log.info("📊 最近的測試數據:")
                 for row in result:
-                    logging.info(f"  {row}")
+                    log.info(f"  {row}")
             else:
-                logging.info("📭 未找到測試數據。")
+                log.info("📭 未找到測試數據。")
 
     except Exception as e:
-        logging.error(f"❌ 查詢數據時發生錯誤: {e}")
+        log.error(f"❌ 查詢數據時發生錯誤: {e}")
 
 
 if __name__ == "__main__":
-    logging.info("InfluxDB 連接測試工具")
-    logging.info("=" * 40)
+    log.info("InfluxDB 連接測試工具")
+    log.info("=" * 40)
 
     # 測試連接並寫入
     if test_influxdb_connection():
-        logging.info("\n" + "=" * 40)
+        log.info("\n" + "=" * 40)
 
         # 查詢測試數據
         query_test_data()
 
-    logging.info("\n" + "=" * 40)
-    logging.info("測試完成。請檢查您的 InfluxDB 儀表板以查看測試數據。")
+    log.info("\n" + "=" * 40)
+    log.info("測試完成。請檢查您的 InfluxDB 儀表板以查看測試數據。")

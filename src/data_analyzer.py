@@ -3,75 +3,22 @@ Crypto Data Analyzer - 分析存儲在 InfluxDB 中的加密貨幣數據
 提供數據查詢、統計分析和可視化功能
 """
 
-"""
-Crypto Data Analyzer - 分析存儲在 InfluxDB 中的加密貨幣數據
-提供數據查詢、統計分析和可視化功能
-"""
-
-import os
-import pandas as pd
-import numpy as np
-from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional, Tuple
-from dataclasses import dataclass
 import logging
+import os
+from datetime import datetime, timezone
+from typing import Dict, List, Optional
 
-from influxdb_client_3 import InfluxDBClient3
+import numpy as np
+import pandas as pd
 from dotenv import load_dotenv
+from influxdb_client_3 import InfluxDBClient3
 
 # 設定日誌記錄
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+log = logging.getLogger(__name__)
 
 # 載入環境變數
 load_dotenv()
-
-
-@dataclass
-class MarketSummary:
-    """
-    市場摘要數據結構。
-
-    屬性:
-        symbol (str): 加密貨幣符號。
-        current_price (float): 當前價格。
-        price_change_24h (float): 24 小時價格變化量。
-        price_change_percent_24h (float): 24 小時價格變化百分比。
-        high_24h (float): 24 小時內最高價格。
-        low_24h (float): 24 小時內最低價格。
-        volume_24h (float): 24 小時交易量。
-        avg_price_24h (float): 24 小時平均價格。
-        volatility (float): 波動率 (標準差)。
-    """
-    symbol: str
-    current_price: float
-    price_change_24h: float
-    price_change_percent_24h: float
-    high_24h: float
-    low_24h: float
-    volume_24h: float
-    avg_price_24h: float
-    volatility: float
-
-
-@dataclass
-class TradingStats:
-    """
-    交易統計數據結構。
-
-    屬性:
-        total_trades (int): 總交易筆數。
-        avg_volume (float): 平均交易量。
-        max_price (float): 期間內最高價格。
-        min_price (float): 期間內最低價格。
-        price_range (float): 價格範圍 (最高價 - 最低價)。
-        trend_direction (str): 趨勢方向 ('bullish', 'bearish', 'sideways')。
-    """
-    total_trades: int
-    avg_volume: float
-    max_price: float
-    min_price: float
-    price_range: float
-    trend_direction: str
 
 
 class CryptoDataAnalyzer:
@@ -108,7 +55,7 @@ class CryptoDataAnalyzer:
             token=self.token,
             database=self.database
         )
-        logging.info(f"CryptoDataAnalyzer 初始化完成，連接到 InfluxDB: {self.host}/{self.database}")
+        log.info(f"CryptoDataAnalyzer 初始化完成，連接到 InfluxDB: {self.host}/{self.database}")
 
     def get_price_data(self, symbol: str, hours: int = 24) -> pd.DataFrame:
         """
@@ -121,7 +68,7 @@ class CryptoDataAnalyzer:
         輸出:
             pd.DataFrame: 包含價格數據的 DataFrame。如果沒有找到數據或發生錯誤，則返回空的 DataFrame。
         """
-        logging.info(f"獲取 {symbol} 在過去 {hours} 小時內的價格數據...")
+        log.info(f"獲取 {symbol} 在過去 {hours} 小時內的價格數據...")
         query = f"""
         SELECT *
         FROM crypto_price
@@ -136,13 +83,13 @@ class CryptoDataAnalyzer:
                 df = pd.DataFrame(result)
                 df['time'] = pd.to_datetime(df['time'])
                 df.set_index('time', inplace=True)
-                logging.info(f"成功獲取 {len(df)} 條 {symbol} 的價格數據。")
+                log.info(f"成功獲取 {len(df)} 條 {symbol} 的價格數據。")
                 return df
             else:
-                logging.warning(f"未找到 {symbol} 的數據。")
+                log.warning(f"未找到 {symbol} 的數據。")
                 return pd.DataFrame()
         except Exception as e:
-            logging.error(f"查詢價格數據時發生錯誤: {e}")
+            log.error(f"查詢價格數據時發生錯誤: {e}")
             return pd.DataFrame()
 
     def calculate_market_summary(self, symbol: str, hours: int = 24) -> Optional[MarketSummary]:
@@ -156,11 +103,11 @@ class CryptoDataAnalyzer:
         輸出:
             Optional[MarketSummary]: 包含市場摘要的 MarketSummary 物件，如果沒有數據則為 None。
         """
-        logging.info(f"計算 {symbol} 在過去 {hours} 小時內的市場摘要...")
+        log.info(f"計算 {symbol} 在過去 {hours} 小時內的市場摘要...")
         df = self.get_price_data(symbol, hours)
 
         if df.empty:
-            logging.warning(f"沒有足夠的數據來計算 {symbol} 的市場摘要。")
+            log.warning(f"沒有足夠的數據來計算 {symbol} 的市場摘要。")
             return None
 
         try:
@@ -189,10 +136,10 @@ class CryptoDataAnalyzer:
                 avg_price_24h=avg_price_24h,
                 volatility=volatility if not np.isnan(volatility) else 0.0
             )
-            logging.info(f"{symbol} 的市場摘要計算完成。")
+            log.info(f"{symbol} 的市場摘要計算完成。")
             return summary
         except Exception as e:
-            logging.error(f"計算 {symbol} 市場摘要時發生錯誤: {e}")
+            log.error(f"計算 {symbol} 市場摘要時發生錯誤: {e}")
             return None
 
     def calculate_trading_stats(self, symbol: str, hours: int = 24) -> Optional[TradingStats]:
@@ -206,11 +153,11 @@ class CryptoDataAnalyzer:
         輸出:
             Optional[TradingStats]: 包含交易統計的 TradingStats 物件，如果沒有數據則為 None。
         """
-        logging.info(f"計算 {symbol} 在過去 {hours} 小時內的交易統計...")
+        log.info(f"計算 {symbol} 在過去 {hours} 小時內的交易統計...")
         df = self.get_price_data(symbol, hours)
 
         if df.empty:
-            logging.warning(f"沒有足夠的數據來計算 {symbol} 的交易統計。")
+            log.warning(f"沒有足夠的數據來計算 {symbol} 的交易統計。")
             return None
 
         try:
@@ -240,10 +187,10 @@ class CryptoDataAnalyzer:
                 price_range=price_range,
                 trend_direction=trend_direction
             )
-            logging.info(f"{symbol} 的交易統計計算完成。")
+            log.info(f"{symbol} 的交易統計計算完成。")
             return stats
         except Exception as e:
-            logging.error(f"計算 {symbol} 交易統計時發生錯誤: {e}")
+            log.error(f"計算 {symbol} 交易統計時發生錯誤: {e}")
             return None
 
     def get_price_alerts(self, symbol: str, threshold_percent: float = 5.0, hours: int = 1) -> List[Dict]:
@@ -258,11 +205,11 @@ class CryptoDataAnalyzer:
         輸出:
             List[Dict]: 包含警報資訊的字典列表。如果沒有警報或數據不足，則返回空列表。
         """
-        logging.info(f"檢測 {symbol} 在過去 {hours} 小時內的價格警報 (閾值: {threshold_percent}%) ...")
+        log.info(f"檢測 {symbol} 在過去 {hours} 小時內的價格警報 (閾值: {threshold_percent}%) ...")
         df = self.get_price_data(symbol, hours)
 
         if df.empty or len(df) < 2:
-            logging.warning(f"沒有足夠的數據來檢測 {symbol} 的價格警報。")
+            log.warning(f"沒有足夠的數據來檢測 {symbol} 的價格警報。")
             return []
 
         alerts = []
@@ -284,11 +231,11 @@ class CryptoDataAnalyzer:
                     'severity': 'high' if abs(row['price_change_pct']) > threshold_percent * 2 else 'medium'
                 }
                 alerts.append(alert)
-                logging.info(
+                log.info(
                     f"檢測到 {symbol} 價格警報: {alert['alert_type']} {alert['change_percent']:.2f}% at {alert['timestamp']}")
 
         except Exception as e:
-            logging.error(f"檢測價格警報時發生錯誤: {e}")
+            log.error(f"檢測價格警報時發生錯誤: {e}")
 
         return alerts
 
@@ -303,11 +250,11 @@ class CryptoDataAnalyzer:
         輸出:
             Dict: 包含交易量分析結果的字典。如果沒有數據，則返回空字典。
         """
-        logging.info(f"分析 {symbol} 在過去 {hours} 小時內的交易量數據...")
+        log.info(f"分析 {symbol} 在過去 {hours} 小時內的交易量數據...")
         df = self.get_price_data(symbol, hours)
 
         if df.empty:
-            logging.warning(f"沒有足夠的數據來分析 {symbol} 的交易量。")
+            log.warning(f"沒有足夠的數據來分析 {symbol} 的交易量。")
             return {}
 
         try:
@@ -330,11 +277,11 @@ class CryptoDataAnalyzer:
                     volume_correlation) else 0.0
             else:
                 volume_stats['price_volume_correlation'] = 0.0
-            logging.info(f"{symbol} 的交易量分析完成。")
+            log.info(f"{symbol} 的交易量分析完成。")
             return volume_stats
 
         except Exception as e:
-            logging.error(f"分析交易量時發生錯誤: {e}")
+            log.error(f"分析交易量時發生錯誤: {e}")
             return {}
 
     def get_available_symbols(self, limit: int = 50) -> List[str]:
@@ -347,7 +294,7 @@ class CryptoDataAnalyzer:
         輸出:
             List[str]: 可用符號的列表。如果沒有找到符號或發生錯誤，則返回空列表。
         """
-        logging.info(f"獲取數據庫中可用的加密貨幣符號 (限制: {limit})...")
+        log.info(f"獲取數據庫中可用的加密貨幣符號 (限制: {limit})...")
         query = f"""
         SELECT DISTINCT symbol
         FROM crypto_price
@@ -359,13 +306,13 @@ class CryptoDataAnalyzer:
             result = self.client.query(query=query, language='sql')
             if result:
                 symbols = [row['symbol'] for row in result]
-                logging.info(f"找到 {len(symbols)} 個可用符號。")
+                log.info(f"找到 {len(symbols)} 個可用符號。")
                 return symbols
             else:
-                logging.warning("未找到任何可用符號。")
+                log.warning("未找到任何可用符號。")
                 return []
         except Exception as e:
-            logging.error(f"獲取可用符號時發生錯誤: {e}")
+            log.error(f"獲取可用符號時發生錯誤: {e}")
             return []
 
     def export_data_to_csv(self, symbol: str, hours: int = 24, filename: str = None) -> str:
@@ -384,11 +331,11 @@ class CryptoDataAnalyzer:
             ValueError: 如果沒有可用數據則拋出。
             Exception: 如果導出過程中發生錯誤則拋出。
         """
-        logging.info(f"將 {symbol} 在過去 {hours} 小時內的數據導出為 CSV 文件...")
+        log.info(f"將 {symbol} 在過去 {hours} 小時內的數據導出為 CSV 文件...")
         df = self.get_price_data(symbol, hours)
 
         if df.empty:
-            logging.error(f"沒有 {symbol} 的數據可供導出。")
+            log.error(f"沒有 {symbol} 的數據可供導出。")
             raise ValueError(f"沒有 {symbol} 的數據可供導出。")
 
         if not filename:
@@ -397,10 +344,10 @@ class CryptoDataAnalyzer:
 
         try:
             df.to_csv(filename)
-            logging.info(f"數據已成功導出到 {filename}")
+            log.info(f"數據已成功導出到 {filename}")
             return filename
         except Exception as e:
-            logging.error(f"導出數據時發生錯誤: {e}")
+            log.error(f"導出數據時發生錯誤: {e}")
             raise
 
     def generate_report(self, symbol: str, hours: int = 24) -> Dict:
@@ -415,7 +362,7 @@ class CryptoDataAnalyzer:
         輸出:
             Dict: 包含完整分析報告的字典。如果生成報告時發生錯誤，則包含錯誤資訊。
         """
-        logging.info(f"為 {symbol} 在過去 {hours} 小時內生成綜合分析報告...")
+        log.info(f"為 {symbol} 在過去 {hours} 小時內生成綜合分析報告...")
         try:
             market_summary = self.calculate_market_summary(symbol, hours)
             trading_stats = self.calculate_trading_stats(symbol, hours)
@@ -432,11 +379,11 @@ class CryptoDataAnalyzer:
                 'price_alerts': price_alerts,
                 'data_availability': len(self.get_price_data(symbol, hours)) > 0
             }
-            logging.info(f"{symbol} 的分析報告生成完成。")
+            log.info(f"{symbol} 的分析報告生成完成。")
             return report
 
         except Exception as e:
-            logging.error(f"生成報告時發生錯誤: {e}")
+            log.error(f"生成報告時發生錯誤: {e}")
             return {
                 'error': str(e),
                 'symbol': symbol.upper(),
@@ -453,12 +400,12 @@ class CryptoDataAnalyzer:
         輸出:
             無。
         """
-        logging.info("關閉 InfluxDB 客戶端連接...")
+        log.info("關閉 InfluxDB 客戶端連接...")
         if self.client:
             self.client.close()
-            logging.info("InfluxDB 客戶端連接已關閉。")
+            log.info("InfluxDB 客戶端連接已關閉。")
         else:
-            logging.info("InfluxDB 客戶端未連接，無需關閉。")
+            log.info("InfluxDB 客戶端未連接，無需關閉。")
 
 
 def main():
@@ -466,52 +413,52 @@ def main():
     主函數 - 演示 CryptoDataAnalyzer 的功能。
     它會初始化分析器，獲取可用符號，並為第一個可用符號生成並列印綜合分析報告。
     """
-    logging.info("啟動數據分析器演示。")
+    log.info("啟動數據分析器演示。")
     try:
         analyzer = CryptoDataAnalyzer()
 
         # 獲取可用符號
         symbols = analyzer.get_available_symbols(limit=5)
-        logging.info(f"可用符號: {symbols}")
+        log.info(f"可用符號: {symbols}")
 
         if symbols:
             # 分析第一個可用符號
             symbol = symbols[0]
-            logging.info(f"正在分析 {symbol}...")
+            log.info(f"正在分析 {symbol}...")
 
             # 生成綜合報告
             report = analyzer.generate_report(symbol, hours=24)
 
-            logging.info(f"=== {symbol} 的分析報告 ===")
+            log.info(f"=== {symbol} 的分析報告 ===")
 
             if 'market_summary' in report and report['market_summary']:
                 summary = report['market_summary']
-                logging.info(f"當前價格: ${summary['current_price']:.4f}")
-                logging.info(f"24 小時變化: {summary['price_change_percent_24h']:.2f}%")
-                logging.info(f"24 小時最高: ${summary['high_24h']:.4f}")
-                logging.info(f"24 小時最低: ${summary['low_24h']:.4f}")
-                logging.info(f"24 小時交易量: {summary['volume_24h']:.2f}")
-                logging.info(f"波動率: {summary['volatility']:.2f}%")
+                log.info(f"當前價格: ${summary['current_price']:.4f}")
+                log.info(f"24 小時變化: {summary['price_change_percent_24h']:.2f}%")
+                log.info(f"24 小時最高: ${summary['high_24h']:.4f}")
+                log.info(f"24 小時最低: ${summary['low_24h']:.4f}")
+                log.info(f"24 小時交易量: {summary['volume_24h']:.2f}")
+                log.info(f"波動率: {summary['volatility']:.2f}%")
 
             if 'trading_stats' in report and report['trading_stats']:
                 stats = report['trading_stats']
-                logging.info(f"交易統計:")
-                logging.info(f"總交易筆數: {stats['total_trades']}")
-                logging.info(f"趨勢方向: {stats['trend_direction']}")
-                logging.info(f"價格範圍: ${stats['price_range']:.4f}")
+                log.info(f"交易統計:")
+                log.info(f"總交易筆數: {stats['total_trades']}")
+                log.info(f"趨勢方向: {stats['trend_direction']}")
+                log.info(f"價格範圍: ${stats['price_range']:.4f}")
 
             if 'price_alerts' in report and report['price_alerts']:
-                logging.info(f"價格警報: 找到 {len(report['price_alerts'])} 個警報")
+                log.info(f"價格警報: 找到 {len(report['price_alerts'])} 個警報")
                 for alert in report['price_alerts'][:3]:  # 顯示前 3 個警報
-                    logging.info(f"  - {alert['alert_type']}: {alert['change_percent']:.2f}% at {alert['timestamp']}")
+                    log.info(f"  - {alert['alert_type']}: {alert['change_percent']:.2f}% at {alert['timestamp']}")
             else:
-                logging.info("未找到價格警報。")
+                log.info("未找到價格警報。")
 
         analyzer.close()
-        logging.info("數據分析器演示結束。")
+        log.info("數據分析器演示結束。")
 
     except Exception as e:
-        logging.error(f"主函數中發生錯誤: {e}")
+        log.error(f"主函數中發生錯誤: {e}")
 
 
 if __name__ == "__main__":
