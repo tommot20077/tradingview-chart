@@ -10,68 +10,88 @@
 
 ## ✨ 主要功能
 
-- **📈 即時價格串流**: 來自 Binance WebSocket 的即時加密貨幣價格數據
-- **💾 InfluxDB 整合**: 自動存儲價格數據以供歷史分析
-- **🔄 WebSocket API**: 向連接的客戶端即時廣播價格數據
-- **🌐 RESTful 端點**: 簡易的訂閱管理和健康監控
-- **📊 數據分析工具**: 內建的數據分析和統計功能
-- **🖥️ Web 監控面板**: 即時監控和可視化界面
-- **⚙️ 環境配置**: 使用 `.env` 文件的安全配置管理
-- **🏗️ 模組化架構**: 清晰的關注點分離和專用提供者
-- **📋 批次處理**: 優化的 InfluxDB 批次寫入性能
-- **📈 性能監控**: 詳細的統計和性能指標
+- **📈 即時價格串流**: 來自 Binance WebSocket 的即時加密貨幣價格數據。
+- **💾 InfluxDB 整合**: 自動存儲價格數據以供歷史分析，並優化批次寫入。
+- **🔄 WebSocket API**: 向連接的客戶端即時廣播價格數據。
+- **🌐 RESTful 端點**: 簡易的訂閱管理、健康監控和數據檢索。
+- **📊 數據分析工具**: 內建的數據分析和統計功能，提供市場洞察。
+- **🖥️ Web 監控面板**: 即時監控和可視化界面，顯示系統和價格數據。
+- **⚙️ 環境配置**: 使用 `.env` 文件的安全配置管理，並提供詳細說明。
+- **🏗️ 模組化架構**: 清晰的關注點分離和專用提供者，以及明確的包結構。
+- **📋 優雅降級**: 優雅處理可選依賴（Kafka、PostgreSQL），即使未安裝也能保持核心功能。
+- **📈 性能監控**: 各組件的詳細統計和性能指標。
+- **📦 包管理**: 利用 `setup.py` 進行正確的項目打包和依賴管理，通過 `pip install -e .` 安裝。
+- **🔄 持久化訂閱**: 自動加載並訂閱數據庫中保存的符號（SQLite 或 PostgreSQL）。
 
 ## 🏗️ 項目架構
 
 ```
-📁 項目根目錄
-├── 📄 run.py                      # 統一運行腳本 (推薦使用)
-├── 📄 requirements.txt            # Python 依賴包
-├── 📄 .env                        # 環境變數 (不在 git 中)
-├── 📄 .env.example               # 環境變數範例
-├── 📄 README.md                  # 項目說明文件
-└── 📁 src/                       # 源代碼目錄
-    ├── 📄 main.py                # 基本版 FastAPI 應用
-    ├── 📄 enhanced_main.py       # 增強版 FastAPI 應用 (推薦)
-    ├── 📄 crypto_price_provider.py    # 基本版價格提供者
-    ├── 📄 enhanced_crypto_provider.py # 增強版價格提供者
-    ├── 📄 data_analyzer.py       # 數據分析工具
-    ├── 📄 config.py              # 配置管理
-    ├── 📄 influx-connector.py    # InfluxDB 連接測試工具
-    └── 📄 test_main.http         # API 端點測試
+📁 Project Root
+├── 📄 setup.py                                  # 項目打包和依賴管理
+├── 📄 run.py                                    # 運行腳本
+├── 📄 .env.example                              # 環境變數範例
+├── 📄 docker-compose-demo.yaml                  # Docker-compose 範例 (可選)
+├── 📄 README.md                                 # 項目說明文件 (英文)
+├── 📄 README_zh-TW.md                           # 項目說明文件 (繁體中文)
+├── 📁 src/
+│   └── 📁 person_chart/                         # Python 包根目錄
+│       ├── 📄 __init__.py                       # 使 person_chart 成為一個包
+│       ├── 📄 main.py                           # 基本版 FastAPI 應用
+│       ├── 📄 enhanced_main.py                  # 增強版 FastAPI 應用 (推薦)
+│       ├── 📄 config.py                         # 集中式環境變數配置管理
+│       ├── 📄 data_models.py                    # 數據類 (PriceData, Stats, etc.)
+│       ├── 📁 providers/                        # 數據提供者子包
+│       │   ├── 📄 __init__.py
+│       │   ├── 📄 abstract_data_provider.py     # 提供者的抽象基類
+│       │   ├── 📄 crypto_provider.py            # 基本版價格提供者
+│       │   └── 📄 enhanced_crypto_provider.py   # 增強版價格提供者
+│       ├── 📁 services/                         # 外部服務管理子包
+│       │   ├── 📄 __init__.py
+│       │   ├── 📄 database_manager.py           # 管理訂閱持久化 (SQLite/PostgreSQL)
+│       │   └── 📄 kafka_manager.py              # 管理 Kafka 連接
+│       ├── 📁 analysis/                         # 數據分析子包
+│       │   ├── 📄 __init__.py
+│       │   └── 📄 data_analyzer.py              # 數據分析工具
+│       └── 📁 tools/                            # 命令行工具子包
+│           ├── 📄 __init__.py
+│           └── 📄 influx_connector.py           # InfluxDB 連接測試工具
+└── 📁 static/                                   # Web 儀表板的靜態文件
+    └── 📄 index.html
 ```
 
 ### 🔧 核心組件
 
-1. **增強版 CryptoPriceProvider**: 處理 Binance WebSocket 連接和價格數據處理，支持緩存和統計
-2. **增強版 InfluxDBManager**: 管理 InfluxDB 連接和批次數據寫入，支持背景處理
-3. **ConnectionManager**: 管理 WebSocket 客戶端連接和廣播
-4. **DataAnalyzer**: 提供歷史數據分析和統計功能
-5. **Config**: 集中式環境變數配置管理
+1. **`EnhancedCryptoPriceProvider`**: 處理 Binance WebSocket 連接和價格數據處理，支持緩存、價格變化計算和統計。它還提供歷史數據查詢功能。
+2. **`EnhancedInfluxDBManager`**: 管理 InfluxDB 連接和優化批次數據寫入，支持後台處理以實現高效數據攝取。
+3. **`EnhancedConnectionManager` (在 `enhanced_main.py` 中)**: 管理 WebSocket 客戶端連接，廣播即時數據，並協調數據提供者。增強版集成了
+   Kafka 用於消息隊列。
+4. **`CryptoDataAnalyzer`**: 提供歷史數據分析、市場摘要、交易統計、價格警報和來自 InfluxDB 的交易量分析。
+5. **`Config`**: 集中式環境變數配置管理，確保安全靈活的部署。
+6. **`SubscriptionRepository`**: 管理訂閱符號在數據庫（SQLite 或 PostgreSQL）中的持久化。
+7. **`KafkaManager`**: 處理 Kafka 生產者和消費者創建，實現數據分發的強大消息隊列。
 
 ### 📊 版本對比
 
-| 功能           | 基本版 | 增強版 |
-|--------------|-----|-----|
-| WebSocket 串流 | ✅   | ✅   |
-| InfluxDB 存儲  | ✅   | ✅   |
-| 批次寫入優化       | ❌   | ✅   |
-| 價格變化計算       | ❌   | ✅   |
-| 統計監控         | ❌   | ✅   |
-| Web 控制面板     | ❌   | ✅   |
-| 數據分析工具       | ❌   | ✅   |
-| 性能緩存         | ❌   | ✅   |
+| 功能模組     | 基本版 (`main.py`)       | 增強版 (`enhanced_main.py`)      | 備註                                    |
+|----------|-----------------------|-------------------------------|---------------------------------------|
+| 數據獲取     | ✅ CryptoPriceProvider | ✅ EnhancedCryptoPriceProvider | 增強版提供者可增加快取、價格變化計算等。                  |
+| 持久化訂閱    | ❌                     | ✅ (SQLite / PostgreSQL)       | 僅增強版支持加載/保存訂閱。                        |
+| 數據儲存     | ✅ InfluxDB (基本寫入)     | ✅ InfluxDB (批次優化)             | 增強版使用 `EnhancedInfluxDBManager` 提升性能。 |
+| 即時數據分發   | ✅ 簡單回調 (Callback)     | ✅ WebSocket 廣播 & Kafka        | 增強版則實現了完整的廣播和消息隊列。                    |
+| API 服務   | ✅ (極簡)                | ✅ (豐富)                        | 基本版只提供最必要的 API，如健康檢查。                 |
+| 前端界面     | ❌                     | ✅ (Web 監控儀表板)                 | 這是增強版最顯著的區別。                          |
+| 歷史數據查詢   | ❌                     | ✅ (為圖表提供 API)                 | 基本版只管寫入，不管查詢。                         |
+| 數據分析     | ❌                     | ✅ (`data_analyzer.py` 整合)     | 增強版提供分析報告、統計等 API。                    |
+| Kafka 整合 | ❌                     | ✅ (可選)                        | 作為高級功能，只在增強版中提供。                      |
+| 配置管理     | ✅ `config.py`         | ✅ `config.py`                 | 兩者共用，但增強版會使用更多配置項。                    |
 
 ## 🚀 快速開始
 
-### 1. 安裝依賴
+### 1. 克隆倉庫
 
 ```bash
-# 使用運行腳本 (推薦)
-python run.py --install
-
-# 或手動安裝
-pip install -r requirements.txt
+git clone https://github.com/tommot20077/tradingview-chart.git 
+cd person-chart
 ```
 
 ### 2. 配置環境
@@ -82,72 +102,48 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-編輯 `.env` 文件，填入你的實際配置：
+編輯 `.env` 文件，填入你的實際配置（請參考 `.env.example` 中的詳細註釋）。
 
-```env
-# InfluxDB 配置
-INFLUXDB_HOST=http://your-influxdb-host:8086
-INFLUXDB_TOKEN=your-influxdb-token
-INFLUXDB_DATABASE=your-database-name
+### 3. 安裝項目依賴
 
-# Binance 配置
-BINANCE_SYMBOL=btcusdt
-BINANCE_INTERVAL=1m
+以可編輯模式安裝項目。這確保所有本地模塊都能正確識別並安裝依賴。
 
-# 服務器配置
-API_HOST=127.0.0.1
-API_PORT=8000
+```bash
+python run.py --install
 ```
 
-### 3. 測試 InfluxDB 連接
+### 4. 測試 InfluxDB 連接
 
 在運行主應用程式之前，測試你的 InfluxDB 連接：
 
 ```bash
-# 使用運行腳本
 python run.py --test-db
-
-# 或直接運行
-cd src && python influx-connector.py
 ```
 
 這將會：
 
-- 測試與 InfluxDB 實例的連接
-- 寫入樣本數據
-- 查詢並顯示測試數據
+- 測試與 InfluxDB 實例的連接。
+- 寫入樣本數據。
+- 查詢並顯示測試數據。
 
-### 4. 運行服務器
+### 5. 運行服務器
 
-**推薦方式 - 使用運行腳本：**
+**推薦方式 - 使用運行腳本（通過控制台腳本使用 `uvicorn`）：**
 
 ```bash
-# 運行增強版服務器 (推薦)
+# 運行增強版服務器 (推薦，包含 Web 儀表板和高級功能)
 python run.py --enhanced
 
-# 或運行基本版服務器
+# 或運行基本版服務器 (最小功能)
 python run.py --basic
 
-# 檢查項目狀態
+# 檢查項目狀態和可用命令
 python run.py --status
 ```
 
-**傳統方式：**
+### 6. 訪問 Web 監控儀表板 (僅限增強版)
 
-```bash
-# 增強版
-cd src && python enhanced_main.py
-
-# 基本版
-cd src && python main.py
-
-# 或使用 uvicorn
-uvicorn src.enhanced_main:app --host 127.0.0.1 --port 8000 --reload
-```
-
-### 5. 訪問 Web 控制面板
-
-運行增強版服務器後，在瀏覽器中訪問：
+運行增強版服務器 (`python run.py --enhanced`) 後，在瀏覽器中訪問：
 
 ```
 http://localhost:8000
@@ -160,25 +156,27 @@ http://localhost:8000
 - 🔄 連接狀態
 - 📈 性能指標
 
-### 6. 運行數據分析
+### 7. 運行數據分析
 
 ```bash
-# 使用運行腳本
 python run.py --analyze
-
-# 或直接運行
-cd src && python data_analyzer.py
 ```
+
+這將執行 `data_analyzer.py` 腳本，該腳本從 InfluxDB 獲取可用符號並為第一個可用符號生成綜合分析報告。
 
 ## API 端點
 
 ### REST 端點
 
-- `GET /` - API 資訊和狀態
+- `GET /` - API 資訊和狀態（基本版）/ Web 監控儀表板（增強版）
 - `GET /health` - 健康檢查和系統狀態
-- `GET /config` - 當前配置 (不包括敏感數據)
+- `GET /config` - 當前配置（不包括敏感數據）
+- `GET /stats` - 詳細系統和加密貨幣提供者統計（僅限增強版）
+- `GET /prices` - 獲取所有已緩存符號的最新價格（僅限增強版）
 - `POST /symbol/{symbol}/subscribe` - 訂閱交易對的價格串流
 - `POST /symbol/{symbol}/unsubscribe` - 取消訂閱交易對的價格串流
+- `GET /historical/{symbol}` - 獲取符號的歷史 K 線數據（僅限增強版）
+- `GET /symbols` - 獲取當前已訂閱和已緩存符號列表（僅限增強版）
 
 ### WebSocket 端點
 
@@ -202,17 +200,47 @@ curl -X POST "http://localhost:8000/symbol/dogeusdt/subscribe?interval=5m"
 curl http://localhost:8000/health
 ```
 
-回應:
+回應（增強版範例）：
 
 ```json
 {
   "status": "healthy",
+  "timestamp": "2025-06-14T12:00:00.000000+00:00",
   "crypto_provider": "running",
   "active_websocket_connections": 2,
+  "connection_stats": {
+    "total_connections": 5,
+    "messages_sent": 120,
+    "failed_sends": 0
+  },
   "subscribed_symbols": [
-    "bnbusdt@kline_1m",
-    "ethusdt@kline_1m"
-  ]
+    "BNBUSDT@kline_1m",
+    "ETHUSDT@kline_1m"
+  ],
+  "provider_stats": {
+    "messages_received": 150,
+    "messages_processed": 145,
+    "messages_failed": 5,
+    "kafka_messages_sent": 145,
+    "start_time": "2025-06-14T11:00:00.000000+00:00",
+    "uptime_seconds": 3600.0,
+    "subscribed_symbols": [
+      "bnbusdt@kline_1m",
+      "ethusdt@kline_1m"
+    ],
+    "cached_symbols": [
+      "BNBUSDT",
+      "ETHUSDT"
+    ],
+    "influxdb_stats": {
+      "total_writes": 145,
+      "successful_writes": 140,
+      "failed_writes": 5,
+      "retry_count": 2,
+      "last_write_time": "2025-06-14T11:59:50.000000+00:00",
+      "queue_size": 0
+    }
+  }
 }
 ```
 
@@ -223,6 +251,8 @@ const ws = new WebSocket('ws://localhost:8000/ws/price');
 
 ws.onopen = function (event) {
     console.log('已連接到價格串流');
+    // 你可以從客戶端發送訂閱命令 (僅限增強版)
+    // ws.send('subscribe:ETHUSDT');
 };
 
 ws.onmessage = function (event) {
@@ -253,6 +283,9 @@ ws.onclose = function (event) {
 - `low`: 區間內最低價
 - `close`: 收盤價
 - `volume`: 交易量
+- `price_change` (可選，增強版): 相對於前一個數據點的價格變化。
+- `price_change_percent` (可選，增強版): 相對於前一個數據點的價格變化百分比。
+- `trade_count` (可選，增強版): K 線期間的交易數量。
 
 **時間戳 (Timestamp)**: 價格數據時間戳
 
@@ -273,20 +306,15 @@ LIMIT 100
 
 ### 運行測試
 
-使用提供的 HTTP 測試文件與你喜歡的 REST 客戶端：
-
-```bash
-# 使用 VS Code REST Client 擴展的 test_main.http 文件
-# 或導入到 Postman/Insomnia
-```
+使用提供的 HTTP 測試文件 (`src/test_main.http`) 與你喜歡的 REST 客戶端（例如，VS Code REST Client 擴展、Postman、Insomnia）。
 
 ### 日誌記錄
 
 應用程式使用結構化日誌記錄，具有以下級別：
 
-- `INFO`: 一般應用程式流程和成功操作
-- `WARNING`: 非關鍵問題 (例如，WebSocket 廣播失敗)
-- `ERROR`: 需要注意的關鍵錯誤
+- `INFO`: 一般應用程式流程和成功操作。
+- `WARNING`: 非關鍵問題（例如，WebSocket 廣播失敗，Kafka 未安裝）。
+- `ERROR`: 需要注意的關鍵錯誤（例如，InfluxDB 連接失敗，配置無效）。
 
 日誌格式：
 
@@ -298,40 +326,45 @@ LIMIT 100
 
 要添加對其他加密貨幣交易所的支持：
 
-1. 創建一個類似 `CryptoPriceProvider` 的新提供者類
-2. 實現相同的接口以保持一致性
-3. 更新配置以支持多個提供者
-4. 修改連接管理器以處理多個數據源
+1. 創建一個類似 `CryptoPriceProviderRealtime` 或 `EnhancedCryptoPriceProviderRealtime` 的新提供者類。
+2. 實現 `AbstractRealtimeDataProvider`（並可選地 `AbstractHistoricalDataProvider`）接口以保持一致性。
+3. 更新 `config.py` 以支持新的提供者特定設置。
+4. 修改 `ConnectionManager` 或 `EnhancedConnectionManager` 以集成和管理新的數據源。
 
 ## 安全考量
 
-- **環境變數**: 敏感數據 (令牌、主機) 存儲在 `.env` 文件中
-- **Git 忽略**: `.env` 文件被排除在版本控制之外
-- **令牌暴露**: `/config` 端點將敏感令牌從回應中排除
-- **輸入驗證**: 符號名稱在訂閱前進行驗證
+- **環境變數**: 敏感數據（API 令牌、數據庫憑據）存儲在 `.env` 文件中，並從版本控制中排除（`.gitignore`）。
+- **令牌暴露**: `/config` 端點明確將敏感令牌從其回應中排除。
+- **輸入驗證**: 符號名稱和其他輸入在適當位置進行驗證，以防止常見漏洞。
+- **CORS**: 默認配置為允許所有來源用於開發；**對於生產環境，請將 `allow_origins` 限制為特定域名。**
 
 ## 故障排除
 
 ### 常見問題
 
 1. **InfluxDB 連接失敗**
-    - 檢查你的 `INFLUXDB_HOST`、`INFLUXDB_TOKEN` 和 `INFLUXDB_DATABASE` 設定
-    - 確保 InfluxDB 正在運行且可訪問
-    - 運行 `python influx-connector.py` 測試連接
+    - 檢查你的 `.env` 文件中的 `INFLUXDB_HOST`、`INFLUXDB_TOKEN` 和 `INFLUXDB_DATABASE` 設置。
+    - 確保 InfluxDB 正在運行且可訪問（例如，如果使用 `docker-compose`，請檢查 Docker 容器狀態）。
+    - 運行 `python run.py --test-db` 測試連接。
 
 2. **Binance WebSocket 連接問題**
-    - 檢查網路連接
-    - 驗證符號名稱是否有效 (使用小寫)
-    - 檢查 Binance API 狀態
+    - 檢查你的互聯網連接。
+    - 驗證符號名稱是否有效（例如，`btcusdt`、`ethusdt` 使用小寫）。
+    - 檢查 Binance API 狀態頁面是否有任何正在進行的問題。
 
 3. **WebSocket 客戶端未接收到數據**
-    - 驗證 WebSocket 端點是否正確：`ws://localhost:8000/ws/price`
-    - 檢查服務器日誌以查找連接問題
-    - 確保加密貨幣提供者正在運行 (檢查 `/health` 端點)
+    - 驗證 WebSocket 端點是否正確：`ws://localhost:8000/ws/price`。
+    - 檢查服務器日誌以查找連接問題或數據處理/廣播期間的錯誤。
+    - 確保加密貨幣提供者正在運行（檢查 `/health` 端點）。
+
+4. **Kafka 或 PostgreSQL 錯誤**
+    - 確保你已安裝可選依賴：Kafka 為 `pip install -e .[kafka]`，PostgreSQL 為 `pip install -e .[postgresql]`。
+    - 驗證 Kafka 或 PostgreSQL 服務正在運行且可訪問（檢查 `docker-compose-demo.yaml` 中的默認端口）。
+    - 檢查 Kafka 代理日誌或 PostgreSQL 數據庫日誌以獲取特定錯誤消息。
 
 ### 調試模式
 
-要啟用調試日誌記錄，請修改 `main.py` 中的日誌配置：
+要啟用調試日誌記錄，請修改 `src/main.py` 或 `src/enhanced_main.py` 中的日誌配置：
 
 ```python
 logging.basicConfig(level=logging.DEBUG)
@@ -341,19 +374,19 @@ logging.basicConfig(level=logging.DEBUG)
 
 ### InfluxDB 寫入優化
 
-根據你的需求調整 `CryptoPriceProvider` 中的寫入選項：
+根據你的需求調整 `EnhancedInfluxDBManager`（在 `src/enhanced_crypto_provider.py` 中）中的寫入選項：
 
 ```python
 write_options = WriteOptions(
-    batch_size=500,  # 增加以提高吞吐量
-    flush_interval=10_000,  # 減少以降低延遲
-    max_retries=5  # 根據網路可靠性調整
+    batch_size=500,  # 增加以提高吞吐量 (enhanced_main.py 中默認為 200)
+    flush_interval=10_000,  # 減少以降低延遲 (默認為 5_000)
+    max_retries=5  # 根據網絡可靠性調整
 )
 ```
 
 ### WebSocket 連接限制
 
-服務器可以處理多個 WebSocket 連接。監控性能並根據需要調整服務器資源。
+服務器可以處理多個 WebSocket 連接。監控性能並根據需要調整服務器資源（CPU、RAM）。
 
 ## 許可證
 
@@ -361,12 +394,11 @@ write_options = WriteOptions(
 
 ## 貢獻
 
-1. Fork 倉庫
-2. 創建一個功能分支
-3. 進行你的更改
-4. 如果適用，添加測試
-5. 提交拉取請求
+1. Fork 倉庫。
+2. 創建一個功能分支（`git checkout -b feature/YourFeature`）。
+3. 進行你的更改。
+4. 如果適用，添加測試。
+5. 確保所有文檔字符串和註釋都使用繁體中文以保持一致性。
+6. 提交拉取請求。
 
 對於重大更改，請先開一個 issue 討論擬議的更改。
-
-
