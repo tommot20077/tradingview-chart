@@ -5,13 +5,15 @@ Crypto Data Analyzer - 分析存儲在 InfluxDB 中的加密貨幣數據
 
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional
 
 import numpy as np
 import pandas as pd
 from dotenv import load_dotenv
 from influxdb_client_3 import InfluxDBClient3
+
+from data_models import MarketSummary, TradingStats
 
 # 設定日誌記錄
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -57,23 +59,46 @@ class CryptoDataAnalyzer:
         )
         log.info(f"CryptoDataAnalyzer 初始化完成，連接到 InfluxDB: {self.host}/{self.database}")
 
-    def get_price_data(self, symbol: str, hours: int = 24) -> pd.DataFrame:
+    def get_price_data(self, symbol: str, interval_time: Optional[timedelta] = None,
+                       start_time: Optional[datetime] = None,
+                       end_time: Optional[datetime] = None) -> pd.DataFrame:
         """
         獲取指定時間範圍內的價格數據。
 
         輸入:
             symbol (str): 加密貨幣符號 (例如 'BTCUSDT')。
-            hours (int): 時間範圍（小時），預設為 24 小時。
+            interval_time (datetime, optional): 查詢的時間間隔。如果提供，則會返回從當前時間到間隔時間的數據。
+            start_time (datetime): 查詢的開始時間，如果未提供，則默認為 Unix 時間戳 0 (1970-01-01)。
+            end_time (datetime): 查詢的結束時間，如果未提供，則默認為當前時間。
 
         輸出:
             pd.DataFrame: 包含價格數據的 DataFrame。如果沒有找到數據或發生錯誤，則返回空的 DataFrame。
         """
-        log.info(f"獲取 {symbol} 在過去 {hours} 小時內的價格數據...")
+
+        if not symbol:
+            log.warning("未提供加密貨幣符號，無法查詢價格數據。")
+            return pd.DataFrame()
+
+        if interval_time:
+            end_time = datetime.now(timezone.utc)
+            start_time = end_time - interval_time
+
+        if not start_time:
+            start_time = datetime.fromtimestamp(0, tz=timezone.utc)
+
+        if not end_time:
+            end_time = datetime.now(timezone.utc)
+
+        log.info(f"獲取 {symbol} 從 {start_time} 到 {end_time} 的價格數據...")
+        start_iso = start_time.isoformat()
+        end_iso = end_time.isoformat()
+
         query = f"""
         SELECT *
         FROM crypto_price
         WHERE symbol = '{symbol.upper()}'
-          AND time >= now() - interval '{hours} hours'
+          AND time >= '{start_iso}'
+          AND time <= '{end_iso}'
         ORDER BY time ASC
         """
 
@@ -104,7 +129,7 @@ class CryptoDataAnalyzer:
             Optional[MarketSummary]: 包含市場摘要的 MarketSummary 物件，如果沒有數據則為 None。
         """
         log.info(f"計算 {symbol} 在過去 {hours} 小時內的市場摘要...")
-        df = self.get_price_data(symbol, hours)
+        df = self.get_price_data(symbol, interval_time=timedelta(hours=hours))
 
         if df.empty:
             log.warning(f"沒有足夠的數據來計算 {symbol} 的市場摘要。")
@@ -154,7 +179,7 @@ class CryptoDataAnalyzer:
             Optional[TradingStats]: 包含交易統計的 TradingStats 物件，如果沒有數據則為 None。
         """
         log.info(f"計算 {symbol} 在過去 {hours} 小時內的交易統計...")
-        df = self.get_price_data(symbol, hours)
+        df = self.get_price_data(symbol, interval_time=timedelta(hours=hours))
 
         if df.empty:
             log.warning(f"沒有足夠的數據來計算 {symbol} 的交易統計。")
@@ -206,7 +231,7 @@ class CryptoDataAnalyzer:
             List[Dict]: 包含警報資訊的字典列表。如果沒有警報或數據不足，則返回空列表。
         """
         log.info(f"檢測 {symbol} 在過去 {hours} 小時內的價格警報 (閾值: {threshold_percent}%) ...")
-        df = self.get_price_data(symbol, hours)
+        df = self.get_price_data(symbol, interval_time=timedelta(hours=hours))
 
         if df.empty or len(df) < 2:
             log.warning(f"沒有足夠的數據來檢測 {symbol} 的價格警報。")
@@ -251,7 +276,7 @@ class CryptoDataAnalyzer:
             Dict: 包含交易量分析結果的字典。如果沒有數據，則返回空字典。
         """
         log.info(f"分析 {symbol} 在過去 {hours} 小時內的交易量數據...")
-        df = self.get_price_data(symbol, hours)
+        df = self.get_price_data(symbol, interval_time=timedelta(hours=hours))
 
         if df.empty:
             log.warning(f"沒有足夠的數據來分析 {symbol} 的交易量。")
@@ -332,7 +357,7 @@ class CryptoDataAnalyzer:
             Exception: 如果導出過程中發生錯誤則拋出。
         """
         log.info(f"將 {symbol} 在過去 {hours} 小時內的數據導出為 CSV 文件...")
-        df = self.get_price_data(symbol, hours)
+        df = self.get_price_data(symbol, interval_time=timedelta(hours=hours))
 
         if df.empty:
             log.error(f"沒有 {symbol} 的數據可供導出。")
@@ -377,7 +402,7 @@ class CryptoDataAnalyzer:
                 'trading_stats': trading_stats.__dict__ if trading_stats else None,
                 'volume_analysis': volume_analysis,
                 'price_alerts': price_alerts,
-                'data_availability': len(self.get_price_data(symbol, hours)) > 0
+                'data_availability': len(self.get_price_data(symbol, interval_time=timedelta(hours=hours))) > 0
             }
             log.info(f"{symbol} 的分析報告生成完成。")
             return report

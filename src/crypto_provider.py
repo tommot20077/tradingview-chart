@@ -7,36 +7,12 @@ from typing import Optional, Callable, Dict, List
 from binance.websocket.um_futures.websocket_client import UMFuturesWebsocketClient
 from influxdb_client_3 import InfluxDBClient3, Point, InfluxDBError, WriteOptions, write_client_options
 
-from abstract_data_provider import AbstractDataProvider
+from abstract_data_provider import AbstractRealtimeDataProvider
+from data_models import PriceData
 
 # 設定日誌記錄
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 log = logging.getLogger(__name__)
-
-
-@dataclass
-class PriceData:
-    """
-    用於儲存加密貨幣價格資料的資料類別。
-
-    屬性:
-        symbol (str): 交易對符號 (例如 'BTCUSDT')。
-        price (float): 當前價格 (通常是收盤價)。
-        timestamp (datetime): 資料的時間戳記。
-        open_price (float): K 線的開盤價。
-        high_price (float): K 線的最高價。
-        low_price (float): K 線的最低價。
-        close_price (float): K 線的收盤價。
-        volume (float): K 線的交易量。
-    """
-    symbol: str
-    price: float
-    timestamp: datetime
-    open_price: float
-    high_price: float
-    low_price: float
-    close_price: float
-    volume: float
 
 
 class InfluxDBManager:
@@ -205,7 +181,7 @@ class InfluxDBManager:
             log.error(f"寫入價格資料到 InfluxDB 失敗: {e}")
 
 
-class CryptoPriceProvider(AbstractDataProvider):
+class CryptoPriceProviderRealtime(AbstractRealtimeDataProvider):
     """
     加密貨幣價格提供者，此類為 AbstractDataProvider 的實現，
     從幣安 WebSocket 獲取加密貨幣價格資料並將其儲存到 InfluxDB。
@@ -223,7 +199,7 @@ class CryptoPriceProvider(AbstractDataProvider):
         self.influxdb_manager = influxdb_manager
         self.message_callback = message_callback
         self.binance_client: Optional[UMFuturesWebsocketClient] = None
-        self.subscribed_symbols = set()
+        self._subscribed_symbols = set()
 
         log.info("CryptoPriceProvider 初始化完成。")
 
@@ -362,9 +338,9 @@ class CryptoPriceProvider(AbstractDataProvider):
 
         stream_name = f"{symbol.lower()}@kline_{interval}"
 
-        if stream_name not in self.subscribed_symbols:
+        if stream_name not in self._subscribed_symbols:
             self.binance_client.subscribe(stream_name)
-            self.subscribed_symbols.add(stream_name)
+            self._subscribed_symbols.add(stream_name)
             log.info(f"已訂閱 {stream_name}")
         else:
             log.info(f"已訂閱 {stream_name}，無需重複訂閱。")
@@ -387,9 +363,9 @@ class CryptoPriceProvider(AbstractDataProvider):
 
         stream_name = f"{symbol.lower()}@kline_{interval}"
 
-        if stream_name in self.subscribed_symbols:
+        if stream_name in self._subscribed_symbols:
             self.binance_client.unsubscribe(stream_name)
-            self.subscribed_symbols.remove(stream_name)
+            self._subscribed_symbols.remove(stream_name)
             log.info(f"已取消訂閱 {stream_name}")
         else:
             log.info(f"未訂閱 {stream_name}，無需取消。")
@@ -417,8 +393,8 @@ class CryptoPriceProvider(AbstractDataProvider):
         """
         log.debug("獲取價格提供者統計數據。")
         return {
-            "subscribed_symbols_count": len(self.subscribed_symbols),
-            "subscribed_symbols_list": list(self.subscribed_symbols)
+            "subscribed_symbols_count": len(self._subscribed_symbols),
+            "subscribed_symbols_list": list(self._subscribed_symbols)
         }
 
     def get_latest_prices(self) -> Dict:
@@ -434,4 +410,4 @@ class CryptoPriceProvider(AbstractDataProvider):
         """
         獲取當前已訂閱的符號列表。
         """
-        return list(self.subscribed_symbols)
+        return list(self._subscribed_symbols)

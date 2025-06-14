@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.websockets import WebSocket
 
 from config import config
-from crypto_price_provider import CryptoPriceProvider, InfluxDBManager
+from crypto_provider import CryptoPriceProviderRealtime, InfluxDBManager
 
 # 設定日誌記錄
 logging.basicConfig(
@@ -34,7 +34,7 @@ class ConnectionManager:
             無。
         """
         self.active_connections: List[WebSocket] = []
-        self.crypto_provider: Optional[CryptoPriceProvider] = None
+        self.crypto_provider: Optional[CryptoPriceProviderRealtime] = None
         self.loop = None
         logger.info("ConnectionManager 初始化完成。")
 
@@ -150,7 +150,7 @@ class ConnectionManager:
             )
 
             # 建立加密貨幣價格提供者，帶有 WebSocket 廣播的訊息回調
-            self.crypto_provider = CryptoPriceProvider(
+            self.crypto_provider = CryptoPriceProviderRealtime(
                 influxdb_manager=influxdb_manager,
                 message_callback=self.sync_broadcast
             )

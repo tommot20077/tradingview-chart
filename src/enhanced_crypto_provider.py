@@ -4,10 +4,12 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from queue import Queue, Empty
-from typing import Optional, Callable, Dict, List
+from typing import Optional, Callable, Dict, List, Any
 
 from binance.websocket.um_futures.websocket_client import UMFuturesWebsocketClient
 from influxdb_client_3 import InfluxDBClient3, Point, InfluxDBError, WriteOptions, write_client_options
+
+from src.data_analyzer import CryptoDataAnalyzer
 
 try:
     from kafka import KafkaProducer
@@ -15,7 +17,7 @@ except ImportError:
     KafkaProducer = None
     logging.warning("KafkaProducer 無法導入。請確保已安裝 'kafka-python' 以啟用 Kafka 功能。")
 
-from abstract_data_provider import AbstractDataProvider
+from abstract_data_provider import AbstractRealtimeDataProvider, AbstractHistoricalDataProvider
 from data_models import InfluxDBStats, PriceData
 
 # 設定日誌記錄
@@ -308,7 +310,7 @@ class EnhancedInfluxDBManager:
         }
 
 
-class EnhancedCryptoPriceProvider(AbstractDataProvider):
+class EnhancedCryptoPriceProviderRealtime(AbstractRealtimeDataProvider, AbstractHistoricalDataProvider):
     """
     增強型加密貨幣價格提供者，此類為 AbstractDataProvider 的實現，
     從幣安 WebSocket 獲取數據，進行處理，並異步儲存到 InfluxDB。
@@ -326,6 +328,8 @@ class EnhancedCryptoPriceProvider(AbstractDataProvider):
         輸入:
             influxdb_manager (EnhancedInfluxDBManager): 用於管理 InfluxDB 連接和寫入的實例。
             message_callback (Optional[Callable[[str], None]]): 可選的回調函數，用於處理接收到的原始 WebSocket 訊息。
+            kafka_producer (Optional[KafkaProducer]): 可選的 Kafka 生產者實例。
+            kafka_topic (Optional[str]): 可選的 Kafka 主題名稱。
         """
         self.influxdb_manager = influxdb_manager
         self.message_callback = message_callback
@@ -334,8 +338,12 @@ class EnhancedCryptoPriceProvider(AbstractDataProvider):
         self.binance_client: Optional[UMFuturesWebsocketClient] = None
         self._subscribed_symbols = set()
         self._price_cache: Dict[str, PriceData] = {}
-        self._executor = ThreadPoolExecutor(max_workers=2)
-
+        self._executor = ThreadPoolExecutor(max_workers=4)
+        self.analyzer = CryptoDataAnalyzer(
+            host=influxdb_manager.host,
+            token=influxdb_manager.token,
+            database=influxdb_manager.database
+        )
         # 統計數據
         self.stats = {
             "messages_received": 0,
@@ -609,3 +617,42 @@ class EnhancedCryptoPriceProvider(AbstractDataProvider):
     @property
     def subscribed_symbols(self) -> List[str]:
         return list(self._subscribed_symbols)
+
+    def get_historical_data(self, symbol: str, start_time: datetime, end_time: datetime, interval: str) -> List[Dict[str, Any]]:
+        """
+        從 InfluxDB 獲取歷史K線數據。
+        注意: 'interval' 參數目前用於日誌記錄，實際數據間隔取決於存儲在數據庫中的數據。
+        未來的版本可以實現基於 interval 的數據降採樣。
+        """
+        log.info(f"正在為 {symbol} 獲取從 {start_time} 到 {end_time} 的歷史數據 (間隔: {interval})")
+        try:
+            df = self.analyzer.get_price_data(symbol, start_time=start_time, end_time=end_time)
+            if df.empty:
+                return []
+
+            df.reset_inplace = True
+            df['time'] = df['time'].apply(lambda x: int(x.timestamp()))
+
+            # 選擇並重命名列以匹配圖表庫要求
+            df_renamed = df.rename(columns={
+                'open_price': 'open',
+                'high_price': 'high',
+                'low_price': 'low',
+                'close_price': 'close'
+            })
+
+            required_columns = ['time', 'open', 'high', 'low', 'close', 'volume']
+            return df_renamed[required_columns].to_dict('records')
+
+        except Exception as e:
+            log.error(f"獲取 {symbol} 的歷史數據時出錯: {e}")
+            return []
+
+    def get_available_symbols(self) -> List[str]:
+        """從 InfluxDB 獲取所有可用的交易對符號。"""
+        log.info("正在獲取所有可用的符號...")
+        try:
+            return self.analyzer.get_available_symbols()
+        except Exception as e:
+            log.error(f"獲取可用符號時出錯: {e}")
+            return []

@@ -1,11 +1,12 @@
 from abc import ABC, abstractmethod
-from typing import Dict, List
+from datetime import datetime
+from typing import Dict, List, Any
 
 
-class AbstractDataProvider(ABC):
+class AbstractRealtimeDataProvider(ABC):
     """
     用於獲取即時市場數據的提供者的抽象基礎類別。
-    定義了所有數據提供者（例如加密貨幣、股票）必須實現的通用介面。
+    定義了所有即時數據提供者必須實現的通用介面。
     """
 
     @abstractmethod
@@ -24,12 +25,12 @@ class AbstractDataProvider(ABC):
 
     @abstractmethod
     def subscribe(self, symbol: str, **kwargs):
-        """訂閱特定符號的數據流。"""
+        """訂閱特定符號的即時數據流。"""
         pass
 
     @abstractmethod
     def unsubscribe(self, symbol: str, **kwargs):
-        """取消訂閱特定符號的數據流。"""
+        """取消訂閱特定符號的即時數據流。"""
         pass
 
     @abstractmethod
@@ -46,4 +47,38 @@ class AbstractDataProvider(ABC):
     @abstractmethod
     def subscribed_symbols(self) -> List[str]:
         """獲取當前已訂閱的符號列表。"""
+        pass
+
+
+class AbstractHistoricalDataProvider(ABC):
+    """
+    用於獲取歷史市場數據的提供者的抽象基礎類別。
+    定義了查詢歷史數據的通用介面。
+    """
+
+    @abstractmethod
+    def get_historical_data(self, symbol: str, start_time: datetime, end_time: datetime, interval: str) -> List[
+        Dict[str, Any]]:
+        """
+        獲取指定時間範圍和間隔的歷史K線數據。
+
+        輸入:
+            symbol (str): 交易對符號。
+            start_time (datetime): 查詢的開始時間。
+            end_time (datetime): 查詢的結束時間。
+            interval (str): 數據的時間間隔 (例如 '1m', '1h')。
+
+        輸出:
+            List[Dict[str, Any]]: 包含歷史K線數據的字典列表。
+        """
+        pass
+
+    @abstractmethod
+    def get_available_symbols(self) -> List[str]:
+        """
+        獲取數據庫中可用的交易對符號列表。
+
+        輸出:
+            List[str]: 可用符號的列表。
+        """
         pass

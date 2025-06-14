@@ -12,7 +12,7 @@ from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import FileResponse
 
 from config import config
-from enhanced_crypto_provider import EnhancedCryptoPriceProvider, EnhancedInfluxDBManager
+from enhanced_crypto_provider import EnhancedCryptoPriceProviderRealtime, EnhancedInfluxDBManager
 from kafka_manager import kafka_manager
 
 # 設定日誌記錄
@@ -40,7 +40,7 @@ class EnhancedConnectionManager:
             無。
         """
         self.active_connections: List[WebSocket] = []
-        self.crypto_provider: Optional[EnhancedCryptoPriceProvider] = None
+        self.crypto_provider: Optional[EnhancedCryptoPriceProviderRealtime] = None
         self.kafka_consumer: Optional[KafkaConsumer] = None
         self.kafka_producer: Optional[KafkaProducer] = None
         self._kafka_thread: Optional[threading.Thread] = None
@@ -193,7 +193,7 @@ class EnhancedConnectionManager:
                 self.kafka_consumer = kafka_manager.create_consumer(
                     topic=config.kafka_topic, group_id="crypto-streamer-group"
                 )
-                self.crypto_provider = EnhancedCryptoPriceProvider(
+                self.crypto_provider = EnhancedCryptoPriceProviderRealtime(
                     influxdb_manager=influxdb_manager,
                     kafka_producer=self.kafka_producer,
                     kafka_topic=config.kafka_topic
@@ -203,7 +203,7 @@ class EnhancedConnectionManager:
                 self._kafka_thread.start()
             else:
                 log.info("Kafka 模式已禁用。使用直接回調模式。")
-                self.crypto_provider = EnhancedCryptoPriceProvider(
+                self.crypto_provider = EnhancedCryptoPriceProviderRealtime(
                     influxdb_manager=influxdb_manager,
                     message_callback=self.sync_broadcast
                 )

@@ -4,11 +4,10 @@ Crypto Price Stream 運行腳本
 提供多種運行選項和工具
 """
 
-import sys
 import argparse
-import subprocess
-import os
 import logging
+import subprocess
+import sys
 from pathlib import Path
 
 # 配置日誌
@@ -162,7 +161,7 @@ def show_status():
         'requirements.txt',
         'src/main.py',
         'src/enhanced_main.py',
-        'src/crypto_price_provider.py',
+        'src/crypto_provider.py',
         'src/enhanced_crypto_provider.py',
         'src/data_analyzer.py',
         'src/config.py'
