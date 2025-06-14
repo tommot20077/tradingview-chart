@@ -1,0 +1,73 @@
+# Crypto Price Stream Server - Docker Compose 演示配置
+#
+# 此文件用於快速啟動專案所需的依賴服務：InfluxDB 和可選的 Kafka。
+#
+# 使用方法:
+# 1. 確保已安裝 Docker 和 Docker Compose。
+# 2. 在專案根目錄運行: docker-compose -f docker-compose-demo.yaml up -d
+# 3. 服務啟動後，請更新 .env 文件中的 INFLUXDB_HOST 和 KAFKA_BOOTSTRAP_SERVERS。
+#
+# 注意: 此配置僅用於開發和演示，不建議直接用於生產環境。
+
+version: '3.8'
+
+services:
+  # InfluxDB v3 服務
+  influxdb:
+    image: influxdb:latest
+    container_name: influxdb_service
+    ports:
+      - "8086:8086" # InfluxDB API 端口
+    volumes:
+      - influxdb_data:/var/lib/influxdb2
+    environment:
+      # 首次啟動時，InfluxDB 會進行初始化設置。
+      # 您需要手動進入容器或使用 UI 設置組織、Bucket 和 Token。
+      # 或者使用以下變數進行自動化設置 (更推薦手動以獲取 Token)。
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=admin
+      - DOCKER_INFLUXDB_INIT_PASSWORD=password1234
+      - DOCKER_INFLUXDB_INIT_ORG=my-org
+      - DOCKER_INFLUXDB_INIT_BUCKET=crypto_data # 與 .env 中的 INFLUXDB_DATABASE 匹配
+      # DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=your_super_secret_token # 您可以在此處預設 Token
+    restart: unless-stopped
+    networks:
+      - crypto-net
+
+  # Zookeeper - Kafka 的依賴
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: zookeeper_service
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    networks:
+      - crypto-net
+
+  # Kafka 消息代理
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka_service
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092" # Kafka 外部端口
+      - "29092:29092" # Kafka 內部端口
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    networks:
+      - crypto-net
+
+volumes:
+  influxdb_data: # 持久化 InfluxDB 數據
+
+networks:
+  crypto-net:
+    driver: bridge

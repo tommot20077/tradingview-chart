@@ -3,6 +3,7 @@ from dataclasses import dataclass, asdict
 from datetime import datetime
 from typing import Optional
 
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 log = logging.getLogger(__name__)
 
 
@@ -11,7 +12,7 @@ class PriceData:
     """
     用於儲存加密貨幣價格資料的資料類別。
 
-    屬性:
+    Attributes:
         symbol (str): 交易對符號 (例如 'BTCUSDT')。
         price (float): 當前價格 (通常是收盤價)。
         timestamp (datetime): 資料的時間戳記。
@@ -40,15 +41,11 @@ class PriceData:
         """
         將 PriceData 物件轉換為字典，以便進行 JSON 序列化。
 
-        輸入:
-            self (PriceData): PriceData 實例本身。
-
-        輸出:
+        Returns:
             dict: 包含價格資料的字典，時間戳記已轉換為 ISO 格式字串。
         """
         data = asdict(self)
         data['timestamp'] = self.timestamp.isoformat()
-        log.debug(f"PriceData 轉換為字典: {data}")
         return data
 
 
@@ -57,7 +54,7 @@ class InfluxDBStats:
     """
     InfluxDB 操作統計數據結構。
 
-    屬性:
+    Attributes:
         total_writes (int): 總寫入點數。
         successful_writes (int): 成功寫入的批次數。
         failed_writes (int): 寫入失敗的批次數。
@@ -76,7 +73,7 @@ class MarketSummary:
     """
     市場摘要數據結構。
 
-    屬性:
+    Attributes:
         symbol (str): 加密貨幣符號。
         current_price (float): 當前價格。
         price_change_24h (float): 24 小時價格變化量。
@@ -85,7 +82,7 @@ class MarketSummary:
         low_24h (float): 24 小時內最低價格。
         volume_24h (float): 24 小時交易量。
         avg_price_24h (float): 24 小時平均價格。
-        volatility (float): 波動率 (標準差)。
+        volatility (float): 波動率 (收盤價回報率的標準差)。
     """
     symbol: str
     current_price: float
@@ -97,13 +94,17 @@ class MarketSummary:
     avg_price_24h: float
     volatility: float
 
+    def to_dict(self) -> dict:
+        """將 MarketSummary 物件轉換為字典。"""
+        return asdict(self)
+
 
 @dataclass
 class TradingStats:
     """
     交易統計數據結構。
 
-    屬性:
+    Attributes:
         total_trades (int): 總交易筆數。
         avg_volume (float): 平均交易量。
         max_price (float): 期間內最高價格。
@@ -117,3 +118,7 @@ class TradingStats:
     min_price: float
     price_range: float
     trend_direction: str
+
+    def to_dict(self) -> dict:
+        """將 TradingStats 物件轉換為字典。"""
+        return asdict(self)
