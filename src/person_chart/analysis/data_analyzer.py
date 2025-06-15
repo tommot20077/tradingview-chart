@@ -13,11 +13,11 @@ import pandas as pd
 from dotenv import load_dotenv
 from influxdb_client_3 import InfluxDBClient3
 
+from person_chart.colored_logging import setup_colored_logging
+from person_chart.tools.time_unity import convert_interval_to_pandas_freq
 from ..data_models import MarketSummary
 
-# 設定日誌記錄
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-log = logging.getLogger(__name__)
+log = setup_colored_logging(level=logging.INFO)
 
 # 載入環境變數
 load_dotenv()
@@ -26,14 +26,23 @@ load_dotenv()
 class CryptoDataAnalyzer:
     """
     加密貨幣數據分析器。
-    用於從 InfluxDB 查詢、分析和報告加密貨幣價格和交易量數據。
+
+    作者: yuan
+    建立時間: 2025-06-15 18:13:00
+    更新時間: 2025-06-15 11:04:00
+    版本號: 0.6.1
+    用途說明:
+        此類用於從 InfluxDB 數據庫中查詢、分析和報告加密貨幣的價格和交易量數據。
+        它提供了獲取指定時間範圍內價格數據、計算市場摘要統計、
+        獲取可用交易對列表以及生成綜合分析報告的功能。
+        此外，還支持直接查詢和 K 線數據聚合。
     """
 
     def __init__(self, host: str = None, token: str = None, database: str = None):
         """
         初始化 CryptoDataAnalyzer 實例。
 
-        Parameters:
+        參數:
             host (str, optional): InfluxDB 服務器的主機位址。若為 None，則從環境變數 'INFLUXDB_HOST' 載入。
             token (str, optional): 用於 InfluxDB 認證的令牌。若為 None，則從環境變數 'INFLUXDB_TOKEN' 載入。
             database (str, optional): 要連接的 InfluxDB 資料庫名稱。若為 None，則從環境變數 'INFLUXDB_DATABASE' 載入。
@@ -59,13 +68,18 @@ class CryptoDataAnalyzer:
         """
         獲取指定時間範圍內的價格數據。
 
-        Parameters:
+        此方法從 InfluxDB 查詢指定交易對在給定時間範圍內的加密貨幣價格數據。
+        可以通過 `interval_time` 指定從現在回溯的時間間隔，
+        或者通過 `start_time` 和 `end_time` 指定明確的時間範圍。
+        數據將按時間排序並以 Pandas DataFrame 格式返回。
+
+        參數:
             symbol (str): 加密貨幣符號 (例如 'BTCUSDT')。
             interval_time (timedelta, optional): 從現在回溯的時間間隔。如果提供，將覆蓋 start_time。
             start_time (datetime, optional): 查詢的開始時間 (UTC)。預設為 24 小時前。
             end_time (datetime, optional): 查詢的結束時間 (UTC)。預設為當前時間。
 
-        Returns:
+        返回:
             pd.DataFrame: 包含價格數據的 DataFrame，索引為 'time'。若無數據或出錯則返回空 DataFrame。
         """
         if not symbol:
@@ -88,7 +102,7 @@ class CryptoDataAnalyzer:
         WHERE symbol = '{symbol.upper()}'
           AND time >= '{start_time.isoformat()}'
           AND time <= '{end_time.isoformat()}'
-        ORDER BY time ASC
+        ORDER BY time
         """
 
         try:
@@ -105,11 +119,15 @@ class CryptoDataAnalyzer:
         """
         計算指定加密貨幣在給定時間範圍內的市場摘要統計。
 
-        Parameters:
+        此方法會獲取指定交易對在過去 `hours` 小時內的價格數據，
+        並計算包括當前價格、24 小時價格變化、最高價、最低價、交易量、
+        平均價格和波動率等關鍵市場指標，將其封裝為 MarketSummary 對象返回。
+
+        參數:
             symbol (str): 加密貨幣符號。
             hours (int): 回溯的時間範圍（小時），預設為 24。
 
-        Returns:
+        返回:
             Optional[MarketSummary]: 包含市場摘要的 MarketSummary 物件，如果沒有數據則為 None。
         """
         log.info(f"正在計算 {symbol} 在過去 {hours} 小時內的市場摘要...")
@@ -150,10 +168,13 @@ class CryptoDataAnalyzer:
         """
         從數據庫中獲取最近指定小時內有數據的可用加密貨幣符號列表。
 
-        Parameters:
+        此方法查詢 InfluxDB，找出在過去 `hours` 小時內有任何價格數據記錄的所有唯一交易對符號。
+        這有助於了解哪些交易對當前是活躍的或有數據可供分析。
+
+        參數:
             hours (int): 回溯的時間範圍（小時），預設為 24。
 
-        Returns:
+        返回:
             List[str]: 可用符號的列表。
         """
         log.info(f"正在獲取過去 {hours} 小時內活躍的加密貨幣符號...")
@@ -175,11 +196,14 @@ class CryptoDataAnalyzer:
         """
         為指定加密貨幣在給定時間範圍內生成一份綜合分析報告。
 
-        Parameters:
+        此方法會調用 `calculate_market_summary` 來獲取市場摘要，
+        並將其與分析時間範圍和報告生成時間一起組合成一個完整的分析報告字典。
+
+        參數:
             symbol (str): 加密貨幣符號。
             hours (int): 時間範圍（小時），預設為 24。
 
-        Returns:
+        返回:
             Dict: 包含完整分析報告的字典。
         """
         log.info(f"正在為 {symbol} 在過去 {hours} 小時內生成綜合分析報告...")
@@ -202,18 +226,133 @@ class CryptoDataAnalyzer:
     def close(self):
         """
         關閉與 InfluxDB 資料庫的連接。
+        此方法會安全地關閉 InfluxDB 客戶端連接，釋放相關資源。
         """
-        log.info("關閉 InfluxDB 客戶端連接...")
+        log.info("正在關閉 InfluxDB 客戶端連接...")
         if self.client:
             self.client.close()
             log.info("InfluxDB 客戶端連接已關閉。")
+
+    def query_direct(self, symbol: str, measurement: str, start_time: datetime, end_time: datetime, limit: int,
+                     offset: int) -> pd.DataFrame:
+        """
+        直接從指定的 measurement 查詢數據，支持分頁。
+
+        此方法允許直接對 InfluxDB 中的指定測量 (measurement) 進行 SQL 查詢，
+        並支持通過 `limit` 和 `offset` 參數進行結果分頁。
+        查詢結果將按時間排序並以 Pandas DataFrame 格式返回。
+
+        參數:
+            symbol (str): 加密貨幣符號。
+            measurement (str): InfluxDB 中的測量名稱。
+            start_time (datetime): 查詢的開始時間 (UTC)。
+            end_time (datetime): 查詢的結束時間 (UTC)。
+            limit (int): 返回的最大記錄數。
+            offset (int): 跳過的記錄數。
+
+        返回:
+            pd.DataFrame: 包含查詢數據的 DataFrame。
+        """
+        log.debug(f"正在查詢 {measurement} 中 {symbol} 從 {start_time} 到 {end_time} 的數據，限制 {limit} 條，偏移 {offset}。")
+        query = f"""
+        SELECT *
+        FROM "{measurement}"
+        WHERE symbol = '{symbol.upper()}'
+          AND time >= '{start_time.isoformat()}'
+          AND time <= '{end_time.isoformat()}'
+        ORDER BY time
+        LIMIT {limit}
+        OFFSET {offset}
+        """
+        try:
+            table = self.client.query(query=query, language='sql')
+            df = table.to_pandas().set_index('time')
+            df.index = pd.to_datetime(df.index)
+            return df
+        except Exception as e:
+            log.error(f"對 {measurement} 中 {symbol} 的直接查詢失敗: {e}")
+            return pd.DataFrame()
+
+    def query_and_aggregate(self, symbol: str, base_measurement: str, start_time: datetime, end_time: datetime,
+                            window_str: str) -> pd.DataFrame:
+        """
+        從基礎 measurement 查詢數據並在客戶端（Python）進行聚合。
+
+        此方法首先從 InfluxDB 獲取指定時間範圍內的原始數據，
+        然後利用 Pandas 的 `resample` 和 `agg` 功能在內存中進行 K 線聚合。
+        這種方法避免了數據庫不支持的聚合函數（如 FIRST/LAST），
+        提供了更高的靈活性和兼容性。
+
+        參數:
+            symbol (str): 加密貨幣符號。
+            base_measurement (str): 基礎測量名稱 (例如 'crypto_price')。
+            start_time (datetime): 查詢的開始時間 (UTC)。
+            end_time (datetime): 查詢的結束時間 (UTC)。
+            window_str (str): 聚合時間窗口的字符串表示 (例如 '1m', '1h', '1d')。
+
+        返回:
+            pd.DataFrame: 包含聚合 K 線數據的 DataFrame。
+        """
+        log.info(f"正在查詢並聚合 {base_measurement} 中 {symbol} 的數據，時間窗口為 '{window_str}'。")
+
+        query = f"""
+        SELECT *
+        FROM "{base_measurement}"
+        WHERE
+            symbol = '{symbol.upper()}' AND
+            time >= '{start_time.isoformat()}' AND
+            time <= '{end_time.isoformat()}'
+        ORDER BY time
+        """
+
+        try:
+            table = self.client.query(query=query, language='sql')
+            df = table.to_pandas().set_index('time')
+            df.index = pd.to_datetime(df.index)
+            if df.empty:
+                log.warning(f"在指定時間範圍內未找到 {symbol} 的原始數據進行聚合。")
+                return pd.DataFrame()
+
+            pandas_freq_str = convert_interval_to_pandas_freq(window_str)
+            if not pandas_freq_str:
+                raise ValueError(f"無法將間隔 '{window_str}' 轉換為有效的 Pandas 頻率。")
+
+            log.debug(f"將間隔 '{window_str}' 轉換為 Pandas 頻率 '{pandas_freq_str}' 進行 resample。")
+
+            aggregation_rules = {
+                'open': 'first',
+                'high': 'max',
+                'low': 'min',
+                'close': 'last',
+                'volume': 'sum'
+            }
+
+            if 'trade_count' in df.columns:
+                aggregation_rules['trade_count'] = 'sum'
+            elif 'trade_count' in aggregation_rules:
+                del aggregation_rules['trade_count']
+
+            agg_df = df.resample(pandas_freq_str).agg(aggregation_rules)
+            agg_df.dropna(subset=['close'], inplace=True)
+            agg_df.dropna(how='all', inplace=True)
+
+            log.debug(f"成功將 {len(df)} 條 '{base_measurement}' 數據聚合為 {len(agg_df)} 條 '{window_str}' K線數據。")
+            return agg_df
+
+        except Exception as e:
+            log.error(f"查詢並聚合 {symbol} 的數據失敗: {e}")
+            return pd.DataFrame()
 
 
 def main():
     """
     主函數 - 演示 CryptoDataAnalyzer 的功能。
+    此函數作為數據分析器的入口點，演示了如何初始化分析器、
+    獲取可用交易對、生成並打印指定交易對的綜合分析報告。
+    它還包含了錯誤處理和資源清理的邏輯。
     """
-    log.info("啟動數據分析器演示...")
+    log.info("正在啟動數據分析器演示...")
+    analyzer = None
     try:
         analyzer = CryptoDataAnalyzer()
         symbols = analyzer.get_available_symbols()

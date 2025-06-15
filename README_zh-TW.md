@@ -28,18 +28,22 @@
 ```
 📁 Project Root
 ├── 📄 setup.py                                  # 項目打包和依賴管理
-├── 📄 run.py                                    # 運行腳本
-├── 📄 .env.example                              # 環境變數範例
-├── 📄 docker-compose-demo.yaml                  # Docker-compose 範例 (可選)
+├── 📄 run.py                                    # 運行腳本 (推薦)
+├── 📄 .env.example                              # 環境變數範例 (包含詳細註釋)
+├── 📄 docker-compose-demo.yaml                  # 依賴服務的 Docker-compose 範例
 ├── 📄 README.md                                 # 項目說明文件 (英文)
 ├── 📄 README_zh-TW.md                           # 項目說明文件 (繁體中文)
 ├── 📁 src/
 │   └── 📁 person_chart/                         # Python 包根目錄
 │       ├── 📄 __init__.py                       # 使 person_chart 成為一個包
-│       ├── 📄 main.py                           # 基本版 FastAPI 應用
-│       ├── 📄 enhanced_main.py                  # 增強版 FastAPI 應用 (推薦)
+│       ├── 📄 colored_logging.py                # 彩色日誌設置
 │       ├── 📄 config.py                         # 集中式環境變數配置管理
 │       ├── 📄 data_models.py                    # 數據類 (PriceData, Stats, etc.)
+│       ├── 📄 enhanced_main.py                  # 增強版 FastAPI 應用 (推薦)
+│       ├── 📄 main.py                           # 基本版 FastAPI 應用
+│       ├── 📁 analysis/                         # 數據分析子包
+│       │   ├── 📄 __init__.py
+│       │   └── 📄 data_analyzer.py              # 數據分析工具
 │       ├── 📁 providers/                        # 數據提供者子包
 │       │   ├── 📄 __init__.py
 │       │   ├── 📄 abstract_data_provider.py     # 提供者的抽象基類
@@ -49,14 +53,12 @@
 │       │   ├── 📄 __init__.py
 │       │   ├── 📄 database_manager.py           # 管理訂閱持久化 (SQLite/PostgreSQL)
 │       │   └── 📄 kafka_manager.py              # 管理 Kafka 連接
-│       ├── 📁 analysis/                         # 數據分析子包
-│       │   ├── 📄 __init__.py
-│       │   └── 📄 data_analyzer.py              # 數據分析工具
 │       └── 📁 tools/                            # 命令行工具子包
 │           ├── 📄 __init__.py
-│           └── 📄 influx_connector.py           # InfluxDB 連接測試工具
+│           ├── 📄 influx-connector.py           # InfluxDB 連接測試工具
+│           └── 📄 time_unity.py                 # 時間單位轉換工具
 └── 📁 static/                                   # Web 儀表板的靜態文件
-    └── 📄 index.html
+    └── 📄 index.html                            # Web 監控儀表板 HTML
 ```
 
 ### 🔧 核心組件
@@ -72,18 +74,18 @@
 
 ### 📊 版本對比
 
-| 功能模組     | 基本版 (`main.py`)       | 增強版 (`enhanced_main.py`)      | 備註                                    |
-|----------|-----------------------|-------------------------------|---------------------------------------|
-| 數據獲取     | ✅ CryptoPriceProvider | ✅ EnhancedCryptoPriceProvider | 增強版提供者可增加快取、價格變化計算等。                  |
-| 持久化訂閱    | ❌                     | ✅ (SQLite / PostgreSQL)       | 僅增強版支持加載/保存訂閱。                        |
-| 數據儲存     | ✅ InfluxDB (基本寫入)     | ✅ InfluxDB (批次優化)             | 增強版使用 `EnhancedInfluxDBManager` 提升性能。 |
-| 即時數據分發   | ✅ 簡單回調 (Callback)     | ✅ WebSocket 廣播 & Kafka        | 增強版則實現了完整的廣播和消息隊列。                    |
-| API 服務   | ✅ (極簡)                | ✅ (豐富)                        | 基本版只提供最必要的 API，如健康檢查。                 |
-| 前端界面     | ❌                     | ✅ (Web 監控儀表板)                 | 這是增強版最顯著的區別。                          |
-| 歷史數據查詢   | ❌                     | ✅ (為圖表提供 API)                 | 基本版只管寫入，不管查詢。                         |
-| 數據分析     | ❌                     | ✅ (`data_analyzer.py` 整合)     | 增強版提供分析報告、統計等 API。                    |
-| Kafka 整合 | ❌                     | ✅ (可選)                        | 作為高級功能，只在增強版中提供。                      |
-| 配置管理     | ✅ `config.py`         | ✅ `config.py`                 | 兩者共用，但增強版會使用更多配置項。                    |
+| 功能模組       | 基本版 (`main.py`)         | 增強版 (`enhanced_main.py`)  | 備註                           |
+|------------|-------------------------|---------------------------|------------------------------|
+| 數據獲取       | ✅ 增強版提供者                | ✅ 增強版提供者                  | 兩個版本使用相同的加強版數據提供者。           |
+| 持久化訂閱      | ✅ (SQLite / PostgreSQL) | ✅ (SQLite / PostgreSQL)   | 兩個版本都支持加載/保存訂閱。              |
+| 數據儲存       | ✅ InfluxDB (基礎+聚合)      | ✅ InfluxDB (基礎+聚合)        | 兩個版本都會儲存基礎和聚合後的 K 線數據。       |
+| 配置管理       | ✅ `config.py`           | ✅ `config.py`             | 兩者共用，但增強版會使用更多配置項。           |
+| 即時數據分發     | ✅ 基礎 WebSocket 廣播       | ✅ WebSocket 廣播 & Kafka    | 增強版增加了可選的 Kafka 以實現更可靠的消息隊列。 |
+| API 服務     | ✅ (極簡)                  | ✅ (豐富)                    | 增強版增加了歷史數據、分析、統計等豐富的 API。    |
+| 前端界面       | ❌                       | ✅ (Web 監控儀表板)             | 這是增強版最顯著的區別。                 |
+| 歷史數據查詢 API | ❌                       | ✅ (為圖表提供 API)             | 僅增強版提供查詢歷史數據的 API。           |
+| 數據分析 API   | ❌                       | ✅ (`data_analyzer.py` 整合) | 僅增強版提供分析報告的 API。             |
+| Kafka 整合   | ❌                       | ✅ (可選)                    | 作為高級功能，只在增強版中提供。             |
 
 ## 🚀 快速開始
 
@@ -188,10 +190,10 @@ python run.py --analyze
 
 ```bash
 # 訂閱以太坊
-curl -X POST "http://localhost:8000/symbol/ethusdt/subscribe?interval=1m"
+curl -X POST "http://localhost:8000/symbol/ethusdt/subscribe"
 
 # 訂閱狗狗幣
-curl -X POST "http://localhost:8000/symbol/dogeusdt/subscribe?interval=5m"
+curl -X POST "http://localhost:8000/symbol/dogeusdt/subscribe"
 ```
 
 ### 檢查系統健康狀況

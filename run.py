@@ -10,25 +10,31 @@ import subprocess
 import sys
 from pathlib import Path
 
-# 配置日誌
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-log = logging.getLogger(__name__)
+from person_chart.colored_logging import setup_colored_logging
+from person_chart.config import config
+
+log = setup_colored_logging(level=logging.INFO)
 sys.path.insert(0, str(Path(__file__).resolve().parent / 'src'))
 
 
 def run_command(command: list):
-    """執行一個子進程命令並處理中斷。"""
+    """
+    執行一個子進程命令並處理中斷。
+    此函數會啟動一個新的子進程來執行指定的命令，並等待其完成。
+    如果用戶在執行過程中發出鍵盤中斷 (Ctrl+C)，則會嘗試終止該進程。
+    若進程在指定時間內未能終止，則會強制殺死該進程。
+    """
     process = None
     try:
         process = subprocess.Popen(command)
         process.wait()
     except KeyboardInterrupt:
-        log.info("\n⚠️  用戶中斷操作，正在終止進程...")
+        log.info("\n⚠️  使用者中斷操作，正在終止進程...")
         process.terminate()
         try:
             process.wait(timeout=5)
         except subprocess.TimeoutExpired:
-            log.warning("進程的終止時間過長，強制終止...")
+            log.warning("進程終止時間過長，正在強制終止...")
             process.kill()
     except Exception as e:
         log.error(f"\n❌ 執行命令時發生錯誤: {e}")
@@ -37,10 +43,16 @@ def run_command(command: list):
 def run_basic_server():
     """
     運行基本版本的加密貨幣價格串流服務器。
-    使用 uvicorn 啟動在 setup.py 中定義的 'person-chart-basic' 入口點。
+    此函數使用 uvicorn 啟動在 setup.py 中定義的 'person-chart-basic' 入口點。
+    服務器預設將在 127.0.0.1:8000 上運行，並啟用熱重載功能。此版本不包含 Web 儀表板功能
+    而連接位置可以使用 API_HOST 和 API_PORT 環境變數進行配置。
     """
     log.info("🚀 正在啟動基本版加密貨幣價格串流服務器...")
-    command = [sys.executable, "-m", "uvicorn", "person_chart.main:app", "--host", "127.0.0.1", "--port", "8000", "--reload",
+    host = config.api_host
+    port = str(config.api_port)
+
+
+    command = [sys.executable, "-m", "uvicorn", "person_chart.main:app", "--host", host, "--port", port, "--reload",
                "--reload-dir", "src"]
     run_command(command)
 
@@ -48,10 +60,14 @@ def run_basic_server():
 def run_enhanced_server():
     """
     運行增強版本的加密貨幣價格串流服務器。
-    使用 uvicorn 啟動在 setup.py 中定義的 'person-chart-enhanced' 入口點。
+    此函數使用 uvicorn 啟動在 setup.py 中定義的 'person-chart-enhanced' 入口點。
+    服務器預設將在 127.0.0.1:8000 上運行，並啟用熱重載功能。此為推薦的運行模式。
+    而連接位置可以使用 API_HOST 和 API_PORT 環境變數進行配置。
     """
     log.info("🚀 正在啟動增強版加密貨幣價格串流服務器 (推薦)...")
-    command = [sys.executable, "-m", "uvicorn", "person_chart.enhanced_main:app", "--host", "127.0.0.1", "--port", "8000", "--reload",
+    host = config.api_host
+    port = str(config.api_port)
+    command = [sys.executable, "-m", "uvicorn", "person_chart.enhanced_main:app", "--host", host, "--port", port, "--reload",
                "--reload-dir", "src"]
     run_command(command)
 
@@ -59,9 +75,10 @@ def run_enhanced_server():
 def test_influxdb():
     """
     測試與 InfluxDB 資料庫的連接。
-    執行 influx-connector.py 腳本。
+    此函數會執行 person_chart.tools.influx_connector 腳本，
+    用於驗證與 InfluxDB 實例的連線狀態、寫入範例數據及查詢測試數據。
     """
-    log.info("🔧 正在測試 InfluxDB 連接...")
+    log.info("🔧 正在測試 InfluxDB 連線...")
     command = [sys.executable, "-m", "person_chart.tools.influx_connector"]
     run_command(command)
 
@@ -69,7 +86,8 @@ def test_influxdb():
 def run_data_analyzer():
     """
     運行數據分析器。
-    執行 data_analyzer.py 腳本。
+    此函數會執行 person_chart.analysis.data_analyzer 腳本，
+    用於從 InfluxDB 獲取可用符號並生成綜合分析報告。
     """
     log.info("📊 正在運行數據分析器...")
     command = [sys.executable, "-m", "person_chart.analysis.data_analyzer"]
@@ -77,7 +95,11 @@ def run_data_analyzer():
 
 
 def install_project():
-    """安裝項目為可編輯模式。"""
+    """
+    安裝項目為可編輯模式。
+    此函數會使用 pip 以可編輯模式安裝項目核心依賴，確保所有本地模塊都能正確識別。
+    同時會提示用戶可選的 Kafka 和 PostgreSQL 依賴安裝方式。
+    """
     log.info("📦 正在以可編輯模式安裝項目核心依賴...")
     try:
         subprocess.check_call([sys.executable, "-m", "pip", "install", "-e", "."])
@@ -90,7 +112,12 @@ def install_project():
 
 
 def check_environment():
-    """檢查 .env 文件配置。"""
+    """
+    檢查 .env 文件配置。
+    此函數會檢查 .env 文件是否存在，並驗證其中是否包含所有必要的環境變數，
+    例如 INFLUXDB_HOST、INFLUXDB_TOKEN 和 INFLUXDB_DATABASE。
+    如果文件缺失或變數不完整，將會發出錯誤提示。
+    """
     log.info("🔍 正在檢查環境配置...")
     env_file = Path('.env')
     if not env_file.exists():
@@ -112,7 +139,11 @@ def check_environment():
 
 
 def show_status():
-    """顯示項目狀態。"""
+    """
+    顯示項目狀態。
+    此函數會提供一個綜合報告，包含重要文件的存在狀態、環境配置檢查結果，
+    以及所有可用的運行命令及其簡要說明，幫助用戶快速了解項目概況。
+    """
     log.info("📋 項目狀態檢查")
     log.info("=" * 50)
 
@@ -140,7 +171,11 @@ def show_status():
 
 
 def main():
-    """主函數。"""
+    """
+    主函數。
+    此函數負責解析命令行參數，並根據用戶選擇的選項執行相應的功能，
+    例如啟動服務器、測試數據庫連接、運行數據分析器或安裝項目依賴。
+    """
     parser = argparse.ArgumentParser(
         description="Crypto Price Stream 運行工具",
         formatter_class=argparse.RawTextHelpFormatter,
