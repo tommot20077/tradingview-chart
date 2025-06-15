@@ -28,18 +28,22 @@
 ```
 📁 Project Root
 ├── 📄 setup.py                                  # 項目打包和依賴管理
-├── 📄 run.py                                    # 運行腳本
-├── 📄 .env.example                              # 環境變數範例
-├── 📄 docker-compose-demo.yaml                  # Docker-compose 範例 (可選)
+├── 📄 run.py                                    # 運行腳本 (推薦)
+├── 📄 .env.example                              # 環境變數範例 (包含詳細註釋)
+├── 📄 docker-compose-demo.yaml                  # 依賴服務的 Docker-compose 範例
 ├── 📄 README.md                                 # 項目說明文件 (英文)
 ├── 📄 README_zh-TW.md                           # 項目說明文件 (繁體中文)
 ├── 📁 src/
 │   └── 📁 person_chart/                         # Python 包根目錄
 │       ├── 📄 __init__.py                       # 使 person_chart 成為一個包
-│       ├── 📄 main.py                           # 基本版 FastAPI 應用
-│       ├── 📄 enhanced_main.py                  # 增強版 FastAPI 應用 (推薦)
+│       ├── 📄 colored_logging.py                # 彩色日誌設置
 │       ├── 📄 config.py                         # 集中式環境變數配置管理
 │       ├── 📄 data_models.py                    # 數據類 (PriceData, Stats, etc.)
+│       ├── 📄 enhanced_main.py                  # 增強版 FastAPI 應用 (推薦)
+│       ├── 📄 main.py                           # 基本版 FastAPI 應用
+│       ├── 📁 analysis/                         # 數據分析子包
+│       │   ├── 📄 __init__.py
+│       │   └── 📄 data_analyzer.py              # 數據分析工具
 │       ├── 📁 providers/                        # 數據提供者子包
 │       │   ├── 📄 __init__.py
 │       │   ├── 📄 abstract_data_provider.py     # 提供者的抽象基類
@@ -49,14 +53,12 @@
 │       │   ├── 📄 __init__.py
 │       │   ├── 📄 database_manager.py           # 管理訂閱持久化 (SQLite/PostgreSQL)
 │       │   └── 📄 kafka_manager.py              # 管理 Kafka 連接
-│       ├── 📁 analysis/                         # 數據分析子包
-│       │   ├── 📄 __init__.py
-│       │   └── 📄 data_analyzer.py              # 數據分析工具
 │       └── 📁 tools/                            # 命令行工具子包
 │           ├── 📄 __init__.py
-│           └── 📄 influx_connector.py           # InfluxDB 連接測試工具
+│           ├── 📄 influx-connector.py           # InfluxDB 連接測試工具
+│           └── 📄 time_unity.py                 # 時間單位轉換工具
 └── 📁 static/                                   # Web 儀表板的靜態文件
-    └── 📄 index.html
+    └── 📄 index.html                            # Web 監控儀表板 HTML
 ```
 
 ### 🔧 核心組件
@@ -188,10 +190,10 @@ python run.py --analyze
 
 ```bash
 # 訂閱以太坊
-curl -X POST "http://localhost:8000/symbol/ethusdt/subscribe?interval=1m"
+curl -X POST "http://localhost:8000/symbol/ethusdt/subscribe"
 
 # 訂閱狗狗幣
-curl -X POST "http://localhost:8000/symbol/dogeusdt/subscribe?interval=5m"
+curl -X POST "http://localhost:8000/symbol/dogeusdt/subscribe"
 ```
 
 ### 檢查系統健康狀況

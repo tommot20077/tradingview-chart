@@ -33,7 +33,7 @@ English | [中文](README_zh-TW.md)
 ```
 📁 Project Root
 ├── 📄 setup.py                                  # Project packaging and dependency management
-├── 📄 run.py                                    # run script (recommended)
+├── 📄 run.py                                    # Run script (recommended)
 ├── 📄 .env.example                              # Example environment variables with detailed comments
 ├── 📄 docker-compose-demo.yaml                  # Docker-compose for dependency services
 ├── 📄 README.md                                 # Project documentation (English)
@@ -41,10 +41,14 @@ English | [中文](README_zh-TW.md)
 ├── 📁 src/
 │   └── 📁 person_chart/                         # Python package root directory
 │       ├── 📄 __init__.py                       # Makes person_chart a package
-│       ├── 📄 main.py                           # Basic FastAPI application
-│       ├── 📄 enhanced_main.py                  # Enhanced FastAPI application (recommended)
+│       ├── 📄 colored_logging.py                # Colored logging setup
 │       ├── 📄 config.py                         # Centralized environment variable configuration
 │       ├── 📄 data_models.py                    # Data classes (PriceData, Stats, etc.)
+│       ├── 📄 enhanced_main.py                  # Enhanced FastAPI application (recommended)
+│       ├── 📄 main.py                           # Basic FastAPI application
+│       ├── 📁 analysis/                         # Data analysis subpackage
+│       │   ├── 📄 __init__.py
+│       │   └── 📄 data_analyzer.py              # Data analysis tools
 │       ├── 📁 providers/                        # Data providers subpackage
 │       │   ├── 📄 __init__.py
 │       │   ├── 📄 abstract_data_provider.py     # Abstract base class for providers
@@ -54,12 +58,10 @@ English | [中文](README_zh-TW.md)
 │       │   ├── 📄 __init__.py
 │       │   ├── 📄 database_manager.py           # Manages subscription persistence (SQLite/PostgreSQL)
 │       │   └── 📄 kafka_manager.py              # Manages Kafka connections
-│       ├── 📁 analysis/                         # Data analysis subpackage
-│       │   ├── 📄 __init__.py
-│       │   └── 📄 data_analyzer.py              # Data analysis tools
 │       └── 📁 tools/                            # Command line tools subpackage
 │           ├── 📄 __init__.py
-│           └── 📄 influx_connector.py           # InfluxDB connection testing tool
+│           ├── 📄 influx-connector.py           # InfluxDB connection testing tool
+│           └── 📄 time_unity.py                 # Time unit conversion utilities
 └── 📁 static/                                   # Static files for web dashboard
     └── 📄 index.html                            # Web monitoring dashboard HTML
 ```
@@ -200,10 +202,10 @@ comprehensive analysis report for the first available symbol.
 
 ```bash
 # Subscribe to Ethereum
-curl -X POST "http://localhost:8000/symbol/ethusdt/subscribe?interval=1m"
+curl -X POST "http://localhost:8000/symbol/ethusdt/subscribe"
 
 # Subscribe to Dogecoin
-curl -X POST "http://localhost:8000/symbol/dogeusdt/subscribe?interval=5m"
+curl -X POST "http://localhost:8000/symbol/dogeusdt/subscribe"
 ```
 
 ### Check System Health
@@ -421,3 +423,27 @@ This project is for educational and research purposes.
 6. Submit a pull request.
 
 For major changes, please open an issue first to discuss the proposed changes.
+
+### New:
+
+- **K-line Aggregation Data Processing**: Automatically aggregates K-line data from base interval (
+  e.g., `config.binance_base_interval`) into larger timeframes, categorized into common and custom intervals.
+    1. Common intervals are predefined aggregation scales, directly usable for queries (defined
+       in `AGGREGATION_INTERVALS`).
+    2. Custom intervals will automatically aggregate data based on the largest common interval factor (e.g., `3d` will
+       aggregate 3 daily K-lines).
+
+### Refactor:
+
+- **Logging System**: Added colored logging support, and updated other modules to use the new logging settings.
+
+### Modified:
+
+- **Historical Data Query**: Now includes `limit` and `offset` parameters for paginated queries.
+- **User Subscription Interval Settings**: Removed user-defined asset interval settings; intervals are now managed by
+  the server, and users can specify custom intervals in requests to display K-line charts of a designated interval.
+
+### Removed:
+
+- `binance_symbol` setting
+- Subscription data table interval setting

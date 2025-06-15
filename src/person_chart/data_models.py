@@ -3,14 +3,25 @@ from dataclasses import dataclass, asdict
 from datetime import datetime
 from typing import Optional
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-log = logging.getLogger(__name__)
+from person_chart.colored_logging import setup_colored_logging
+
+log = setup_colored_logging(level=logging.INFO)
 
 
 @dataclass
 class PriceData:
     """
     用於儲存加密貨幣價格資料的資料類別。
+
+    作者: yuan
+    建立時間: 2025-06-15 18:13:00
+    更新時間: 2025-06-15 18:13:00
+    版本號: 0.6.0
+    用途說明:
+        此資料類別定義了加密貨幣價格數據的結構，包括交易對符號、
+        當前價格、時間戳記以及 K 線的開盤價、最高價、最低價、收盤價和交易量。
+        它還可選地包含價格變化量、價格變化百分比和交易數量，
+        並提供將實例轉換為字典的方法，以便於 JSON 序列化和數據傳輸。
 
     Attributes:
         symbol (str): 交易對符號 (例如 'BTCUSDT')。
@@ -41,7 +52,11 @@ class PriceData:
         """
         將 PriceData 物件轉換為字典，以便進行 JSON 序列化。
 
-        Returns:
+        此方法將 PriceData 實例的所有屬性轉換為字典，
+        並將 datetime 類型的 timestamp 屬性轉換為 ISO 格式的字串，
+        以便於數據的序列化和跨系統傳輸。
+
+        返回:
             dict: 包含價格資料的字典，時間戳記已轉換為 ISO 格式字串。
         """
         data = asdict(self)
@@ -53,6 +68,16 @@ class PriceData:
 class InfluxDBStats:
     """
     InfluxDB 操作統計數據結構。
+
+    作者: yuan
+    建立時間: 2025-06-15 18:13:00
+    更新時間: 2025-06-15 18:13:00
+    版本號: 0.6.0
+    用途說明:
+        此資料類別用於記錄與 InfluxDB 數據庫交互的統計信息，
+        包括總寫入點數、成功寫入批次數、失敗寫入批次數、
+        最後一次成功寫入的時間以及寫入重試的次數。
+        這些統計數據有助於監控 InfluxDB 數據寫入操作的性能和可靠性。
 
     Attributes:
         total_writes (int): 總寫入點數。
@@ -72,6 +97,16 @@ class InfluxDBStats:
 class MarketSummary:
     """
     市場摘要數據結構。
+
+    作者: yuan
+    建立時間: 2025-06-15 18:13:00
+    更新時間: 2025-06-15 18:13:00
+    版本號: 0.6.0
+    用途說明:
+        此資料類別定義了市場摘要數據的結構，用於提供加密貨幣市場的概覽信息。
+        它包含了交易對符號、當前價格、24小時價格變化、最高價、最低價、
+        交易量、平均價格以及波動率等關鍵指標，
+        並提供將實例轉換為字典的方法。
 
     Attributes:
         symbol (str): 加密貨幣符號。
@@ -95,7 +130,11 @@ class MarketSummary:
     volatility: float
 
     def to_dict(self) -> dict:
-        """將 MarketSummary 物件轉換為字典。"""
+        """
+        將 MarketSummary 物件轉換為字典。
+        此方法將 MarketSummary 實例的所有屬性轉換為字典，
+        以便於數據的序列化和傳輸。
+        """
         return asdict(self)
 
 
@@ -103,6 +142,15 @@ class MarketSummary:
 class TradingStats:
     """
     交易統計數據結構。
+
+    作者: yuan
+    建立時間: 2025-06-15 18:13:00
+    更新時間: 2025-06-15 18:13:00
+    版本號: 0.6.0
+    用途說明:
+        此資料類別定義了交易統計數據的結構，用於提供交易活動的詳細統計信息。
+        它包含了總交易筆數、平均交易量、期間內最高價、最低價、價格範圍以及趨勢方向等指標，
+        並提供將實例轉換為字典的方法。
 
     Attributes:
         total_trades (int): 總交易筆數。
@@ -120,5 +168,9 @@ class TradingStats:
     trend_direction: str
 
     def to_dict(self) -> dict:
-        """將 TradingStats 物件轉換為字典。"""
+        """
+        將 TradingStats 物件轉換為字典。
+        此方法將 TradingStats 實例的所有屬性轉換為字典，
+        以便於數據的序列化和傳輸。
+        """
         return asdict(self)
