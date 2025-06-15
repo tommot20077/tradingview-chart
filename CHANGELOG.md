@@ -2,7 +2,30 @@
 
 ---
 
-## V0.6.0 - 2025-06-15
+## 0.5.2 - 2025-06-16
+
+### 新增
+
+- **K 線聚合資料處理優化**: 優化 K 線聚合邏輯，確保時間戳對齊，並處理緩衝區清空。
+- **時間單位轉換工具**: 新增 `find_optimal_source_interval` 和 `convert_interval_to_pandas_freq` 函數，用於更靈活地處理時間間隔。
+
+### 修改
+
+- **配置更新**: 將 `config.aggregation_intervals` 更名為 `config.binance_aggregation_intervals`。
+- **日誌級別調整**: 將 `query_direct` 中的日誌級別從 `info` 調整為 `debug`。
+- **WebSocket 連接管理**: 優化 WebSocket 廣播邏輯，處理連接斷開和異步任務。
+- **Kafka 消費者關閉**: 修正 Kafka 消費者關閉時的參數。
+- **訂閱日誌**: 調整訂閱日誌的詳細程度。
+- **版本號更新**: 更新 `enhanced_main.py` 的版本號至 1.0.1。
+
+### 移除
+
+- 移除 `src/person_chart/providers/enhanced_crypto_provider.py`
+  ，其功能已更改到 `src/person_chart/providers/crypto_provider.py`。
+
+---
+
+## 0.5.1 - 2025-06-15
 
 ### 新增
 

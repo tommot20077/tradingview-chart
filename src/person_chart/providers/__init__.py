@@ -1,3 +1,2 @@
 from .abstract_data_provider import AbstractRealtimeDataProvider, AbstractHistoricalDataProvider
 from .crypto_provider import CryptoPriceProviderRealtime, InfluxDBManager
-from .enhanced_crypto_provider import EnhancedCryptoPriceProviderRealtime, EnhancedInfluxDBManager

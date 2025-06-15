@@ -1,7 +1,7 @@
-import os
-from dataclasses import dataclass, field
-from typing import List
 import logging
+import os
+from dataclasses import dataclass
+from typing import List
 
 from dotenv import load_dotenv
 
@@ -51,7 +51,7 @@ class Config:
 
     # 幣安設定
     binance_base_interval: str
-    aggregation_intervals: List[str]
+    binance_aggregation_intervals: List[str]
 
     # 服務器設定
     api_host: str
@@ -81,7 +81,7 @@ class Config:
         """
         log.info("從環境變數載入設定...")
 
-        agg_intervals_str = os.getenv('AGGREGATION_INTERVALS', '5m,15m,30m,1h,4h,12h,1d,1w,1M,1y')
+        agg_intervals_str = os.getenv('BINANCE_AGGREGATION_INTERVALS', '5m,15m,30m,1h,4h,12h,1d,1w,1M,1y')
         aggregation_intervals = [s.strip() for s in agg_intervals_str.split(',')]
 
         return cls(
@@ -90,7 +90,7 @@ class Config:
             influxdb_database=os.getenv('INFLUXDB_DATABASE', 'crypto_data'),
 
             binance_base_interval=os.getenv('BINANCE_BASE_INTERVAL', '1m'),
-            aggregation_intervals=aggregation_intervals,
+            binance_aggregation_intervals=aggregation_intervals,
 
             api_host=os.getenv('API_HOST', '127.0.0.1'),
             api_port=int(os.getenv('API_PORT', '8000')),

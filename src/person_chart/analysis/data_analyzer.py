@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 from influxdb_client_3 import InfluxDBClient3
 
 from person_chart.colored_logging import setup_colored_logging
+from person_chart.tools.time_unity import convert_interval_to_pandas_freq
 from ..data_models import MarketSummary
 
 log = setup_colored_logging(level=logging.INFO)
@@ -28,13 +29,13 @@ class CryptoDataAnalyzer:
 
     作者: yuan
     建立時間: 2025-06-15 18:13:00
-    更新時間: 2025-06-15 18:13:00
-    版本號: 0.6.0
+    更新時間: 2025-06-15 11:04:00
+    版本號: 0.6.1
     用途說明:
         此類用於從 InfluxDB 數據庫中查詢、分析和報告加密貨幣的價格和交易量數據。
         它提供了獲取指定時間範圍內價格數據、計算市場摘要統計、
         獲取可用交易對列表以及生成綜合分析報告的功能。
-        此外，還支持直接查詢和在數據庫層面進行 K 線數據聚合。
+        此外，還支持直接查詢和 K 線數據聚合。
     """
 
     def __init__(self, host: str = None, token: str = None, database: str = None):
@@ -252,7 +253,7 @@ class CryptoDataAnalyzer:
         返回:
             pd.DataFrame: 包含查詢數據的 DataFrame。
         """
-        log.info(f"正在查詢 {measurement} 中 {symbol} 從 {start_time} 到 {end_time} 的數據，限制 {limit} 條，偏移 {offset}。")
+        log.debug(f"正在查詢 {measurement} 中 {symbol} 從 {start_time} 到 {end_time} 的數據，限制 {limit} 條，偏移 {offset}。")
         query = f"""
         SELECT *
         FROM "{measurement}"
@@ -275,12 +276,12 @@ class CryptoDataAnalyzer:
     def query_and_aggregate(self, symbol: str, base_measurement: str, start_time: datetime, end_time: datetime,
                             window_str: str) -> pd.DataFrame:
         """
-        從基礎 measurement 查詢數據並在數據庫層面進行聚合。
+        從基礎 measurement 查詢數據並在客戶端（Python）進行聚合。
 
-        此方法利用 InfluxDB 的 SQL `date_bin` 函數，
-        將基礎測量中的數據按指定的時間窗口進行聚合，
-        生成 K 線數據（開盤價、最高價、最低價、收盤價、交易量、交易數量）。
-        這對於生成不同時間粒度的 K 線圖非常有用。
+        此方法首先從 InfluxDB 獲取指定時間範圍內的原始數據，
+        然後利用 Pandas 的 `resample` 和 `agg` 功能在內存中進行 K 線聚合。
+        這種方法避免了數據庫不支持的聚合函數（如 FIRST/LAST），
+        提供了更高的靈活性和兼容性。
 
         參數:
             symbol (str): 加密貨幣符號。
@@ -295,26 +296,49 @@ class CryptoDataAnalyzer:
         log.info(f"正在查詢並聚合 {base_measurement} 中 {symbol} 的數據，時間窗口為 '{window_str}'。")
 
         query = f"""
-        SELECT
-            FIRST(open_price) AS open_price,
-            MAX(high_price) AS high_price,
-            MIN(low_price) AS low_price,
-            LAST(close_price) AS close_price,
-            SUM(volume) AS volume,
-            SUM(trade_count) AS trade_count
+        SELECT *
         FROM "{base_measurement}"
         WHERE
             symbol = '{symbol.upper()}' AND
             time >= '{start_time.isoformat()}' AND
             time <= '{end_time.isoformat()}'
-        GROUP BY date_bin(INTERVAL '{window_str.replace('s', ' seconds')}', time)
-        ORDER BY date_bin
+        ORDER BY time
         """
+
         try:
             table = self.client.query(query=query, language='sql')
-            df = table.to_pandas().rename(columns={'date_bin': 'time'}).set_index('time')
+            df = table.to_pandas().set_index('time')
             df.index = pd.to_datetime(df.index)
-            return df
+            if df.empty:
+                log.warning(f"在指定時間範圍內未找到 {symbol} 的原始數據進行聚合。")
+                return pd.DataFrame()
+
+            pandas_freq_str = convert_interval_to_pandas_freq(window_str)
+            if not pandas_freq_str:
+                raise ValueError(f"無法將間隔 '{window_str}' 轉換為有效的 Pandas 頻率。")
+
+            log.debug(f"將間隔 '{window_str}' 轉換為 Pandas 頻率 '{pandas_freq_str}' 進行 resample。")
+
+            aggregation_rules = {
+                'open': 'first',
+                'high': 'max',
+                'low': 'min',
+                'close': 'last',
+                'volume': 'sum'
+            }
+
+            if 'trade_count' in df.columns:
+                aggregation_rules['trade_count'] = 'sum'
+            elif 'trade_count' in aggregation_rules:
+                del aggregation_rules['trade_count']
+
+            agg_df = df.resample(pandas_freq_str).agg(aggregation_rules)
+            agg_df.dropna(subset=['close'], inplace=True)
+            agg_df.dropna(how='all', inplace=True)
+
+            log.debug(f"成功將 {len(df)} 條 '{base_measurement}' 數據聚合為 {len(agg_df)} 條 '{window_str}' K線數據。")
+            return agg_df
+
         except Exception as e:
             log.error(f"查詢並聚合 {symbol} 的數據失敗: {e}")
             return pd.DataFrame()

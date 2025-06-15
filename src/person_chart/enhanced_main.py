@@ -4,7 +4,7 @@ import logging
 import threading
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from typing import List, Optional, Dict
+from typing import Optional, Dict
 
 from fastapi import FastAPI, HTTPException, WebSocket, Query
 from starlette.middleware.cors import CORSMiddleware
@@ -12,11 +12,11 @@ from starlette.responses import FileResponse
 
 from person_chart.data_models import PriceData
 from person_chart.tools.time_unity import interval_to_seconds
-from .config import config
-from .providers.enhanced_crypto_provider import EnhancedCryptoPriceProviderRealtime, EnhancedInfluxDBManager
-from .services.kafka_manager import kafka_manager, _KAFKA_AVAILABLE
-from .services.database_manager import SubscriptionRepository
 from .colored_logging import setup_colored_logging
+from .config import config
+from .providers.crypto_provider import CryptoPriceProviderRealtime, InfluxDBManager
+from .services.database_manager import SubscriptionRepository
+from .services.kafka_manager import kafka_manager, _KAFKA_AVAILABLE
 
 log = setup_colored_logging(level=logging.INFO)
 
@@ -45,7 +45,7 @@ class EnhancedConnectionManager:
         同時計算基礎時間間隔的秒數，用於 K 線聚合。
         """
         self.active_connections: Dict[WebSocket, Dict] = {}
-        self.crypto_provider: Optional[EnhancedCryptoPriceProviderRealtime] = None
+        self.crypto_provider: Optional[CryptoPriceProviderRealtime] = None
         self.kafka_consumer = None
         self.kafka_producer = None
         self._kafka_thread: Optional[threading.Thread] = None
@@ -63,48 +63,21 @@ class EnhancedConnectionManager:
         同時初始化用於自定義聚合的緩衝區。
         """
         await websocket.accept()
-
         target_interval_seconds = interval_to_seconds(interval)
-        multiplier = 1
-        is_custom = False
-
-        if target_interval_seconds > self.base_interval_seconds and target_interval_seconds % self.base_interval_seconds == 0:
-            multiplier = target_interval_seconds // self.base_interval_seconds
-            is_custom = True
+        if target_interval_seconds < self.base_interval_seconds or target_interval_seconds % self.base_interval_seconds != 0:
+            log.warning(
+                f"客戶端請求的間隔 '{interval}' 對於符號 '{symbol}' 無效。它必須是基礎間隔 '{config.binance_base_interval}' 的倍數。正在關閉連接。")
+            await websocket.close(code=1008, reason="Invalid interval")
+            return
 
         self.active_connections[websocket] = {
-            "symbol": symbol,
+            "symbol": symbol.upper(),
             "interval": interval,
-            "is_custom": is_custom,
-            "multiplier": multiplier,
-            "buffer": []  # 用於自定義聚合的緩衝區
+            "interval_seconds": target_interval_seconds,
+            "buffer": [],
+            "current_agg_kline": None
         }
         log.info(f"WebSocket 客戶端已連接，訂閱 {symbol}@{interval}。總連接數: {len(self.active_connections)}")
-
-    def _aggregate_buffer(self, buffer: List[PriceData]) -> PriceData | None:
-        """
-        將緩衝區中的 PriceData 聚合成單個 PriceData。
-        此方法接收一個 PriceData 對象列表，並將其聚合成一個代表 K 線數據的單個 PriceData 對象。
-        聚合邏輯包括使用第一筆數據的開盤價、最後一筆數據的收盤價和時間戳，
-        以及緩衝區中所有數據的最高價、最低價、總交易量和總交易數量。
-        """
-        if not buffer:
-            return None
-
-        first = buffer[0]
-        last = buffer[-1]
-
-        return PriceData(
-            symbol=first.symbol,
-            price=last.price,
-            timestamp=last.timestamp,  # 使用最後一筆數據的時間戳
-            open_price=first.open_price,
-            high_price=max(p.high_price for p in buffer),
-            low_price=min(p.low_price for p in buffer),
-            close_price=last.close_price,
-            volume=sum(p.volume for p in buffer),
-            trade_count=sum(p.trade_count or 0 for p in buffer)
-        )
 
     def disconnect(self, websocket: WebSocket):
         """
@@ -116,6 +89,43 @@ class EnhancedConnectionManager:
             log.info(
                 f"WebSocket 客戶端已斷開連接，訂閱 {sub_details['symbol']}@{sub_details['interval']}。總連接數: {len(self.active_connections)}")
 
+    def _update_and_get_aggregate(self, sub_details: Dict, base_kline: PriceData) -> PriceData:
+        """
+        將緩衝區中的 PriceData 聚合成單個 PriceData。
+        此方法接收一個 PriceData 對象列表，並將其聚合成一個代表 K 線數據的單個 PriceData 對象。
+        聚合邏輯包括使用第一筆數據的開盤價、最後一筆數據的收盤價和時間戳，
+        以及緩衝區中所有數據的最高價、最低價、總交易量和總交易數量。
+        """
+        buffer = sub_details["buffer"]
+        interval_seconds = sub_details["interval_seconds"]
+
+        base_timestamp = int(base_kline.timestamp.timestamp())
+        time_bucket_start = datetime.fromtimestamp(base_timestamp - (base_timestamp % interval_seconds), tz=timezone.utc)
+
+        if buffer and int(buffer[0].timestamp.timestamp()) - (int(buffer[0].timestamp.timestamp()) % interval_seconds) != base_timestamp - (
+                base_timestamp % interval_seconds):
+            log.debug(f"New time bucket for {sub_details['symbol']}@{sub_details['interval']}. Clearing buffer.")
+            buffer.clear()
+
+        buffer.append(base_kline)
+
+        first_kline = buffer[0]
+        last_kline = buffer[-1]
+
+        agg_kline = PriceData(
+            symbol=base_kline.symbol,
+            price=last_kline.close_price,
+            timestamp=time_bucket_start,
+            open_price=first_kline.open_price,
+            high_price=max(p.high_price for p in buffer),
+            low_price=min(p.low_price for p in buffer),
+            close_price=last_kline.close_price,
+            volume=sum(p.volume for p in buffer),
+            trade_count=sum(p.trade_count or 0 for p in buffer)
+        )
+
+        return agg_kline
+
     async def broadcast(self, base_price_data: PriceData):
         """
         將基礎價格數據廣播或聚合後廣播到所有客戶端。
@@ -126,38 +136,17 @@ class EnhancedConnectionManager:
         if not self.active_connections:
             return
 
+        tasks = []
         disconnected_clients = []
-        # 迭代項目的副本，因為 disconnect 可能會修改字典
+
         for connection, sub in list(self.active_connections.items()):
             if sub["symbol"] != base_price_data.symbol:
                 continue
 
-            message_to_send = None
-
-            # 情況 1: 客戶端直接需要基礎間隔的數據
-            # `is_custom` 為 False 且 `interval` 與基礎間隔匹配
-            if not sub["is_custom"] and sub["interval"] == config.binance_base_interval:
+            if sub["interval_seconds"] == self.base_interval_seconds:
                 message_to_send = base_price_data
-
-            # 情況 2: 客戶端需要一個聚合後的時間間隔
-            # `is_custom` 為 True
-            elif sub["is_custom"]:
-                sub["buffer"].append(base_price_data)
-                if len(sub["buffer"]) >= sub["multiplier"]:
-                    aggregated_data = self._aggregate_buffer(sub["buffer"])
-                    if aggregated_data:
-                        # 修正時間戳：將其對齊到聚合區間的起始時間
-                        # 這對於圖表正確放置 K 線至關重要
-                        interval_seconds = sub["multiplier"] * self.base_interval_seconds
-                        kline_timestamp = int(aggregated_data.timestamp.timestamp())
-                        time_bucket = kline_timestamp - (kline_timestamp % interval_seconds)
-                        aggregated_data.timestamp = datetime.fromtimestamp(time_bucket, tz=timezone.utc)
-
-                        message_to_send = aggregated_data
-                    sub["buffer"] = []  # 清空緩衝區
-
-            # 情況 3 (隱含): 客戶端請求了不支持的時間間隔。
-            # `is_custom` 為 False 且 `interval` 與基礎間隔不匹配。不會發送任何消息。
+            else:
+                message_to_send = self._update_and_get_aggregate(sub, base_price_data)
 
             if message_to_send:
                 try:
@@ -166,10 +155,18 @@ class EnhancedConnectionManager:
                         "data": message_to_send.to_dict(),
                         "timestamp": datetime.now(timezone.utc).isoformat()
                     })
-                    await connection.send_text(payload)
+                    tasks.append(asyncio.create_task(connection.send_text(payload)))
                 except Exception:
-                    # 可能的各種連接錯誤
                     disconnected_clients.append(connection)
+
+        if tasks:
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for i, result in enumerate(results):
+                if isinstance(result, Exception):
+
+                    conn_to_disconnect = list(self.active_connections.keys())[i]
+                    if conn_to_disconnect not in disconnected_clients:
+                        disconnected_clients.append(conn_to_disconnect)
 
         for client in disconnected_clients:
             self.disconnect(client)
@@ -208,7 +205,7 @@ class EnhancedConnectionManager:
             for message in self.kafka_consumer:
                 if self._stop_event.is_set():
                     break
-                log.debug(f"從 Kafka 收到訊息: {message.value}")
+                log.debug(f"從 Kafka 收到消息: {message.value}")
                 self.sync_broadcast(message.value)
         except Exception as e:
             if "KafkaConsumer is closed" == str(e):
@@ -229,7 +226,7 @@ class EnhancedConnectionManager:
         if not config.validate():
             raise ValueError("配置無效，請檢查 .env 文件。")
 
-        influxdb_manager = EnhancedInfluxDBManager(
+        influxdb_manager = InfluxDBManager(
             host=config.influxdb_host, token=config.influxdb_token,
             database=config.influxdb_database, batch_size=200
         )
@@ -245,7 +242,7 @@ class EnhancedConnectionManager:
             self.kafka_consumer = kafka_manager.create_consumer(
                 topic=config.kafka_topic, group_id="crypto-streamer-group"
             )
-            message_cb = None  # Kafka 將處理廣播
+            message_cb = None
             self._kafka_thread = threading.Thread(target=self._kafka_consumer_worker, daemon=True)
             self._kafka_thread.start()
         else:
@@ -253,7 +250,7 @@ class EnhancedConnectionManager:
                 log.warning("Kafka 已在配置中啟用，但 kafka-python 庫不可用或管理器初始化失敗。將使用直接回調模式。")
             log.info("Kafka 模式已禁用。將使用直接回調模式。")
 
-        self.crypto_provider = EnhancedCryptoPriceProviderRealtime(
+        self.crypto_provider = CryptoPriceProviderRealtime(
             influxdb_manager=influxdb_manager,
             message_callback=message_cb,
             kafka_producer=self.kafka_producer,
@@ -274,8 +271,9 @@ class EnhancedConnectionManager:
 
         subscriptions = self.subscription_repo.get_all_subscriptions()
         log.info(f"從資料庫找到 {len(subscriptions)} 個持久化訂閱。")
+        log.info(f"自動訂閱的交易對: {[sub['symbol'] for sub in subscriptions]}")
         for sub in subscriptions:
-            log.info(f"自動訂閱: {sub['symbol']}")
+            log.debug(f"正在訂閱 {sub['symbol']}...")
             self.crypto_provider.subscribe(symbol=sub['symbol'])
 
     def stop_services(self):
@@ -290,7 +288,7 @@ class EnhancedConnectionManager:
         if self.crypto_provider:
             self.crypto_provider.stop()
         if self.kafka_consumer:
-            self.kafka_consumer.close()
+            self.kafka_consumer.close(autocommit=False)
         if self._kafka_thread and self._kafka_thread.is_alive():
             self._kafka_thread.join(timeout=5)
 
@@ -316,7 +314,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="增強型加密貨幣價格串流 API",
     description="具有增強型 InfluxDB 儲存、監控和持久化訂閱的即時加密貨幣價格串流",
-    version="2.0.0",
+    version="1.0.1",
     lifespan=lifespan
 )
 
@@ -343,7 +341,7 @@ async def websocket_endpoint(
     await manager.connect(websocket, symbol, interval)
     try:
         while True:
-            await websocket.receive_text()  # 保持連接活躍
+            await websocket.receive_text()
     except Exception:
         log.info("WebSocket 連接已關閉。")
     finally:
@@ -401,8 +399,8 @@ async def get_latest_prices():
 async def get_history(
         symbol: str,
         interval: str,
-        start: int,  # UNIX timestamp
-        end: int,  # UNIX timestamp
+        start: int,
+        end: int,
         limit: int = 1000,
         offset: int = 0
 ):
@@ -434,7 +432,7 @@ async def subscribe_symbol(symbol: str):
 
     manager.crypto_provider.subscribe(symbol)
     manager.subscription_repo.add_subscription(symbol)
-    return {"status": "成功", "message": f"已訂閱 {symbol.upper()} 並已持久化。"}
+    return {"status": "success", "message": f"已訂閱 {symbol.upper()} 並已持久化。"}
 
 
 @app.post("/symbol/{symbol}/unsubscribe")
@@ -449,7 +447,7 @@ async def unsubscribe_symbol(symbol: str):
 
     manager.crypto_provider.unsubscribe(symbol)
     manager.subscription_repo.remove_subscription(symbol)
-    return {"status": "成功", "message": f"已取消訂閱 {symbol.upper()} 並已移除持久化。"}
+    return {"status": "success", "message": f"已取消訂閱 {symbol.upper()} 並已移除持久化。"}
 
 
 @app.get("/symbols")
