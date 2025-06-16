@@ -41,7 +41,6 @@ English | [中文](README_zh-TW.md)
 ├── 📁 src/
 │   └── 📁 person_chart/                         # Python package root directory
 │       ├── 📄 __init__.py                       # Makes person_chart a package
-│       ├── 📄 colored_logging.py                # Colored logging setup
 │       ├── 📄 config.py                         # Centralized environment variable configuration
 │       ├── 📄 data_models.py                    # Data classes (PriceData, Stats, etc.)
 │       ├── 📄 enhanced_main.py                  # Enhanced FastAPI application (recommended)
@@ -51,16 +50,20 @@ English | [中文](README_zh-TW.md)
 │       │   └── 📄 data_analyzer.py              # Data analysis tools
 │       ├── 📁 providers/                        # Data providers subpackage
 │       │   ├── 📄 __init__.py
-│       │   ├── 📄 abstract_data_provider.py     # Abstract base class for providers
-│       │   ├── 📄 crypto_provider.py            # Basic price provider
-│       │   └── 📄 enhanced_crypto_provider.py   # Enhanced price provider
+│       │   ├── 📄 abstract.py                   # Abstract base class for providers
+│       │   └── 📄 binance_provider.py           # Binance price provider
 │       ├── 📁 services/                         # External service management subpackage
 │       │   ├── 📄 __init__.py
-│       │   ├── 📄 database_manager.py           # Manages subscription persistence (SQLite/PostgreSQL)
 │       │   └── 📄 kafka_manager.py              # Manages Kafka connections
-│       └── 📁 tools/                            # Command line tools subpackage
+│       ├── 📁 storage/                          # Data storage subpackage
+│       │   ├── 📄 __init__.py
+│       │   └── 📄 subscription_repo.py          # Manages subscription persistence (SQLite/PostgreSQL)
+│       ├── 📁 tools/                            # Command line tools subpackage
+│       │   ├── 📄 __init__.py
+│       │   └── 📄 influx-connector.py           # InfluxDB connection testing tool
+│       └── 📁 utils/                            # Utility functions subpackage
 │           ├── 📄 __init__.py
-│           ├── 📄 influx-connector.py           # InfluxDB connection testing tool
+│           ├── 📄 colored_logging.py            # Colored logging setup
 │           └── 📄 time_unity.py                 # Time unit conversion utilities
 └── 📁 static/                                   # Static files for web dashboard
     └── 📄 index.html                            # Web monitoring dashboard HTML

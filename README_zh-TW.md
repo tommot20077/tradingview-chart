@@ -36,7 +36,6 @@
 ├── 📁 src/
 │   └── 📁 person_chart/                         # Python 包根目錄
 │       ├── 📄 __init__.py                       # 使 person_chart 成為一個包
-│       ├── 📄 colored_logging.py                # 彩色日誌設置
 │       ├── 📄 config.py                         # 集中式環境變數配置管理
 │       ├── 📄 data_models.py                    # 數據類 (PriceData, Stats, etc.)
 │       ├── 📄 enhanced_main.py                  # 增強版 FastAPI 應用 (推薦)
@@ -46,16 +45,20 @@
 │       │   └── 📄 data_analyzer.py              # 數據分析工具
 │       ├── 📁 providers/                        # 數據提供者子包
 │       │   ├── 📄 __init__.py
-│       │   ├── 📄 abstract_data_provider.py     # 提供者的抽象基類
-│       │   ├── 📄 crypto_provider.py            # 基本版價格提供者
-│       │   └── 📄 enhanced_crypto_provider.py   # 增強版價格提供者
+│       │   ├── 📄 abstract.py                   # 提供者的抽象基類
+│       │   └── 📄 binance_provider.py           # Binance 價格提供者
 │       ├── 📁 services/                         # 外部服務管理子包
 │       │   ├── 📄 __init__.py
-│       │   ├── 📄 database_manager.py           # 管理訂閱持久化 (SQLite/PostgreSQL)
 │       │   └── 📄 kafka_manager.py              # 管理 Kafka 連接
-│       └── 📁 tools/                            # 命令行工具子包
+│       ├── 📁 storage/                          # 數據存儲子包
+│       │   ├── 📄 __init__.py
+│       │   └── 📄 subscription_repo.py          # 管理訂閱持久化 (SQLite/PostgreSQL)
+│       ├── 📁 tools/                            # 命令行工具子包
+│       │   ├── 📄 __init__.py
+│       │   └── 📄 influx-connector.py           # InfluxDB 連接測試工具
+│       └── 📁 utils/                            # 工具函數子包
 │           ├── 📄 __init__.py
-│           ├── 📄 influx-connector.py           # InfluxDB 連接測試工具
+│           ├── 📄 colored_logging.py            # 彩色日誌設置
 │           └── 📄 time_unity.py                 # 時間單位轉換工具
 └── 📁 static/                                   # Web 儀表板的靜態文件
     └── 📄 index.html                            # Web 監控儀表板 HTML

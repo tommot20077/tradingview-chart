@@ -5,7 +5,7 @@ import logging
 from typing import Tuple
 
 from person_chart import config
-from person_chart.colored_logging import setup_colored_logging
+from person_chart.utils.colored_logging import setup_colored_logging
 
 log = setup_colored_logging(level=logging.INFO)
 
@@ -90,8 +90,8 @@ def convert_interval_to_pandas_freq(interval_str: str) -> str:
         'h': 'h',  # 小時
         'd': 'D',  # 天
         'w': 'W',  # 週
-        'M': 'ME',  # 月底
-        'y': 'YE'  # 年底
+        'M': 'MS',  # 月初
+        'y': 'YS'  # 年初
     }
 
     pandas_unit = unit_map.get(unit)

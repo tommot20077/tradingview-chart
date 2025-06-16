@@ -5,11 +5,10 @@ from typing import List
 
 from dotenv import load_dotenv
 
-from person_chart.colored_logging import setup_colored_logging
+from person_chart.utils.colored_logging import setup_colored_logging
 
 log = setup_colored_logging(level=logging.INFO)
 
-# 從 .env 檔案載入環境變數
 load_dotenv()
 
 
@@ -144,5 +143,4 @@ class Config:
         return True
 
 
-# 全局配置實例
 config = Config.from_env()

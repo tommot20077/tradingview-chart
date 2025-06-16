@@ -1,2 +1,2 @@
-from .abstract_data_provider import AbstractRealtimeDataProvider, AbstractHistoricalDataProvider
-from .crypto_provider import CryptoPriceProviderRealtime, InfluxDBManager
+from person_chart.providers.abstract import AbstractRealtimeDataProvider, AbstractHistoricalDataProvider
+from person_chart.providers.binance_provider import CryptoPriceProviderRealtime, InfluxDBManager

@@ -10,8 +10,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-from person_chart.colored_logging import setup_colored_logging
 from person_chart.config import config
+from person_chart.utils.colored_logging import setup_colored_logging
 
 log = setup_colored_logging(level=logging.INFO)
 sys.path.insert(0, str(Path(__file__).resolve().parent / 'src'))

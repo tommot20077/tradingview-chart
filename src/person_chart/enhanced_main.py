@@ -10,13 +10,13 @@ from fastapi import FastAPI, HTTPException, WebSocket, Query
 from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import FileResponse
 
+from person_chart.config import config
 from person_chart.data_models import PriceData
-from person_chart.tools.time_unity import interval_to_seconds
-from .colored_logging import setup_colored_logging
-from .config import config
-from .providers.crypto_provider import CryptoPriceProviderRealtime, InfluxDBManager
-from .services.database_manager import SubscriptionRepository
-from .services.kafka_manager import kafka_manager, _KAFKA_AVAILABLE
+from person_chart.providers.binance_provider import CryptoPriceProviderRealtime, InfluxDBManager
+from person_chart.services.kafka_manager import kafka_manager, _KAFKA_AVAILABLE
+from person_chart.storage.subscription_repo import SubscriptionRepository
+from person_chart.utils.colored_logging import setup_colored_logging
+from person_chart.utils.time_unity import interval_to_seconds
 
 log = setup_colored_logging(level=logging.INFO)
 
@@ -27,8 +27,8 @@ class EnhancedConnectionManager:
 
     作者: yuan
     建立時間: 2025-06-15 18:13:00
-    更新時間: 2025-06-15 18:13:00
-    版本號: 0.6.0
+    更新時間: 2025-06-16 14:00:00
+    版本號: 0.6.1
     用途說明:
         此類負責處理所有連接到服務器的 WebSocket 客戶端，
         並協調加密貨幣價格數據的實時廣播。
@@ -74,7 +74,6 @@ class EnhancedConnectionManager:
             "symbol": symbol.upper(),
             "interval": interval,
             "interval_seconds": target_interval_seconds,
-            "buffer": [],
             "current_agg_kline": None
         }
         log.info(f"WebSocket 客戶端已連接，訂閱 {symbol}@{interval}。總連接數: {len(self.active_connections)}")
@@ -89,42 +88,46 @@ class EnhancedConnectionManager:
             log.info(
                 f"WebSocket 客戶端已斷開連接，訂閱 {sub_details['symbol']}@{sub_details['interval']}。總連接數: {len(self.active_connections)}")
 
-    def _update_and_get_aggregate(self, sub_details: Dict, base_kline: PriceData) -> PriceData:
+    def _update_and_get_aggregate(self, sub_details: Dict, base_kline: PriceData) -> Optional[PriceData]:
         """
-        將緩衝區中的 PriceData 聚合成單個 PriceData。
-        此方法接收一個 PriceData 對象列表，並將其聚合成一個代表 K 線數據的單個 PriceData 對象。
-        聚合邏輯包括使用第一筆數據的開盤價、最後一筆數據的收盤價和時間戳，
-        以及緩衝區中所有數據的最高價、最低價、總交易量和總交易數量。
+        使用狀態管理方法更新或創建聚合 K 線。
+
+        此方法取代了原有的緩衝區聚合邏輯，改為更高效的狀態管理。
+        它檢查傳入的基礎 K 線是否屬於新的時間窗口。
+        如果是，則創建一個新的聚合 K 線。
+        如果不是，則更新現有的聚合 K 線。
+        只有當一個時間窗口的第一筆數據到達時，才會返回聚合 K 線，之後只更新不返回，直到下一個窗口。
+        （註：此處邏輯簡化為每次都返回更新後的K線，以提供更即時的更新）
         """
-        buffer = sub_details["buffer"]
         interval_seconds = sub_details["interval_seconds"]
+        current_agg_kline: Optional[PriceData] = sub_details.get("current_agg_kline")
 
         base_timestamp = int(base_kline.timestamp.timestamp())
-        time_bucket_start = datetime.fromtimestamp(base_timestamp - (base_timestamp % interval_seconds), tz=timezone.utc)
+        time_bucket_ts = base_timestamp - (base_timestamp % interval_seconds)
+        time_bucket_dt = datetime.fromtimestamp(time_bucket_ts, tz=timezone.utc)
 
-        if buffer and int(buffer[0].timestamp.timestamp()) - (int(buffer[0].timestamp.timestamp()) % interval_seconds) != base_timestamp - (
-                base_timestamp % interval_seconds):
-            log.debug(f"New time bucket for {sub_details['symbol']}@{sub_details['interval']}. Clearing buffer.")
-            buffer.clear()
-
-        buffer.append(base_kline)
-
-        first_kline = buffer[0]
-        last_kline = buffer[-1]
-
-        agg_kline = PriceData(
-            symbol=base_kline.symbol,
-            price=last_kline.close_price,
-            timestamp=time_bucket_start,
-            open_price=first_kline.open_price,
-            high_price=max(p.high_price for p in buffer),
-            low_price=min(p.low_price for p in buffer),
-            close_price=last_kline.close_price,
-            volume=sum(p.volume for p in buffer),
-            trade_count=sum(p.trade_count or 0 for p in buffer)
-        )
-
-        return agg_kline
+        if current_agg_kline is None or current_agg_kline.timestamp != time_bucket_dt:
+            new_agg_kline = PriceData(
+                symbol=base_kline.symbol,
+                price=base_kline.close_price,
+                timestamp=time_bucket_dt,
+                open_price=base_kline.open_price,
+                high_price=base_kline.high_price,
+                low_price=base_kline.low_price,
+                close_price=base_kline.close_price,
+                volume=base_kline.volume,
+                trade_count=base_kline.trade_count or 0
+            )
+            sub_details["current_agg_kline"] = new_agg_kline
+            return new_agg_kline
+        else:
+            current_agg_kline.high_price = max(current_agg_kline.high_price, base_kline.high_price)
+            current_agg_kline.low_price = min(current_agg_kline.low_price, base_kline.low_price)
+            current_agg_kline.close_price = base_kline.close_price
+            current_agg_kline.price = base_kline.close_price
+            current_agg_kline.volume += base_kline.volume
+            current_agg_kline.trade_count = (current_agg_kline.trade_count or 0) + (base_kline.trade_count or 0)
+            return current_agg_kline
 
     async def broadcast(self, base_price_data: PriceData):
         """
@@ -163,7 +166,6 @@ class EnhancedConnectionManager:
             results = await asyncio.gather(*tasks, return_exceptions=True)
             for i, result in enumerate(results):
                 if isinstance(result, Exception):
-
                     conn_to_disconnect = list(self.active_connections.keys())[i]
                     if conn_to_disconnect not in disconnected_clients:
                         disconnected_clients.append(conn_to_disconnect)

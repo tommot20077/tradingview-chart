@@ -2,21 +2,11 @@ import logging
 import os
 from typing import List, Dict, Any
 
-from sqlalchemy import create_engine, Column, Integer, String, Table, MetaData, select, delete, insert, text, UniqueConstraint
+from sqlalchemy import create_engine, Column, Integer, String, Table, MetaData, select, delete, insert
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
 
-from person_chart.colored_logging import setup_colored_logging
-
-import logging
-import os
-from typing import List, Dict, Any
-
-from sqlalchemy import create_engine, Column, Integer, String, Table, MetaData, select, delete, insert, text, UniqueConstraint
-from sqlalchemy.engine import Engine
-from sqlalchemy.exc import IntegrityError
-
-from person_chart.colored_logging import setup_colored_logging
+from person_chart.utils.colored_logging import setup_colored_logging
 
 log = setup_colored_logging(level=logging.INFO)
 

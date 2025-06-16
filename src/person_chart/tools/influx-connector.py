@@ -1,30 +1,17 @@
 """
 InfluxDB 連接測試工具
 """
-import os
 import logging
+import os
 from datetime import datetime
 
 from dotenv import load_dotenv
 from influxdb_client_3 import InfluxDBClient3, Point, InfluxDBError
 
-from person_chart.colored_logging import setup_colored_logging
-
-"""
-InfluxDB 連接測試工具
-"""
-import os
-import logging
-from datetime import datetime
-
-from dotenv import load_dotenv
-from influxdb_client_3 import InfluxDBClient3, Point, InfluxDBError
-
-from person_chart.colored_logging import setup_colored_logging
+from person_chart.utils.colored_logging import setup_colored_logging
 
 log = setup_colored_logging(level=logging.INFO)
 
-# 載入環境變數
 load_dotenv()
 
 

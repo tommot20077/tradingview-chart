@@ -13,13 +13,12 @@ import pandas as pd
 from dotenv import load_dotenv
 from influxdb_client_3 import InfluxDBClient3
 
-from person_chart.colored_logging import setup_colored_logging
-from person_chart.tools.time_unity import convert_interval_to_pandas_freq
-from ..data_models import MarketSummary
+from person_chart.data_models import MarketSummary
+from person_chart.utils.colored_logging import setup_colored_logging
+from person_chart.utils.time_unity import convert_interval_to_pandas_freq
 
 log = setup_colored_logging(level=logging.INFO)
 
-# 載入環境變數
 load_dotenv()
 
 
@@ -29,8 +28,8 @@ class CryptoDataAnalyzer:
 
     作者: yuan
     建立時間: 2025-06-15 18:13:00
-    更新時間: 2025-06-15 11:04:00
-    版本號: 0.6.1
+    更新時間: 2025-06-16 13:51:00
+    版本號: 0.6.2
     用途說明:
         此類用於從 InfluxDB 數據庫中查詢、分析和報告加密貨幣的價格和交易量數據。
         它提供了獲取指定時間範圍內價格數據、計算市場摘要統計、
@@ -270,7 +269,7 @@ class CryptoDataAnalyzer:
             df.index = pd.to_datetime(df.index)
             return df
         except Exception as e:
-            log.error(f"對 {measurement} 中 {symbol} 的直接查詢失敗: {e}")
+            log.warning(f"對 {measurement} 中 {symbol} 的直接查詢失敗: {e}")
             return pd.DataFrame()
 
     def query_and_aggregate(self, symbol: str, base_measurement: str, start_time: datetime, end_time: datetime,
@@ -279,9 +278,8 @@ class CryptoDataAnalyzer:
         從基礎 measurement 查詢數據並在客戶端（Python）進行聚合。
 
         此方法首先從 InfluxDB 獲取指定時間範圍內的原始數據，
-        然後利用 Pandas 的 `resample` 和 `agg` 功能在內存中進行 K 線聚合。
-        這種方法避免了數據庫不支持的聚合函數（如 FIRST/LAST），
-        提供了更高的靈活性和兼容性。
+        然後利用 Pandas 的 `groupby` 和 `pd.Grouper` 功能在內存中進行 K 線聚合。
+        它能正確處理空時間窗口，確保只返回包含有效交易數據的 K 線。
 
         參數:
             symbol (str): 加密貨幣符號。
@@ -320,21 +318,25 @@ class CryptoDataAnalyzer:
             log.debug(f"將間隔 '{window_str}' 轉換為 Pandas 頻率 '{pandas_freq_str}' 進行 resample。")
 
             aggregation_rules = {
-                'open': 'first',
-                'high': 'max',
-                'low': 'min',
-                'close': 'last',
-                'volume': 'sum'
+                'open': ('open', 'first'),
+                'high': ('high', 'max'),
+                'low': ('low', 'min'),
+                'close': ('close', 'last'),
+                'volume': ('volume', 'sum')
             }
 
             if 'trade_count' in df.columns:
-                aggregation_rules['trade_count'] = 'sum'
-            elif 'trade_count' in aggregation_rules:
-                del aggregation_rules['trade_count']
+                aggregation_rules['trade_count'] = ('trade_count', 'sum')
 
-            agg_df = df.resample(pandas_freq_str).agg(aggregation_rules)
-            agg_df.dropna(subset=['close'], inplace=True)
-            agg_df.dropna(how='all', inplace=True)
+            required_cols = [col for col, _ in aggregation_rules.values()]
+            missing_cols = [col for col in required_cols if col not in df.columns]
+            if missing_cols:
+                raise ValueError(f"源數據中缺少聚合所需的列: {missing_cols}")
+
+            agg_df = df.groupby(pd.Grouper(freq=pandas_freq_str)).agg(**aggregation_rules)
+
+            ohlc_cols = ['open', 'high', 'low', 'close']
+            agg_df.dropna(subset=ohlc_cols, inplace=True)
 
             log.debug(f"成功將 {len(df)} 條 '{base_measurement}' 數據聚合為 {len(agg_df)} 條 '{window_str}' K線數據。")
             return agg_df

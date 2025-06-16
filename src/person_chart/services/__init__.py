@@ -1,2 +1,1 @@
-from .database_manager import SubscriptionRepository
-from .kafka_manager import KafkaManager, kafka_manager
+from person_chart.services.kafka_manager import KafkaManager, kafka_manager

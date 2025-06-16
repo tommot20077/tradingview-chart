@@ -1,1 +1,1 @@
-from .data_analyzer import CryptoDataAnalyzer
+from person_chart.analysis.data_analyzer import CryptoDataAnalyzer

@@ -1,11 +1,6 @@
 import logging
 
-from person_chart.colored_logging import setup_colored_logging
-from src.person_chart.config import config
-
-import logging
-
-from person_chart.colored_logging import setup_colored_logging
+from person_chart.utils.colored_logging import setup_colored_logging
 from src.person_chart.config import config
 
 log = setup_colored_logging(level=logging.INFO)
@@ -120,7 +115,6 @@ class KafkaManager:
             raise
 
 
-# 全局 Kafka 管理器實例
 kafka_manager = None
 if config.kafka_enabled:
     if _KAFKA_AVAILABLE:

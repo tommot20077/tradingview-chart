@@ -7,12 +7,12 @@ from typing import Optional, Callable, Dict, List, Any, Union
 from binance.websocket.um_futures.websocket_client import UMFuturesWebsocketClient
 from influxdb_client_3 import InfluxDBClient3, Point, InfluxDBError, WriteOptions, write_client_options
 
-from .abstract_data_provider import AbstractRealtimeDataProvider, AbstractHistoricalDataProvider
-from .. import config
-from ..analysis.data_analyzer import CryptoDataAnalyzer
-from ..colored_logging import setup_colored_logging
-from ..data_models import InfluxDBStats, PriceData
-from ..tools.time_unity import interval_to_seconds, find_optimal_source_interval
+from person_chart import config
+from person_chart.analysis.data_analyzer import CryptoDataAnalyzer
+from person_chart.data_models import InfluxDBStats, PriceData
+from person_chart.providers.abstract import AbstractRealtimeDataProvider, AbstractHistoricalDataProvider
+from person_chart.utils.colored_logging import setup_colored_logging
+from person_chart.utils.time_unity import interval_to_seconds, find_optimal_source_interval
 
 log = setup_colored_logging(level=logging.INFO)
 
@@ -539,6 +539,16 @@ class CryptoPriceProviderRealtime(AbstractRealtimeDataProvider, AbstractHistoric
         2. 如果請求的 `interval` 是自定義的，則使用 `find_optimal_source_interval` 找到最高效的
         預聚合數據源進行二次聚合，然後在內存中應用分頁，並被格式化為適合圖表庫使用的字典列表。
 
+        並且進行了優化以解決歷史數據與即時數據流的銜接問題，
+         它會：
+        1. 查詢指定時間範圍內的基礎數據（通常是 1m）。
+        2. 使用 Pandas Grouper 將數據聚合成目標時間間隔的 K 線。
+        3. 確保即使是當前時間窗口內未完成的最後一根 K 線也能被正確聚合和返回。
+        4. 最後應用分頁（limit 和 offset）。
+
+        這種方法確保客戶端在加載歷史數據時，能獲得直到查詢時刻為止的最新狀態，
+        從而讓後續的 WebSocket 即時更新能夠平滑地銜接上。
+
         參數:
             symbol (str): 交易對符號。
             interval (str): K 線間隔 (例如 '1m', '5m', '1h', '1d')。
@@ -584,8 +594,12 @@ class CryptoPriceProviderRealtime(AbstractRealtimeDataProvider, AbstractHistoric
             df.reset_index(inplace=True)
             df['time'] = df['time'].apply(lambda x: int(x.timestamp()))
             required_columns = ['time', 'open', 'high', 'low', 'close', 'volume']
+
             return df[required_columns].to_dict('records')
 
+        except ValueError as ve:
+            log.warning(f"無效的時間間隔或查詢參數: {ve}。")
+            return []
         except Exception as e:
             log.error(f"獲取 {symbol} 的歷史數據失敗: {e}。")
             return []

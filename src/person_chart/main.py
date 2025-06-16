@@ -7,12 +7,12 @@ from typing import Optional, Dict
 
 from fastapi import FastAPI, WebSocket, HTTPException, Query
 
-from person_chart.colored_logging import setup_colored_logging
+from person_chart.config import config
 from person_chart.data_models import PriceData
-from person_chart.tools.time_unity import interval_to_seconds
-from .config import config
-from .providers.crypto_provider import CryptoPriceProviderRealtime, InfluxDBManager
-from .services.database_manager import SubscriptionRepository
+from person_chart.providers.binance_provider import CryptoPriceProviderRealtime, InfluxDBManager
+from person_chart.storage.subscription_repo import SubscriptionRepository
+from person_chart.utils.colored_logging import setup_colored_logging
+from person_chart.utils.time_unity import interval_to_seconds
 
 log = setup_colored_logging(level=logging.INFO)
 
@@ -185,7 +185,6 @@ class ConnectionManager:
         if not config.validate():
             raise ValueError("配置無效，請檢查 .env 文件。")
 
-        # 使用 InfluxDB 管理器
         influxdb_manager = InfluxDBManager(
             host=config.influxdb_host, token=config.influxdb_token,
             database=config.influxdb_database, batch_size=200
