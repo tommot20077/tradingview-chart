@@ -77,26 +77,29 @@
 
 ### 📊 版本對比
 
-| 功能模組           | 基本版 (`main.py`)         | 增強版 (`enhanced_main.py`)  | 備註                           |
-|----------------|-------------------------|---------------------------|------------------------------|
-| 數據獲取           | ✅ 增強版提供者                | ✅ 增強版提供者                  | 兩個版本使用相同的加強版數據提供者。           |
-| 持久化訂閱          | ✅ (SQLite / PostgreSQL) | ✅ (SQLite / PostgreSQL)   | 兩個版本都支持加載/保存訂閱。              |
-| 數據儲存           | ✅ InfluxDB (基礎+聚合)      | ✅ InfluxDB (基礎+聚合)        | 兩個版本都會儲存基礎和聚合後的 K 線數據。       |
-| WebSocket 時間間隔 | ✅ 僅支持 1m                | ✅ 支援多種時間間隔                | 基本版僅支援 1m K線，增強版支援任意配置的時間間隔。 |
-| 即時數據分發         | ✅ 基礎 WebSocket 廣播       | ✅ WebSocket 廣播 & Kafka    | 增強版增加了可選的 Kafka 以實現更可靠的消息隊列。 |
-| API 服務         | ✅ (極簡)                  | ✅ (豐富)                    | 增強版增加了歷史數據、分析、統計等豐富的 API。    |
-| 前端界面           | ❌                       | ✅ (Web 監控儀表板)             | 這是增強版最顯著的區別。                 |
-| 歷史數據查詢 API     | ❌                       | ✅ (為圖表提供 API)             | 僅增強版提供查詢歷史數據的 API。           |
-| 數據分析 API       | ❌                       | ✅ (`data_analyzer.py` 整合) | 僅增強版提供分析報告的 API。             |
-| Kafka 整合       | ❌                       | ✅ (可選)                    | 作為高級功能，只在增強版中提供。             |
+| 功能模組           | 基本版 (`main.py`)         | 增強版 (`enhanced_main.py`)  | 備註                                                                          |
+|----------------|-------------------------|---------------------------|-----------------------------------------------------------------------------|
+| 數據獲取           | ✅ 增強版提供者                | ✅ 增強版提供者                  | 兩個版本使用相同的加強版數據提供者。                                                          |
+| 持久化訂閱          | ✅ (SQLite / PostgreSQL) | ✅ (SQLite / PostgreSQL)   | 兩個版本都支持加載/保存訂閱。                                                             |
+| 數據儲存           | ✅ InfluxDB (僅基礎數據)      | ✅ InfluxDB (基礎+聚合)        | 基本版僅儲存 1m 基礎數據。增強版支援聚合數據。                                                   |
+| 即時數據分發         | ✅ 基礎 WebSocket 廣播       | ✅ WebSocket 廣播 & Kafka    | 增強版增加了可選的 Kafka 以實現更可靠的消息隊列。                                                |
+| WebSocket 配置   | ✅ 支援動態訂閱                | ✅ 支援動態訂閱                  | 兩個版本都支援透過 WebSocket 訊息進行動態訂閱。                                               |
+| WebSocket 時間間隔 | ✅ 固定 1m 間隔              | ✅ 支援多種時間間隔                | 基本版：僅 1m。增強版：1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 3d, 1w, 1M。 |
+| 訂閱管理           | ✅ 僅支援單一訂閱               | ✅ 支援多個同時訂閱                | 基本版：一次一個訂閱。增強版：同時支援多個訂閱。                                                    |
+| K 線聚合          | ❌ (僅直接 1m 數據)           | ✅ (即時聚合)                  | 基本版直接傳遞 1m 數據。增強版聚合為多種間隔。                                                   |
+| API 服務         | ✅ (極簡)                  | ✅ (豐富)                    | 增強版增加了歷史數據、分析、統計等豐富的 API。                                                   |
+| 前端界面           | ❌                       | ✅ (Web 監控儀表板)             | 這是增強版最顯著的區別。                                                                |
+| 歷史數據查詢 API     | ❌                       | ✅ (為圖表提供 API)             | 僅增強版提供查詢歷史數據的 API。                                                          |
+| 數據分析 API       | ❌                       | ✅ (`data_analyzer.py` 整合) | 僅增強版提供分析報告的 API。                                                            |
+| Kafka 整合       | ❌                       | ✅ (可選)                    | 作為高級功能，只在增強版中提供。                                                            |
 
 ## 🚀 快速開始
 
 ### 1. 克隆倉庫
 
 ```bash
-git clone https://github.com/tommot20077/tradingview-chart.git 
-cd person-chart
+   git clone https://github.com/tommot20077/tradingview-chart.git 
+   cd person-chart
 ```
 
 ### 2. 配置環境
@@ -104,7 +107,7 @@ cd person-chart
 複製環境變數範例文件並配置設定：
 
 ```bash
-cp .env.example .env
+   cp .env.example .env
 ```
 
 編輯 `.env` 文件，填入你的實際配置（請參考 `.env.example` 中的詳細註釋）。
@@ -114,7 +117,7 @@ cp .env.example .env
 以可編輯模式安裝項目。這確保所有本地模塊都能正確識別並安裝依賴。
 
 ```bash
-python run.py --install
+   python run.py --install
 ```
 
 ### 4. 測試 InfluxDB 連接
@@ -122,7 +125,7 @@ python run.py --install
 在運行主應用程式之前，測試你的 InfluxDB 連接：
 
 ```bash
-python run.py --test-db
+   python run.py --test-db
 ```
 
 這將會：
@@ -136,14 +139,14 @@ python run.py --test-db
 **推薦方式 - 使用運行腳本（通過控制台腳本使用 `uvicorn`）：**
 
 ```bash
-# 運行增強版服務器 (推薦，包含 Web 儀表板和高級功能)
-python run.py --enhanced
-
-# 或運行基本版服務器 (最小功能)
-python run.py --basic
-
-# 檢查項目狀態和可用命令
-python run.py --status
+   # 運行增強版服務器 (推薦，包含 Web 儀表板和高級功能)
+   python run.py --enhanced
+   
+   # 或運行基本版服務器 (最小功能)
+   python run.py --basic
+   
+   # 檢查項目狀態和可用命令
+   python run.py --status
 ```
 
 ### 6. 訪問 Web 監控儀表板 (僅限增強版)
@@ -164,7 +167,7 @@ http://localhost:8000
 ### 7. 運行數據分析
 
 ```bash
-python run.py --analyze
+   python run.py --analyze
 ```
 
 這將執行 `data_analyzer.py` 腳本，該腳本從 InfluxDB 獲取可用符號並為第一個可用符號生成綜合分析報告。
@@ -185,7 +188,32 @@ python run.py --analyze
 
 ### WebSocket 端點
 
-- `ws://localhost:8000/ws/price` - 即時價格串流
+- `ws://localhost:8000/ws/price` - 支援動態訂閱的即時價格串流
+
+#### WebSocket 訂閱訊息
+
+**訂閱串流：**
+
+```json
+{
+   "action": "subscribe",
+   "stream": "btcusdt@kline_5m"
+}
+```
+
+**取消訂閱串流：**
+
+```json
+{
+   "action": "unsubscribe",
+   "stream": "btcusdt@kline_5m"
+}
+```
+
+**支援的時間間隔：**
+
+- 基本版：僅支援 `1m`
+- 增強版：`1m`, `3m`, `5m`, `15m`, `30m`, `1h`, `2h`, `4h`, `6h`, `8h`, `12h`, `1d`, `3d`, `1w`, `1M`
 
 ## 使用範例
 
@@ -202,7 +230,7 @@ curl -X POST "http://localhost:8000/symbol/dogeusdt/subscribe"
 ### 檢查系統健康狀況
 
 ```bash
-curl http://localhost:8000/health
+   curl http://localhost:8000/health
 ```
 
 回應（增強版範例）：
@@ -256,13 +284,37 @@ const ws = new WebSocket('ws://localhost:8000/ws/price');
 
 ws.onopen = function (event) {
     console.log('已連接到價格串流');
-    // 你可以從客戶端發送訂閱命令 (僅限增強版)
-    // ws.send('subscribe:ETHUSDT');
+
+   // 基本版：僅支援 1m 間隔
+   ws.send(JSON.stringify({
+      action: "subscribe",
+      stream: "btcusdt@kline_1m"  // 基本版只接受 @kline_1m
+   }));
+
+   // 增強版：支援多種間隔和同時訂閱
+   // ws.send(JSON.stringify({
+   //     action: "subscribe", 
+   //     stream: "btcusdt@kline_5m"  // 增強版支援各種間隔
+   // }));
+
+   // 增強版：多個同時訂閱
+   // ws.send(JSON.stringify({
+   //     action: "subscribe", 
+   //     stream: "ethusdt@kline_1m"
+   // }));
 };
 
 ws.onmessage = function (event) {
-    const priceData = JSON.parse(event.data);
-    console.log('價格更新:', priceData);
+   const message = JSON.parse(event.data);
+
+   if (message.type === 'price_update') {
+      console.log('價格更新:', message.data);
+      console.log('串流:', message.stream);
+   } else if (message.type === 'subscription_success') {
+      console.log('訂閱成功:', message.stream);
+   } else if (message.type === 'error') {
+      console.error('錯誤:', message.message);
+   }
 };
 
 ws.onclose = function (event) {

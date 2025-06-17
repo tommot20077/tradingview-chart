@@ -5,14 +5,13 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Optional, Dict
 
-from fastapi import FastAPI, WebSocket, HTTPException, Query
+from fastapi import FastAPI, WebSocket, HTTPException
 
 from person_chart.config import config
 from person_chart.data_models import PriceData
 from person_chart.providers.binance_provider import CryptoPriceProviderRealtime, InfluxDBManager
 from person_chart.storage.subscription_repo import SubscriptionRepository
 from person_chart.utils.colored_logging import setup_colored_logging
-from person_chart.utils.time_unity import interval_to_seconds
 
 log = setup_colored_logging(level=logging.INFO)
 
@@ -23,8 +22,8 @@ class ConnectionManager:
 
     作者: yuan
     建立時間: 2025-06-15 18:13:00
-    更新時間: 2025-06-16 01:17:00
-    版本號: 0.7.0
+    更新時間: 2025-06-17 16:00:00
+    版本號: 0.7.1
     用途說明:
         此類負責管理所有連接到服務器的 WebSocket 客戶端，
         並協調加密貨幣價格數據的實時廣播。
@@ -35,79 +34,42 @@ class ConnectionManager:
 
     def __init__(self):
         """
-        初始化 ConnectionManager 實例。
+        初始化基本版 ConnectionManager 實例。
+        設定簡化的連接管理和單一訂閱支援。
         """
         self.active_connections: Dict[WebSocket, Dict] = {}
         self.crypto_provider: Optional[CryptoPriceProviderRealtime] = None
         self.subscription_repo: Optional[SubscriptionRepository] = None
         self.loop: Optional[asyncio.AbstractEventLoop] = None
-        self.base_interval_seconds = interval_to_seconds(config.binance_base_interval)
-        log.info("ConnectionManager 初始化完成。")
+        log.info("基本版 ConnectionManager 初始化完成。")
 
-    async def connect(self, websocket: WebSocket, symbol: str, interval: str):
+    async def connect(self, websocket: WebSocket):
         """
-        接受新的 WebSocket 連接並設定其聚合需求。
+        接受新的 WebSocket 連接。
+        基本版簡化設計：只支援單一訂閱，固定 1m 間隔。
         """
         await websocket.accept()
-        target_interval_seconds = interval_to_seconds(interval)
-        if target_interval_seconds < self.base_interval_seconds or target_interval_seconds % self.base_interval_seconds != 0:
-            log.warning(
-                f"客戶端請求的間隔 '{interval}' 對於符號 '{symbol}' 無效。它必須是基礎間隔 '{config.binance_base_interval}' 的倍數。正在關閉連接。")
-            await websocket.close(code=1008, reason="Invalid interval")
-            return
-
         self.active_connections[websocket] = {
-            "symbol": symbol.upper(),
-            "interval": interval,
-            "interval_seconds": target_interval_seconds,
-            "buffer": [],
+            "current_symbol": None,  # 當前訂閱的交易對
         }
-        log.info(f"WebSocket 客戶端已連接，訂閱 {symbol}@{interval}。總連接數: {len(self.active_connections)}")
+        log.info(f"WebSocket 客戶端已連接。總連接數: {len(self.active_connections)}")
 
     def disconnect(self, websocket: WebSocket):
         """
         斷開 WebSocket 連接。
         """
         if websocket in self.active_connections:
-            sub_details = self.active_connections.pop(websocket)
-            log.info(
-                f"WebSocket 客戶端已斷開連接，訂閱 {sub_details['symbol']}@{sub_details['interval']}。總連接數: {len(self.active_connections)}")
+            conn_info = self.active_connections.pop(websocket)
+            current_symbol = conn_info.get("current_symbol")
+            if current_symbol:
+                log.info(f"WebSocket 客戶端已斷開連接，訂閱 {current_symbol}@1m。總連接數: {len(self.active_connections)}")
+            else:
+                log.info(f"WebSocket 客戶端已斷開連接。總連接數: {len(self.active_connections)}")
 
-    def _update_and_get_aggregate(self, sub_details: Dict, base_kline: PriceData) -> PriceData:
-        """
-        根據基礎 K 線更新並返回為 WebSocket 客戶端聚合的 K 線數據。
-        """
-        buffer = sub_details["buffer"]
-        interval_seconds = sub_details["interval_seconds"]
-
-        base_timestamp = int(base_kline.timestamp.timestamp())
-        time_bucket_start_ts = base_timestamp - (base_timestamp % interval_seconds)
-
-        if buffer and int(buffer[0].timestamp.timestamp()) < time_bucket_start_ts:
-            buffer.clear()
-
-        buffer.append(base_kline)
-        sub_details["buffer"] = [k for k in buffer if int(k.timestamp.timestamp()) >= time_bucket_start_ts]
-        buffer = sub_details["buffer"]
-
-        first_kline = buffer[0]
-        last_kline = buffer[-1]
-
-        return PriceData(
-            symbol=base_kline.symbol,
-            price=last_kline.close_price,
-            timestamp=datetime.fromtimestamp(time_bucket_start_ts, tz=timezone.utc),
-            open_price=first_kline.open_price,
-            high_price=max(p.high_price for p in buffer),
-            low_price=min(p.low_price for p in buffer),
-            close_price=last_kline.close_price,
-            volume=sum(p.volume for p in buffer),
-            trade_count=sum(p.trade_count or 0 for p in buffer)
-        )
 
     async def broadcast(self, base_price_data: PriceData):
         """
-        將基礎價格數據廣播或聚合後廣播到所有客戶端。
+        將基礎價格數據廣播到所有客戶端。
         """
         if not self.active_connections:
             return
@@ -115,36 +77,129 @@ class ConnectionManager:
         tasks = []
         disconnected_clients = []
 
-        for connection, sub in list(self.active_connections.items()):
-            if sub["symbol"] != base_price_data.symbol:
+        for connection, conn_info in list(self.active_connections.items()):
+            current_symbol = conn_info.get("current_symbol")
+            if not current_symbol or current_symbol != base_price_data.symbol:
                 continue
 
-            if sub["interval_seconds"] == self.base_interval_seconds:
-                message_to_send = base_price_data
-            else:
-                message_to_send = self._update_and_get_aggregate(sub, base_price_data)
-
-            if message_to_send:
-                try:
-                    payload = json.dumps({
-                        "type": "price_update",
-                        "data": message_to_send.to_dict(),
-                        "timestamp": datetime.now(timezone.utc).isoformat()
-                    })
-                    tasks.append(asyncio.create_task(connection.send_text(payload)))
-                except Exception:
-                    disconnected_clients.append(connection)
+            try:
+                payload = json.dumps({
+                    "type": "price_update",
+                    "data": base_price_data.to_dict(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "stream": f"{current_symbol.lower()}@kline_1m"
+                })
+                tasks.append(asyncio.create_task(connection.send_text(payload)))
+            except Exception:
+                disconnected_clients.append(connection)
 
         if tasks:
             results = await asyncio.gather(*tasks, return_exceptions=True)
             for i, result in enumerate(results):
                 if isinstance(result, Exception):
-                    conn_to_disconnect = list(self.active_connections.keys())[i]
-                    if conn_to_disconnect not in disconnected_clients:
-                        disconnected_clients.append(conn_to_disconnect)
+                    task_index = 0
+                    for connection, conn_info in self.active_connections.items():
+                        if conn_info.get("current_symbol") == base_price_data.symbol:
+                            if task_index == i and connection not in disconnected_clients:
+                                disconnected_clients.append(connection)
+                                break
+                            task_index += 1
 
         for client in disconnected_clients:
             self.disconnect(client)
+
+    async def handle_subscription_message(self, websocket: WebSocket, message: dict):
+        """
+        處理客戶端訂閱消息。
+        基本版限制：只支援 1m 間隔的單一訂閱，新訂閱會自動取代舊訂閱。
+        """
+        try:
+            action = message.get("action")
+            stream = message.get("stream")
+
+            if not action or not stream:
+                await websocket.send_text(json.dumps({
+                    "type": "error",
+                    "message": "缺少必要的 action 或 stream 參數"
+                }))
+                return
+
+            if "@kline_" not in stream:
+                await websocket.send_text(json.dumps({
+                    "type": "error",
+                    "message": "stream 格式無效，應為 symbol@kline_interval"
+                }))
+                return
+
+            symbol, interval_part = stream.split("@kline_")
+            symbol = symbol.upper()
+            interval = interval_part
+
+            # 基本版限制：只支援 1m 間隔
+            if interval != "1m":
+                await websocket.send_text(json.dumps({
+                    "type": "error",
+                    "message": f"基本版只支援 1m 間隔，不支援 '{interval}'"
+                }))
+                return
+
+            conn_info = self.active_connections.get(websocket)
+            if not conn_info:
+                return
+
+            if action == "subscribe":
+                # 基本版：新訂閱自動取代舊訂閱
+                old_symbol = conn_info.get("current_symbol")
+                conn_info["current_symbol"] = symbol
+
+                # 確保後端已訂閱該 symbol
+                if self.crypto_provider and symbol not in self.crypto_provider.subscribed_symbols:
+                    self.crypto_provider.subscribe(symbol)
+                    if self.subscription_repo:
+                        self.subscription_repo.add_subscription(symbol)
+
+                success_message = f"已訂閱 {stream}"
+                if old_symbol and old_symbol != symbol:
+                    success_message += f"（已自動取代 {old_symbol}@kline_1m）"
+
+                await websocket.send_text(json.dumps({
+                    "type": "subscription_success",
+                    "stream": stream,
+                    "message": success_message
+                }))
+
+                log.info(f"WebSocket 客戶端訂閱: {stream} (基本版單一訂閱)")
+
+            elif action == "unsubscribe":
+                # 取消當前訂閱
+                current_symbol = conn_info.get("current_symbol")
+                if current_symbol:
+                    conn_info["current_symbol"] = None
+
+                    await websocket.send_text(json.dumps({
+                        "type": "unsubscription_success",
+                        "stream": stream,
+                        "message": f"已取消訂閱 {stream}"
+                    }))
+
+                    log.info(f"WebSocket 客戶端取消訂閱: {stream}")
+                else:
+                    await websocket.send_text(json.dumps({
+                        "type": "error",
+                        "message": "目前沒有活動訂閱"
+                    }))
+            else:
+                await websocket.send_text(json.dumps({
+                    "type": "error",
+                    "message": f"不支援的動作: {action}"
+                }))
+
+        except Exception as e:
+            log.error(f"處理訂閱消息失敗: {e}")
+            await websocket.send_text(json.dumps({
+                "type": "error",
+                "message": f"處理訂閱消息失敗: {str(e)}"
+            }))
 
     def sync_broadcast(self, message: str):
         """
@@ -230,27 +285,32 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="基本版加密貨幣價格串流 API",
     description="提供即時加密貨幣價格串流、後台聚合數據存儲、持久化訂閱和實時 K 線聚合廣播",
-    version="1.0.1",
+    version="1.0.2",
     lifespan=lifespan
 )
 
 
 @app.websocket("/ws/price")
-async def websocket_endpoint(
-        websocket: WebSocket,
-        symbol: str = Query(...),
-):
+async def websocket_endpoint(websocket: WebSocket):
     """
     用於即時價格串流的 WebSocket 端點。
-    客戶端可以通過此端點連接並接收指定交易對和時間間隔的實時 K 線數據。
-    服務器會根據請求的間隔進行數據聚合。
+    客戶端可以通過此端點連接並發送訂閱消息來指定要訂閱的交易對和時間間隔。
+    基本版只支援單一訂閱，新訂閱會自動取代舊訂閱。
     """
-    await manager.connect(websocket, symbol, config.binance_base_interval)
+    await manager.connect(websocket)
     try:
         while True:
-            await websocket.receive_text()
-    except Exception:
-        log.info("WebSocket 連接已關閉。")
+            data = await websocket.receive_text()
+            try:
+                message = json.loads(data)
+                await manager.handle_subscription_message(websocket, message)
+            except json.JSONDecodeError:
+                await websocket.send_text(json.dumps({
+                    "type": "error",
+                    "message": "JSON 格式無效"
+                }))
+    except Exception as e:
+        log.info(f"WebSocket 連接已關閉: {e}")
     finally:
         manager.disconnect(websocket)
 

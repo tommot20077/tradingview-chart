@@ -87,26 +87,29 @@ English | [中文](README_zh-TW.md)
 
 ### 📊 Version Comparison
 
-| Feature Module            | Basic Version (`main.py`)      | Enhanced Version (`enhanced_main.py`) | Notes                                                                                              |
-|---------------------------|--------------------------------|---------------------------------------|----------------------------------------------------------------------------------------------------|
-| Data Fetching             | ✅ EnhancedCryptoPriceProvider  | ✅ EnhancedCryptoPriceProvider         | Both versions use the same advanced data provider.                                                 |
-| Persistent Subscriptions  | ✅ (SQLite / PostgreSQL)        | ✅ (SQLite / PostgreSQL)               | Both versions load/save subscriptions.                                                             |
-| Data Storage              | ✅ InfluxDB (Base + Aggregated) | ✅ InfluxDB (Base + Aggregated)        | Both versions store base and aggregated K-lines.                                                   |
-| Real-time Distribution    | ✅ Simple WebSocket Broadcast   | ✅ WebSocket Broadcast & Kafka         | Enhanced version adds optional Kafka for robust message queuing.                                   |
-| WebSocket Intervals       | ✅ 1m only                      | ✅ Multiple intervals support          | Basic version only supports 1m K-lines, enhanced version supports multiple configurable intervals. |
-| API Service               | ✅ (Minimal)                    | ✅ (Rich)                              | Enhanced version adds APIs for history, analysis, stats, etc.                                      |
-| Frontend UI               | ❌                              | ✅ (Web Monitoring Dashboard)          | A key differentiator for the enhanced version.                                                     |
-| Historical Data Query API | ❌                              | ✅ (API for charts)                    | Only the enhanced version provides an API to query historical data.                                |
-| Data Analysis API         | ❌                              | ✅ (Integrated `data_analyzer.py`)     | Only the enhanced version offers analysis reports via API.                                         |
-| Kafka Integration         | ❌                              | ✅ (Optional)                          | An advanced feature available only in the enhanced version.                                        |
+| Feature Module            | Basic Version (`main.py`)      | Enhanced Version (`enhanced_main.py`) | Notes                                                                                                    |
+|---------------------------|--------------------------------|---------------------------------------|----------------------------------------------------------------------------------------------------------|
+| Data Fetching             | ✅ EnhancedCryptoPriceProvider  | ✅ EnhancedCryptoPriceProvider         | Both versions use the same advanced data provider.                                                       |
+| Persistent Subscriptions  | ✅ (SQLite / PostgreSQL)        | ✅ (SQLite / PostgreSQL)               | Both versions load/save subscriptions.                                                                   |
+| Data Storage              | ✅ InfluxDB (Base only)         | ✅ InfluxDB (Base + Aggregated)        | Basic version stores only base 1m data. Enhanced version supports aggregated data.                       |
+| Real-time Distribution    | ✅ Simple WebSocket Broadcast   | ✅ WebSocket Broadcast & Kafka         | Enhanced version adds optional Kafka for robust message queuing.                                         |
+| WebSocket Configuration   | ✅ Dynamic subscription support | ✅ Dynamic subscription support        | Both versions support dynamic subscription via WebSocket messages.                                       |
+| WebSocket Intervals       | ✅ Fixed 1m interval only       | ✅ Multiple intervals support          | Basic version: 1m only. Enhanced version: 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 3d, 1w, 1M. |
+| Subscription Management   | ✅ Single subscription only     | ✅ Multiple simultaneous subscriptions | Basic version: one subscription at a time. Enhanced version: multiple subscriptions simultaneously.      |
+| K-line Aggregation        | ❌ (Direct 1m data only)        | ✅ (Real-time aggregation)             | Basic version passes through 1m data directly. Enhanced version aggregates to multiple intervals.        |
+| API Service               | ✅ (Minimal)                    | ✅ (Rich)                              | Enhanced version adds APIs for history, analysis, stats, etc.                                            |
+| Frontend UI               | ❌                              | ✅ (Web Monitoring Dashboard)          | A key differentiator for the enhanced version.                                                           |
+| Historical Data Query API | ❌                              | ✅ (API for charts)                    | Only the enhanced version provides an API to query historical data.                                      |
+| Data Analysis API         | ❌                              | ✅ (Integrated `data_analyzer.py`)     | Only the enhanced version offers analysis reports via API.                                               |
+| Kafka Integration         | ❌                              | ✅ (Optional)                          | An advanced feature available only in the enhanced version.                                              |
 
 ## 🚀 Quick Start
 
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/tommot20077/tradingview-chart.git
-cd person-chart
+    git clone https://github.com/tommot20077/tradingview-chart.git
+    cd person-chart
 ```
 
 ### 2. Configure Environment
@@ -114,7 +117,7 @@ cd person-chart
 Copy the example environment variables file and configure settings:
 
 ```bash
-cp .env.example .env
+    cp .env.example .env
 ```
 
 Edit the `.env` file with your actual configuration (refer to the detailed comments within `.env.example`).
@@ -125,7 +128,7 @@ Install the project in editable mode. This ensures all local modules are correct
 installed.
 
 ```bash
-python run.py --install
+    python run.py --install
 ```
 
 ### 4. Test InfluxDB Connection
@@ -133,7 +136,7 @@ python run.py --install
 Before running the main application, test your InfluxDB connection:
 
 ```bash
-python run.py --test-db
+    python run.py --test-db
 ```
 
 This will:
@@ -147,14 +150,14 @@ This will:
 **Recommended way - using the run script (uses `uvicorn` via console scripts):**
 
 ```bash
-# Run enhanced server (recommended, includes web dashboard and advanced features)
-python run.py --enhanced
-
-# Or run basic server (minimal features)
-python run.py --basic
-
-# Check project status and available commands
-python run.py --status
+    # Run enhanced server (recommended, includes web dashboard and advanced features)
+    python run.py --enhanced
+    
+    # Or run basic server (minimal features)
+    python run.py --basic
+    
+    # Check project status and available commands
+    python run.py --status
 ```
 
 ### 6. Access Web Monitoring Dashboard (Enhanced Version Only)
@@ -175,7 +178,7 @@ You will see a real-time monitoring dashboard with:
 ### 7. Run Data Analysis
 
 ```bash
-python run.py --analyze
+   python run.py --analyze
 ```
 
 This will execute the `data_analyzer.py` script, which fetches available symbols from InfluxDB and generates a
@@ -197,24 +200,49 @@ comprehensive analysis report for the first available symbol.
 
 ### WebSocket Endpoint
 
-- `ws://localhost:8000/ws/price` - Real-time price streaming
+- `ws://localhost:8000/ws/price` - Real-time price streaming with dynamic subscription support
+
+#### WebSocket Subscription Messages
+
+**Subscribe to a stream:**
+
+```json
+{
+  "action": "subscribe",
+  "stream": "btcusdt@kline_5m"
+}
+```
+
+**Unsubscribe from a stream:**
+
+```json
+{
+  "action": "unsubscribe",
+  "stream": "btcusdt@kline_5m"
+}
+```
+
+**Supported intervals:**
+
+- Basic version: `1m` only
+- Enhanced version: `1m`, `3m`, `5m`, `15m`, `30m`, `1h`, `2h`, `4h`, `6h`, `8h`, `12h`, `1d`, `3d`, `1w`, `1M`
 
 ## Usage Examples
 
 ### Subscribe to Additional Symbols
 
 ```bash
-# Subscribe to Ethereum
-curl -X POST "http://localhost:8000/symbol/ethusdt/subscribe"
-
-# Subscribe to Dogecoin
-curl -X POST "http://localhost:8000/symbol/dogeusdt/subscribe"
+    # Subscribe to Ethereum
+    curl -X POST "http://localhost:8000/symbol/ethusdt/subscribe"
+    
+    # Subscribe to Dogecoin
+    curl -X POST "http://localhost:8000/symbol/dogeusdt/subscribe"
 ```
 
 ### Check System Health
 
 ```bash
-curl http://localhost:8000/health
+  curl http://localhost:8000/health
 ```
 
 Response (example for enhanced version):
@@ -268,13 +296,36 @@ const ws = new WebSocket('ws://localhost:8000/ws/price');
 
 ws.onopen = function (event) {
     console.log('Connected to price stream');
-    // You can send subscription commands from the client (enhanced version only)
-    // ws.send('subscribe:ETHUSDT');
+
+    ws.send(JSON.stringify({
+        action: "subscribe",
+        stream: "btcusdt@kline_5m"  // Basic version only accepts @kline_1m
+    }));
+
+    // Enhanced version: Supports multiple intervals and simultaneous subscriptions
+    // ws.send(JSON.stringify({
+    //     action: "subscribe", 
+    //     stream: "btcusdt@kline_5m"  // Enhanced version supports various intervals
+    // }));
+
+    // Enhanced version: Multiple simultaneous subscriptions
+    // ws.send(JSON.stringify({
+    //     action: "subscribe", 
+    //     stream: "ethusdt@kline_1m"
+    // }));
 };
 
 ws.onmessage = function (event) {
-    const priceData = JSON.parse(event.data);
-    console.log('Price update:', priceData);
+    const message = JSON.parse(event.data);
+
+    if (message.type === 'price_update') {
+        console.log('Price update:', message.data);
+        console.log('Stream:', message.stream);
+    } else if (message.type === 'subscription_success') {
+        console.log('Subscription successful:', message.stream);
+    } else if (message.type === 'error') {
+        console.error('Error:', message.message);
+    }
 };
 
 ws.onclose = function (event) {
@@ -390,7 +441,7 @@ To add support for additional cryptocurrency exchanges:
 To enable debug logging, modify the logging configuration in `src/main.py` or `src/enhanced_main.py`:
 
 ```python
-logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.DEBUG)
 ```
 
 ## Performance Tuning
