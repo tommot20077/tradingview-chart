@@ -60,7 +60,7 @@ class EnhancedConnectionManager:
         接受新的 WebSocket 連接並設定其聚合需求。
         此方法會接受一個新的 WebSocket 連接，並根據客戶端請求的交易對和時間間隔，
         計算所需的聚合乘數，並將連接信息存儲在 active_connections 字典中，
-        同時初始化用於自定義聚合的緩衝區。
+        同時初始化用於自定義聚合的緩衝區，並從數據庫查詢當前未完成K線狀態。
         """
         await websocket.accept()
         target_interval_seconds = interval_to_seconds(interval)
@@ -70,13 +70,71 @@ class EnhancedConnectionManager:
             await websocket.close(code=1008, reason="Invalid interval")
             return
 
+        current_agg_kline = await self._initialize_current_kline(symbol.upper(), target_interval_seconds)
+
         self.active_connections[websocket] = {
             "symbol": symbol.upper(),
             "interval": interval,
             "interval_seconds": target_interval_seconds,
-            "current_agg_kline": None
+            "current_agg_kline": current_agg_kline
         }
         log.info(f"WebSocket 客戶端已連接，訂閱 {symbol}@{interval}。總連接數: {len(self.active_connections)}")
+
+    async def _initialize_current_kline(self, symbol: str, interval_seconds: int) -> Optional[PriceData]:
+        """
+        初始化當前時間窗口的聚合K線狀態。
+        
+        此方法會查詢數據庫中當前時間窗口內的基礎數據，
+        並在內存中聚合成對應間隔的K線，確保WebSocket連接時
+        能夠正確銜接之前累積的數據，避免數據跳空。
+        
+        參數:
+            symbol (str): 交易對符號
+            interval_seconds (int): 目標間隔的秒數
+            
+        返回:
+            Optional[PriceData]: 當前時間窗口的聚合K線，如果沒有數據則返回None
+        """
+        if not self.crypto_provider:
+            return None
+
+        try:
+            from datetime import datetime, timezone
+
+            now = datetime.now(timezone.utc)
+            current_timestamp = int(now.timestamp())
+
+            time_bucket_start = current_timestamp - (current_timestamp % interval_seconds)
+            window_start = datetime.fromtimestamp(time_bucket_start, tz=timezone.utc)
+
+            base_data = self.crypto_provider.analyzer.get_price_data(
+                symbol=symbol,
+                start_time=window_start,
+                end_time=now
+            )
+
+            if base_data.empty:
+                log.debug(f"當前時間窗口內沒有找到 {symbol} 的基礎數據")
+                return None
+
+            agg_kline = PriceData(
+                symbol=symbol,
+                price=float(base_data['close'].iloc[-1]),
+                timestamp=window_start,
+                open_price=float(base_data['open'].iloc[0]),
+                high_price=float(base_data['high'].max()),
+                low_price=float(base_data['low'].min()),
+                close_price=float(base_data['close'].iloc[-1]),
+                volume=float(base_data['volume'].sum()),
+                trade_count=int(base_data['trade_count'].sum()) if 'trade_count' in base_data.columns else 0
+            )
+
+            log.info(f"成功初始化 {symbol} 當前時間窗口的聚合K線: {window_start}")
+            return agg_kline
+
+        except Exception as e:
+            log.error(f"初始化 {symbol} 當前K線狀態失敗: {e}")
+            return None
 
     def disconnect(self, websocket: WebSocket):
         """

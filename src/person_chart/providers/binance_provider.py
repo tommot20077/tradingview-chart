@@ -530,7 +530,7 @@ class CryptoPriceProviderRealtime(AbstractRealtimeDataProvider, AbstractHistoric
     def get_historical_data(self, symbol: str, interval: str, start: datetime, end: datetime, limit: int, offset: int) -> List[
         Dict[str, Any]]:
         """
-        從 InfluxDB 獲取歷史 K 線數據，支持分頁和優化的動態聚合。
+        從 InfluxDB 獲取歷史 K 線數據，並智能銜接當前未完成的 K 線。
 
         此方法從 InfluxDB 查詢指定交易對在給定時間範圍內的歷史 K 線數據。
         它支持兩種模式：
@@ -541,7 +541,7 @@ class CryptoPriceProviderRealtime(AbstractRealtimeDataProvider, AbstractHistoric
 
         並且進行了優化以解決歷史數據與即時數據流的銜接問題，
          它會：
-        1. 查詢指定時間範圍內的基礎數據（通常是 1m）。
+        1. 查詢指定時間範圍內的基礎數據（或最優的預聚合數據）。
         2. 使用 Pandas Grouper 將數據聚合成目標時間間隔的 K 線。
         3. 確保即使是當前時間窗口內未完成的最後一根 K 線也能被正確聚合和返回。
         4. 最後應用分頁（limit 和 offset）。
@@ -562,38 +562,39 @@ class CryptoPriceProviderRealtime(AbstractRealtimeDataProvider, AbstractHistoric
         """
         log.debug(f"正在為 {symbol} 獲取從 {start} 到 {end} 的歷史數據 {symbol}@{interval}。")
 
-        is_pre_aggregated = interval in config.binance_aggregation_intervals or interval == config.binance_base_interval
-
         try:
-            if is_pre_aggregated:
-                measurement = f"crypto_price_{interval}" if interval != config.binance_base_interval else "crypto_price"
-                log.debug(f"從預聚合的 measurement '{measurement}' 直接查詢數據。")
-                df = self.analyzer.query_direct(symbol, measurement, start, end, limit, offset)
-            else:
-                base_seconds = interval_to_seconds(config.binance_base_interval)
-                target_seconds = interval_to_seconds(interval)
+            source_interval, _ = find_optimal_source_interval(interval)
+            log.debug(f"為目標間隔 '{interval}' 找到最佳聚合來源: '{source_interval}'。")
 
-                if not target_seconds or target_seconds < base_seconds or target_seconds % base_seconds != 0:
-                    raise ValueError(f"自定義間隔 {interval} 無效或必須是基礎間隔 {config.binance_base_interval} 的整數倍。")
+            source_measurement = f"crypto_price_{source_interval}" if source_interval != config.binance_base_interval else "crypto_price"
 
-                source_interval, _ = find_optimal_source_interval(interval)
-                log.debug(f"為目標間隔 '{interval}' 找到最佳聚合來源: '{source_interval}'。")
+            df = self.analyzer.query_and_aggregate(symbol, source_measurement, start, end, interval)
 
-                source_measurement = f"crypto_price_{source_interval}" if source_interval != config.binance_base_interval else "crypto_price"
-
-                df = self.analyzer.query_and_aggregate(symbol, source_measurement, start, end, interval)
-
-                if not df.empty and (limit or offset):
-                    total_records = len(df)
-                    df = df.iloc[offset: offset + limit]
-                    log.info(f"對聚合後的 {total_records} 條記錄應用分頁: 偏移 {offset}, 限制 {limit}。")
+            if not df.empty and (limit or offset):
+                total_records = len(df)
+                start_index = offset
+                end_index = offset + limit
+                df = df.iloc[start_index:end_index]
+                log.info(f"對聚合後的 {total_records} 條記錄應用分頁: 偏移 {offset}, 限制 {limit}。")
 
             if df.empty:
                 return []
 
             df.reset_index(inplace=True)
             df['time'] = df['time'].apply(lambda x: int(x.timestamp()))
+
+            df.rename(columns={
+                'open': 'open',
+                'high': 'high',
+                'low': 'low',
+                'close': 'close',
+                'volume': 'volume'
+            }, inplace=True)
+
             required_columns = ['time', 'open', 'high', 'low', 'close', 'volume']
+
+            if 'trade_count' in df.columns:
+                required_columns.append('trade_count')
 
             return df[required_columns].to_dict('records')
 

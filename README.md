@@ -87,18 +87,18 @@ English | [中文](README_zh-TW.md)
 
 ### 📊 Version Comparison
 
-| Feature Module            | Basic Version (`main.py`)      | Enhanced Version (`enhanced_main.py`) | Notes                                                               |
-|---------------------------|--------------------------------|---------------------------------------|---------------------------------------------------------------------|
-| Data Fetching             | ✅ EnhancedCryptoPriceProvider  | ✅ EnhancedCryptoPriceProvider         | Both versions use the same advanced data provider.                  |
-| Persistent Subscriptions  | ✅ (SQLite / PostgreSQL)        | ✅ (SQLite / PostgreSQL)               | Both versions load/save subscriptions.                              |
-| Data Storage              | ✅ InfluxDB (Base + Aggregated) | ✅ InfluxDB (Base + Aggregated)        | Both versions store base and aggregated K-lines.                    |
-| Real-time Distribution    | ✅ Simple WebSocket Broadcast   | ✅ WebSocket Broadcast & Kafka         | Enhanced version adds optional Kafka for robust message queuing.    |
-| Configuration             | ✅ `config.py`                  | ✅ `config.py`                         | Shared, but the enhanced version uses more configuration options.   |
-| API Service               | ✅ (Minimal)                    | ✅ (Rich)                              | Enhanced version adds APIs for history, analysis, stats, etc.       |
-| Frontend UI               | ❌                              | ✅ (Web Monitoring Dashboard)          | A key differentiator for the enhanced version.                      |
-| Historical Data Query API | ❌                              | ✅ (API for charts)                    | Only the enhanced version provides an API to query historical data. |
-| Data Analysis API         | ❌                              | ✅ (Integrated `data_analyzer.py`)     | Only the enhanced version offers analysis reports via API.          |
-| Kafka Integration         | ❌                              | ✅ (Optional)                          | An advanced feature available only in the enhanced version.         |
+| Feature Module            | Basic Version (`main.py`)      | Enhanced Version (`enhanced_main.py`) | Notes                                                                                              |
+|---------------------------|--------------------------------|---------------------------------------|----------------------------------------------------------------------------------------------------|
+| Data Fetching             | ✅ EnhancedCryptoPriceProvider  | ✅ EnhancedCryptoPriceProvider         | Both versions use the same advanced data provider.                                                 |
+| Persistent Subscriptions  | ✅ (SQLite / PostgreSQL)        | ✅ (SQLite / PostgreSQL)               | Both versions load/save subscriptions.                                                             |
+| Data Storage              | ✅ InfluxDB (Base + Aggregated) | ✅ InfluxDB (Base + Aggregated)        | Both versions store base and aggregated K-lines.                                                   |
+| Real-time Distribution    | ✅ Simple WebSocket Broadcast   | ✅ WebSocket Broadcast & Kafka         | Enhanced version adds optional Kafka for robust message queuing.                                   |
+| WebSocket Intervals       | ✅ 1m only                      | ✅ Multiple intervals support          | Basic version only supports 1m K-lines, enhanced version supports multiple configurable intervals. |
+| API Service               | ✅ (Minimal)                    | ✅ (Rich)                              | Enhanced version adds APIs for history, analysis, stats, etc.                                      |
+| Frontend UI               | ❌                              | ✅ (Web Monitoring Dashboard)          | A key differentiator for the enhanced version.                                                     |
+| Historical Data Query API | ❌                              | ✅ (API for charts)                    | Only the enhanced version provides an API to query historical data.                                |
+| Data Analysis API         | ❌                              | ✅ (Integrated `data_analyzer.py`)     | Only the enhanced version offers analysis reports via API.                                         |
+| Kafka Integration         | ❌                              | ✅ (Optional)                          | An advanced feature available only in the enhanced version.                                        |
 
 ## 🚀 Quick Start
 

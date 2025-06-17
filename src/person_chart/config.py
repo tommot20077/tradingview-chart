@@ -31,7 +31,7 @@ class Config:
         influxdb_host (str): InfluxDB 的主機位址。
         influxdb_token (str): InfluxDB 的認證令牌。
         influxdb_database (str): InfluxDB 的資料庫名稱。
-        binance_base_interval: (str): 幣安 K 線資料的基礎時間間隔，例如 '1m'。
+        binance_base_interval: (str): 幣安 K 線資料的基礎時間間隔，固定設定為 '1m'。
         binance_aggregation_intervals: List[str]: 幣安 K 線資料的聚合時間間隔列表，例如 ['1m', '5m', '15m', '1h', '1d']。
         api_host (str): API 服務器的主機位址。
         api_port (int): API 服務器的埠號。
@@ -88,7 +88,7 @@ class Config:
             influxdb_token=os.getenv('INFLUXDB_TOKEN', ''),
             influxdb_database=os.getenv('INFLUXDB_DATABASE', 'crypto_data'),
 
-            binance_base_interval=os.getenv('BINANCE_BASE_INTERVAL', '1m'),
+            binance_base_interval='1m',
             binance_aggregation_intervals=aggregation_intervals,
 
             api_host=os.getenv('API_HOST', '127.0.0.1'),

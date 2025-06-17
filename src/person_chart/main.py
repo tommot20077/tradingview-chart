@@ -239,14 +239,13 @@ app = FastAPI(
 async def websocket_endpoint(
         websocket: WebSocket,
         symbol: str = Query(...),
-        interval: str = Query(config.binance_base_interval)
 ):
     """
     用於即時價格串流的 WebSocket 端點。
     客戶端可以通過此端點連接並接收指定交易對和時間間隔的實時 K 線數據。
     服務器會根據請求的間隔進行數據聚合。
     """
-    await manager.connect(websocket, symbol, interval)
+    await manager.connect(websocket, symbol, config.binance_base_interval)
     try:
         while True:
             await websocket.receive_text()

@@ -15,7 +15,7 @@ from influxdb_client_3 import InfluxDBClient3
 
 from person_chart.data_models import MarketSummary
 from person_chart.utils.colored_logging import setup_colored_logging
-from person_chart.utils.time_unity import convert_interval_to_pandas_freq
+from person_chart.utils.time_unity import convert_interval_to_pandas_freq, interval_to_seconds
 
 log = setup_colored_logging(level=logging.INFO)
 
@@ -278,20 +278,24 @@ class CryptoDataAnalyzer:
         從基礎 measurement 查詢數據並在客戶端（Python）進行聚合。
 
         此方法首先從 InfluxDB 獲取指定時間範圍內的原始數據，
-        然後利用 Pandas 的 `groupby` 和 `pd.Grouper` 功能在內存中進行 K 線聚合。
-        它能正確處理空時間窗口，確保只返回包含有效交易數據的 K 線。
+        然後利用 Pandas 的 `resample` 功能在內存中進行 K 線聚合。
+        它能正確處理時間窗口，並聚合出 OHLCV 數據，包括未完成的最後一根 K 線。
 
         參數:
             symbol (str): 加密貨幣符號。
-            base_measurement (str): 基礎測量名稱 (例如 'crypto_price')。
+            base_measurement (str): 基礎測量名稱 (例如 'crypto_price' 或 'crypto_price_5m')。
             start_time (datetime): 查詢的開始時間 (UTC)。
             end_time (datetime): 查詢的結束時間 (UTC)。
             window_str (str): 聚合時間窗口的字符串表示 (例如 '1m', '1h', '1d')。
 
         返回:
-            pd.DataFrame: 包含聚合 K 線數據的 DataFrame。
+            pd.DataFrame: 包含聚合 K 線數據的 DataFrame，索引為 'time'。
         """
-        log.info(f"正在查詢並聚合 {base_measurement} 中 {symbol} 的數據，時間窗口為 '{window_str}'。")
+        log.info(f"正在查詢並聚合 {base_measurement} 中 {symbol} 的數據，從 {start_time} 到 {end_time}，時間窗口為 '{window_str}'。")
+
+        if interval_to_seconds(window_str) < 60:
+            log.warning(f"時間窗口 '{window_str}' 格式不正確。")
+            return pd.DataFrame()
 
         query = f"""
         SELECT *
@@ -307,6 +311,7 @@ class CryptoDataAnalyzer:
             table = self.client.query(query=query, language='sql')
             df = table.to_pandas().set_index('time')
             df.index = pd.to_datetime(df.index)
+
             if df.empty:
                 log.warning(f"在指定時間範圍內未找到 {symbol} 的原始數據進行聚合。")
                 return pd.DataFrame()
@@ -318,25 +323,19 @@ class CryptoDataAnalyzer:
             log.debug(f"將間隔 '{window_str}' 轉換為 Pandas 頻率 '{pandas_freq_str}' 進行 resample。")
 
             aggregation_rules = {
-                'open': ('open', 'first'),
-                'high': ('high', 'max'),
-                'low': ('low', 'min'),
-                'close': ('close', 'last'),
-                'volume': ('volume', 'sum')
+                'open': 'first',
+                'high': 'max',
+                'low': 'min',
+                'close': 'last',
+                'volume': 'sum'
             }
 
             if 'trade_count' in df.columns:
-                aggregation_rules['trade_count'] = ('trade_count', 'sum')
+                aggregation_rules['trade_count'] = 'sum'
 
-            required_cols = [col for col, _ in aggregation_rules.values()]
-            missing_cols = [col for col in required_cols if col not in df.columns]
-            if missing_cols:
-                raise ValueError(f"源數據中缺少聚合所需的列: {missing_cols}")
+            agg_df = df.resample(pandas_freq_str, label='left', closed='left').agg(aggregation_rules)
 
-            agg_df = df.groupby(pd.Grouper(freq=pandas_freq_str)).agg(**aggregation_rules)
-
-            ohlc_cols = ['open', 'high', 'low', 'close']
-            agg_df.dropna(subset=ohlc_cols, inplace=True)
+            agg_df.dropna(subset=['open'], inplace=True)
 
             log.debug(f"成功將 {len(df)} 條 '{base_measurement}' 數據聚合為 {len(agg_df)} 條 '{window_str}' K線數據。")
             return agg_df

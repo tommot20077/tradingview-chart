@@ -2,6 +2,47 @@
 
 ---
 
+## 0.5.4 - 2025-06-17
+
+### 修復
+
+- **圖表數據顯示跳空問題**:
+  - 優化 `src/person_chart/analysis/data_analyzer.py` 中的 K 線聚合邏輯，將 Pandas 的 `groupby` 和 `pd.Grouper` 替換為更高效的
+    `resample` 功能，以確保數據連續性並正確處理未完成的 K 線。
+  - 在 `query_and_aggregate` 方法中新增了對無效時間窗口（小於 60 秒）的警告。
+  - 移除聚合規則中對 `required_cols` 和 `missing_cols` 的檢查，並簡化 `dropna` 邏輯。
+- **WebSocket 連接初始化**:
+  - 在 `src/person_chart/enhanced_main.py` 中新增 `_initialize_current_kline` 方法，用於在 WebSocket
+    連接建立時，從數據庫查詢並初始化當前時間窗口的聚合 K 線狀態，避免數據跳空。
+  - `_update_and_get_aggregate` 方法現在使用狀態管理而非緩衝區來更新聚合 K 線，確保實時數據的平滑銜接。
+  - 移除了 `active_connections` 中對 `buffer` 的依賴。
+- **歷史數據獲取優化**:
+  - `src/person_chart/providers/binance_provider.py` 中的 `get_historical_data` 方法現在能智能銜接當前未完成的 K
+    線，並優化了數據查詢邏輯，不再區分預聚合數據。
+  - 增加了對返回數據列的重命名和 `trade_count` 列的包含。
+  - 增加了對 `ValueError` 的捕獲和日誌記錄。
+- **配置調整**:
+  - `src/person_chart/config.py` 中 `binance_base_interval` 固定為 `'1m'`，不再從環境變數讀取。
+
+---
+
+## 0.5.3 - 2025-06-16
+
+### 重構
+
+- **重新設計結構目錄**:
+  - `src/person_chart/colored_logging.py` => `src/person_chart/utils/colored_logging.py`
+  - `src/person_chart/tools/time_unity.py` => `src/person_chart/utils/time_unity.py`
+  - `src/person_chart/services/database_manager.py` => `src/person_chart/storage/subscription_repo.py`
+  - `src/person_chart/providers/abstract_data_provider.py` => `src/person_chart/providers/abstract.py`
+  - `src/person_chart/providers/crypto_provider.py` => `src/person_chart/providers/binance_provider.py`
+  - `src/person_chart/utils/time_unity.py` 中的 `convert_interval_to_pandas_freq` 函數將月份和年份的 Pandas 頻率從
+    `ME`/`YE` 調整為 `MS`/`YS` (月初/年初)。
+  - 更新了所有受影響文件的導入路徑。
+- **版本號更新**: `src/person_chart/enhanced_main.py` 的版本號更新至 `0.6.1`。
+
+---
+
 ## 0.5.2 - 2025-06-16
 
 ### 新增
@@ -29,7 +70,7 @@
 
 ### 新增
 
-- **K 線聚合資料處理**: 加入 K 線聚合資料處理，由基礎數據 (config.binance_base_interval)
+- **K 線聚合資料處理**: 加入 K 線聚合資料處理，由基礎數據 `config.binance_base_interval`
   開始會自動聚合成更大尺度的數據類型，根據聚合的間隔分成常用間隔以及自定義間隔。
     1. 常用間隔為預設的聚合尺度，在查詢時可以直接使用 (定義於 `AGGREGATION_INTERVALS`)。
     2. 自定義間隔則是會再查詢此間隔的最大常用間隔因數，例如 `3d` 則會自動聚合 3 根日線的數據。
