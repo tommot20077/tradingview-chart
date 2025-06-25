@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "crypto-single"
+version = "0.1.1"
+description = "Single crypto data ingestion service"
+readme = "README.md"
+requires-python = ">=3.12"
+license = {text = "MIT"}
+authors = [
+    {name = "TradingChart Team"},
+]
+
+dependencies = [
+    "asset-core",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.1.0",
+    "pytest-mock>=3.11.1",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["crypto_single*"]
+exclude = ["tests*"]

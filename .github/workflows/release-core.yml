@@ -1,0 +1,77 @@
+name: Release Asset Core
+
+on:
+  push:
+    tags:
+      - 'asset-core-v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+      with:
+        version: "latest"
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+    
+    - name: Install build dependencies
+      run: |
+        uv pip install --system build twine
+    
+    - name: Build package
+      run: |
+        cd src/asset_core
+        python -m build
+    
+    - name: Check package
+      run: |
+        cd src/asset_core
+        twine check dist/*
+    
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: Asset Core ${{ github.ref }}
+        body: |
+          Release of Asset Core library.
+          
+          ## Installation
+          
+          Download the wheel file and install with:
+          ```bash
+          pip install asset_core-*.whl
+          ```
+        draft: false
+        prerelease: false
+    
+    - name: Upload wheel
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./src/asset_core/dist/asset_core-*.whl
+        asset_name: asset_core-${{ github.ref_name }}.whl
+        asset_content_type: application/zip
+    
+    - name: Upload source distribution
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./src/asset_core/dist/asset-core-*.tar.gz
+        asset_name: asset-core-${{ github.ref_name }}.tar.gz
+        asset_content_type: application/gzip
