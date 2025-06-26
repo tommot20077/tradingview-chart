@@ -15,7 +15,14 @@ from src.asset_core.asset_core.models import BaseEvent, EventPriority, EventType
 
 @pytest.fixture(scope="session")
 def event_loop() -> Any:
-    """Create an instance of the default event loop for the test session."""
+    """Provides an instance of the default event loop for the test session.
+
+    This fixture ensures that asynchronous tests have a consistent event loop
+    to run on.
+
+    Yields:
+        Any: The event loop instance.
+    """
     loop = asyncio.get_event_loop_policy().new_event_loop()
     yield loop
     loop.close()
@@ -23,7 +30,14 @@ def event_loop() -> Any:
 
 @pytest.fixture
 def mock_settings() -> BaseCoreSettings:
-    """Provide mock settings for testing."""
+    """Provides mock settings for testing.
+
+    This fixture returns a `BaseCoreSettings` instance with predefined
+    values suitable for unit and integration tests.
+
+    Returns:
+        BaseCoreSettings: A mock settings object.
+    """
 
     class TestConfig(BaseCoreSettings):
         """Test configuration for unit tests."""
@@ -39,7 +53,11 @@ def mock_settings() -> BaseCoreSettings:
 
 @pytest.fixture
 def sample_trade() -> Trade:
-    """Provide a sample Trade instance for testing."""
+    """Provides a sample Trade instance for testing.
+
+    Returns:
+        Trade: A `Trade` object with predefined values for testing.
+    """
     return Trade(
         symbol="BTCUSDT",
         trade_id="test_trade_123",
@@ -52,7 +70,11 @@ def sample_trade() -> Trade:
 
 @pytest.fixture
 def sample_kline() -> Kline:
-    """Provide a sample Kline instance for testing."""
+    """Provides a sample Kline instance for testing.
+
+    Returns:
+        Kline: A `Kline` object with predefined values for testing.
+    """
     # Use a properly aligned time for 1-minute interval
     base_time = datetime(2023, 1, 1, 12, 5, 0, tzinfo=UTC)  # Aligned to minute boundary
     return Kline(
@@ -72,13 +94,21 @@ def sample_kline() -> Kline:
 
 @pytest.fixture
 def sample_event() -> BaseEvent:
-    """Provide a sample BaseEvent instance for testing."""
+    """Provides a sample BaseEvent instance for testing.
+
+    Returns:
+        BaseEvent: A `BaseEvent` object with predefined values for testing.
+    """
     return BaseEvent(event_type=EventType.TRADE, priority=EventPriority.NORMAL, data={"test": "data"}, source="test")
 
 
 @pytest.fixture
 def sample_trade_data() -> dict[str, Any]:
-    """Provide sample trade data for testing."""
+    """Provides sample trade data for testing.
+
+    Returns:
+        dict[str, Any]: A dictionary containing sample trade data.
+    """
     return {
         "symbol": "BTCUSDT",
         "trade_id": "test_trade_456",
@@ -91,7 +121,11 @@ def sample_trade_data() -> dict[str, Any]:
 
 @pytest.fixture
 def sample_kline_data() -> dict[str, Any]:
-    """Provide sample kline data for testing."""
+    """Provides sample kline data for testing.
+
+    Returns:
+        dict[str, Any]: A dictionary containing sample kline data.
+    """
     base_time = datetime.now(UTC)
     return {
         "symbol": "ETHUSDT",
@@ -109,7 +143,12 @@ def sample_kline_data() -> dict[str, Any]:
 
 @pytest.fixture
 def mock_websocket() -> AsyncMock:
-    """Provide a mock websocket for testing."""
+    """Provides a mock websocket for testing asynchronous network interactions.
+
+    Returns:
+        AsyncMock: A mock object simulating a websocket connection with `send`,
+                   `recv`, `close`, and `wait_closed` methods.
+    """
     mock_ws = AsyncMock()
     mock_ws.send = AsyncMock()
     mock_ws.recv = AsyncMock()
@@ -120,13 +159,21 @@ def mock_websocket() -> AsyncMock:
 
 @pytest.fixture
 def mock_logger() -> MagicMock:
-    """Provide a mock logger for testing."""
+    """Provides a mock logger for testing logging interactions.
+
+    Returns:
+        MagicMock: A mock object simulating a logger.
+    """
     return MagicMock()
 
 
 @pytest.fixture
 def mock_metrics_registry() -> MagicMock:
-    """Provide a mock metrics registry for testing."""
+    """Provides a mock metrics registry for testing metric collection.
+
+    Returns:
+        MagicMock: A mock object simulating a Prometheus metrics registry.
+    """
     registry = MagicMock()
     registry.register = MagicMock()
     registry.collect = MagicMock(return_value=[])
@@ -135,7 +182,14 @@ def mock_metrics_registry() -> MagicMock:
 
 @pytest.fixture(autouse=True)
 def reset_global_state() -> Any:
-    """Reset any global state before each test."""
+    """Resets any global state before each test.
+
+    This fixture is automatically used by all tests (`autouse=True`)
+    to ensure a clean and isolated environment for each test function.
+
+    Yields:
+        Any: Yields control to the test function.
+    """
     # This fixture can be used to reset singletons, clear caches, etc.
     yield
     # Cleanup after test if needed
@@ -143,7 +197,14 @@ def reset_global_state() -> Any:
 
 @pytest.fixture
 def temp_env_vars(monkeypatch: Any) -> Any:
-    """Provide a way to temporarily set environment variables."""
+    """Provides a way to temporarily set environment variables for tests.
+
+    Args:
+        monkeypatch (Any): The pytest `monkeypatch` fixture for modifying environment variables.
+
+    Returns:
+        Callable[[Any], None]: A callable that takes keyword arguments to set environment variables.
+    """
 
     def _set_env_vars(**kwargs: Any) -> None:
         for key, value in kwargs.items():
@@ -154,14 +215,23 @@ def temp_env_vars(monkeypatch: Any) -> Any:
 
 @pytest.fixture
 def boundary_values() -> dict[str, Any]:
-    """Provide boundary values for testing edge cases."""
+    """Provides boundary values for testing edge cases.
+
+    Returns:
+        dict[str, Any]: A dictionary containing various boundary values
+                        for numbers, strings, and timestamps.
+    """
     return {
-        "min_decimal": Decimal("0.00000001"),
-        "max_decimal": Decimal("999999999.99999999"),
+        "min_decimal": Decimal("0.000000000001"),  # Updated to 12 decimal places minimum
+        "max_decimal": Decimal("1000000000"),  # Updated to new maximum price
         "zero": Decimal("0"),
         "negative": Decimal("-1.0"),
         "very_large": Decimal("1e10"),
-        "very_small": Decimal("1e-10"),
+        "very_small": Decimal("1e-12"),  # Updated to 12 decimal places precision
+        "min_price": Decimal("0.000000000001"),  # 1E-12 minimum price
+        "max_price": Decimal("1000000000"),  # 1B maximum price
+        "min_volume": Decimal("0.001"),  # Updated minimum volume
+        "max_volume": Decimal("10000000000"),  # Updated maximum volume (10B)
         "empty_string": "",
         "max_string_length": "x" * 1000,
         "unicode_string": "测试数据🚀",
@@ -172,7 +242,12 @@ def boundary_values() -> dict[str, Any]:
 
 @pytest.fixture
 def invalid_data_samples() -> dict[str, Any]:
-    """Provide various invalid data samples for negative testing."""
+    """Provides various invalid data samples for negative testing.
+
+    Returns:
+        dict[str, Any]: A dictionary containing lists of invalid data samples
+                        categorized by field type.
+    """
     return {
         "invalid_price": ["", "abc", "-1", "0", None, []],
         "invalid_quantity": ["", "xyz", "-0.1", "0", None, {}],

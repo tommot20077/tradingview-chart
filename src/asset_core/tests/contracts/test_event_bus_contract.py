@@ -9,23 +9,26 @@ import asyncio
 from collections.abc import Callable
 
 import pytest
-from asset_core.events.bus import AbstractEventBus, AsyncEventHandler, EventHandler
-from asset_core.models.events import BaseEvent, EventType
 
-from .base_contract_test import AsyncContractTestMixin, BaseContractTest, \
-    MockImplementationBase
+from src.asset_core.asset_core.events.bus import AbstractEventBus, AsyncEventHandler, EventHandler
+from src.asset_core.asset_core.models.events import BaseEvent, EventType
+
+from .base_contract_test import AsyncContractTestMixin, BaseContractTest, MockImplementationBase
 
 
 class MockEvent(BaseEvent[dict]):
-    """Test event for contract testing."""
+    """A mock event class for contract testing of the event bus.
+
+    This class extends `BaseEvent` and is used to create test events
+    with specific event types, symbols, and data payloads.
+    """
 
     def __init__(self, event_type: EventType, symbol: str | None = None, data: dict | None = None):
         super().__init__(event_type=event_type, symbol=symbol, source="test_source", data=data or {})
 
 
 class MockEventBus(AbstractEventBus, MockImplementationBase):
-    """
-    Mock implementation of AbstractEventBus for contract testing.
+    """Mock implementation of AbstractEventBus for contract testing.
 
     Provides a complete implementation that follows the interface contract
     while using in-memory event handling for testing purposes.
@@ -38,7 +41,14 @@ class MockEventBus(AbstractEventBus, MockImplementationBase):
         self._published_events: list[BaseEvent] = []
 
     async def publish(self, event: BaseEvent) -> None:
-        """Publish event to all matching subscribers."""
+        """Publishes an event to all matching subscribers.
+
+        Args:
+            event (BaseEvent): The event to publish.
+
+        Raises:
+            RuntimeError: If the event bus is closed.
+        """
         self._check_not_closed()
 
         self._published_events.append(event)
@@ -72,7 +82,23 @@ class MockEventBus(AbstractEventBus, MockImplementationBase):
         *,
         filter_symbol: str | None = None,
     ) -> str:
-        """Subscribe to events with optional symbol filter."""
+        """Subscribes a handler to events of a specific type, with optional symbol filtering.
+
+        Args:
+            event_type (EventType): The type of event to subscribe to.
+            handler (EventHandler | AsyncEventHandler): The callable (sync or async)
+                                                        that will handle the event.
+            filter_symbol (str | None): An optional symbol to filter events by.
+                                        If provided, only events matching this symbol
+                                        will be dispatched to the handler.
+
+        Returns:
+            str: A unique subscription ID that can be used to unsubscribe.
+
+        Raises:
+            ValueError: If the handler is not callable.
+            RuntimeError: If the event bus is closed.
+        """
         self._check_not_closed()
 
         if not callable(handler):
@@ -96,7 +122,17 @@ class MockEventBus(AbstractEventBus, MockImplementationBase):
         return subscription_id
 
     def unsubscribe(self, subscription_id: str) -> bool:
-        """Remove specific subscription."""
+        """Removes a specific subscription from the event bus.
+
+        Args:
+            subscription_id (str): The unique ID of the subscription to remove.
+
+        Returns:
+            bool: True if the subscription was found and removed, False otherwise.
+
+        Raises:
+            RuntimeError: If the event bus is closed.
+        """
         self._check_not_closed()
 
         for _event_type, subscriptions in self._subscriptions.items():
@@ -108,7 +144,19 @@ class MockEventBus(AbstractEventBus, MockImplementationBase):
         return False
 
     def unsubscribe_all(self, event_type: EventType | None = None) -> int:
-        """Remove all subscriptions matching criteria."""
+        """Removes all subscriptions, optionally for a specific event type.
+
+        Args:
+            event_type (EventType | None): The type of event for which to remove
+                                           all subscriptions. If None, all subscriptions
+                                           across all event types will be removed.
+
+        Returns:
+            int: The number of subscriptions that were removed.
+
+        Raises:
+            RuntimeError: If the event bus is closed.
+        """
         self._check_not_closed()
 
         removed_count = 0
@@ -128,13 +176,28 @@ class MockEventBus(AbstractEventBus, MockImplementationBase):
         return removed_count
 
     async def close(self) -> None:
-        """Close event bus and clean up resources."""
+        """Closes the event bus and cleans up resources.
+
+        Sets the internal `_is_closed` flag to True and clears all subscriptions
+        and published events.
+        """
         self._is_closed = True
         self._subscriptions.clear()
         self._published_events.clear()
 
     def get_subscription_count(self, event_type: EventType | None = None) -> int:
-        """Get count of active subscriptions."""
+        """Returns the number of active subscriptions, optionally for a specific event type.
+
+        Args:
+            event_type (EventType | None): The event type for which to count subscriptions.
+                                           If None, returns the total count across all types.
+
+        Returns:
+            int: The number of subscriptions.
+
+        Raises:
+            RuntimeError: If the event bus is closed.
+        """
         self._check_not_closed()
 
         if event_type is None:
@@ -149,7 +212,25 @@ class MockEventBus(AbstractEventBus, MockImplementationBase):
         timeout: float | None = None,
         filter_func: Callable[[BaseEvent], bool] | None = None,
     ) -> BaseEvent | None:
-        """Wait for specific event with optional timeout and filter."""
+        """Waits for a specific event to be published, with optional timeout and filtering.
+
+        Args:
+            event_type (EventType): The type of event to wait for.
+            timeout (float | None): The maximum time in seconds to wait for the event.
+                                    If None, waits indefinitely.
+            filter_func (Callable[[BaseEvent], bool] | None): An optional callable
+                                                                to filter events. Only
+                                                                events for which this
+                                                                function returns True
+                                                                will be considered.
+
+        Returns:
+            BaseEvent | None: The first matching event, or None if the timeout is reached.
+
+        Raises:
+            RuntimeError: If the event bus is closed.
+            asyncio.TimeoutError: If the timeout is reached before the event is received.
+        """
         self._check_not_closed()
 
         # Create a future to wait for the event
@@ -177,47 +258,67 @@ class MockEventBus(AbstractEventBus, MockImplementationBase):
 
     @property
     def is_closed(self) -> bool:
-        """Check if event bus is closed."""
+        """Checks if the event bus is closed.
+
+        Returns:
+            bool: True if the event bus is closed, False otherwise.
+        """
         return self._is_closed
 
     # Additional testing helpers
     def get_published_events(self) -> list[BaseEvent]:
-        """Get list of all published events (for testing)."""
+        """Returns a copy of the list of all events published to this mock bus.
+
+        This method is primarily for testing and inspection purposes.
+
+        Returns:
+            list[BaseEvent]: A list of published events.
+        """
         return self._published_events.copy()
 
     def clear_published_events(self) -> None:
-        """Clear published events list (for testing)."""
+        """Clears the list of published events.
+
+        This method is primarily for testing and resetting the state.
+        """
         self._published_events.clear()
 
 
 class TestAbstractEventBusContract(BaseContractTest, AsyncContractTestMixin):
-    """
-    Contract tests for AbstractEventBus interface.
+    """Contract tests for AbstractEventBus interface.
 
     These tests verify that any implementation of AbstractEventBus
-    follows the expected behavioral contracts.
+    follows the expected behavioral contracts and interface specifications.
     """
 
     @pytest.fixture
     async def event_bus(self) -> MockEventBus:
-        """Create a mock event bus instance for testing."""
+        """Provides a mock event bus instance for testing.
+
+        Returns:
+            MockEventBus: An instance of the mock event bus.
+        """
         return MockEventBus()
 
     @pytest.fixture
     def sample_event(self) -> MockEvent:
-        """Create a sample event for testing."""
+        """Provides a sample event for testing.
+
+        Returns:
+            MockEvent: A sample `MockEvent` of type `TRADE` with symbol "BTCUSDT".
+        """
         return MockEvent(EventType.TRADE, "BTCUSDT", {"price": 50000})
 
     def test_required_methods_defined(self):
-        """
-        Test that all required abstract methods are defined in the interface.
+        """Test that all required abstract methods are defined in the interface.
 
-        Verifies that AbstractEventBus declares all necessary methods
+        Description of what the test covers.
+        Verifies that `AbstractEventBus` declares all necessary methods
         as abstract and that they have the correct signatures.
 
         Expected Result:
-            - All required methods are present as abstract methods
-            - Method signatures match the expected interface
+        - All required methods are present as abstract methods.
+        - Method signatures match the expected interface.
         """
         abstract_methods = self.get_abstract_methods(AbstractEventBus)
 
@@ -237,15 +338,15 @@ class TestAbstractEventBusContract(BaseContractTest, AsyncContractTestMixin):
         )
 
     def test_method_signatures(self):
-        """
-        Test that all abstract methods have correct signatures.
+        """Test that all abstract methods have correct signatures.
 
+        Description of what the test covers.
         Verifies parameter types, return types, and async/sync designation
         for all methods in the interface.
 
         Expected Result:
-            - All methods have correct parameter and return type annotations
-            - Async methods are properly marked as async
+        - All methods have correct parameter and return type annotations.
+        - Async methods are properly marked as async.
         """
         # Test key method signatures
         publish_sig = self.get_method_signature(AbstractEventBus, "publish")
@@ -269,16 +370,36 @@ class TestAbstractEventBusContract(BaseContractTest, AsyncContractTestMixin):
         assert not self.is_async_method(AbstractEventBus, "unsubscribe")
         assert not self.is_async_method(AbstractEventBus, "unsubscribe_all")
 
-    def test_event_handler_type_definitions(self):
-        """
-        Test that event handler types are properly defined.
+    def test_inheritance_chain(self):
+        """Test that AbstractEventBus correctly inherits from abc.ABC.
 
-        Verifies that EventHandler and AsyncEventHandler types
+        Description of what the test covers.
+        Verifies that the abstract event bus follows proper inheritance patterns
+        for abstract base classes.
+
+        Expected Result:
+        - `AbstractEventBus` should inherit from `abc.ABC`.
+        - Should be properly marked as abstract class.
+        """
+        import abc
+
+        # Test inheritance from ABC
+        assert issubclass(AbstractEventBus, abc.ABC)
+
+        # Test that the class itself is abstract (cannot be instantiated)
+        with pytest.raises(TypeError):
+            AbstractEventBus()  # Should raise TypeError due to abstract methods
+
+    def test_event_handler_type_definitions(self):
+        """Test that event handler types are properly defined.
+
+        Description of what the test covers.
+        Verifies that `EventHandler` and `AsyncEventHandler` types
         are available and correctly typed.
 
         Expected Result:
-            - Handler types are available for import
-            - Types represent callable interfaces
+        - Handler types are available for import.
+        - Types represent callable interfaces.
         """
         # Test that handler types are available
         assert EventHandler is not None
@@ -287,18 +408,17 @@ class TestAbstractEventBusContract(BaseContractTest, AsyncContractTestMixin):
         # These should be type aliases or protocols for callable handlers
         # The exact implementation depends on the typing system used
 
-    @pytest.mark.asyncio
     async def test_mock_implementation_completeness(self, event_bus: MockEventBus):
-        """
-        Test that the mock implementation provides complete interface coverage.
+        """Test that the mock implementation provides complete interface coverage.
 
+        Description of what the test covers.
         Creates a complete mock implementation and verifies that all methods
         work correctly and follow the expected behavioral contracts.
 
         Expected Result:
-            - All abstract methods are implemented
-            - Methods return expected types
-            - State transitions work correctly
+        - All abstract methods are implemented.
+        - Methods return expected types.
+        - State transitions work correctly.
         """
         # Test that all abstract methods are implemented
         abstract_methods = self.get_abstract_methods(AbstractEventBus)
@@ -322,26 +442,26 @@ class TestAbstractEventBusContract(BaseContractTest, AsyncContractTestMixin):
 
     @pytest.mark.asyncio
     async def test_basic_publish_subscribe_flow(self, event_bus: MockEventBus, sample_event: MockEvent):
-        """
-        Test basic publish-subscribe functionality.
+        """Test basic publish-subscribe functionality.
 
+        Description of what the test covers.
         Tests the fundamental event publishing and subscription mechanism
         to ensure events are properly delivered to subscribers.
 
         Preconditions:
-            - Event bus is initialized and not closed
+        - Event bus is initialized and not closed.
 
         Steps:
-            - Subscribe to an event type
-            - Publish an event of that type
-            - Verify the handler is called
-            - Unsubscribe
-            - Verify no more events are received
+        - Subscribe to an event type.
+        - Publish an event of that type.
+        - Verify the handler is called.
+        - Unsubscribe.
+        - Verify no more events are received.
 
         Expected Result:
-            - Events are delivered to subscribers
-            - Handlers are called with correct event data
-            - Subscription management works correctly
+        - Events are delivered to subscribers.
+        - Handlers are called with correct event data.
+        - Subscription management works correctly.
         """
         received_events = []
 
@@ -379,16 +499,16 @@ class TestAbstractEventBusContract(BaseContractTest, AsyncContractTestMixin):
 
     @pytest.mark.asyncio
     async def test_async_event_handler_support(self, event_bus: MockEventBus):
-        """
-        Test support for async event handlers.
+        """Test support for async event handlers.
 
-        Verifies that both sync and async event handlers can be registered
+        Description of what the test covers.
+        Verifies that both synchronous and asynchronous event handlers can be registered
         and that they are properly called when events are published.
 
         Expected Result:
-            - Async handlers are properly awaited
-            - Both sync and async handlers work correctly
-            - Mixed handler types can coexist
+        - Async handlers are properly awaited.
+        - Both sync and async handlers work correctly.
+        - Mixed handler types can coexist.
         """
         sync_events = []
         async_events = []
@@ -425,16 +545,16 @@ class TestAbstractEventBusContract(BaseContractTest, AsyncContractTestMixin):
 
     @pytest.mark.asyncio
     async def test_symbol_filtering_mechanism(self, event_bus: MockEventBus):
-        """
-        Test symbol-based event filtering.
+        """Test symbol-based event filtering.
 
+        Description of what the test covers.
         Verifies that events can be filtered by symbol and that only
         matching events are delivered to filtered subscribers.
 
         Expected Result:
-            - Symbol filters work correctly
-            - Only matching events are delivered
-            - Unfiltered subscriptions receive all events
+        - Symbol filters work correctly.
+        - Only matching events are delivered.
+        - Unfiltered subscriptions receive all events.
         """
         btc_events = []
         eth_events = []
@@ -482,16 +602,16 @@ class TestAbstractEventBusContract(BaseContractTest, AsyncContractTestMixin):
 
     @pytest.mark.asyncio
     async def test_subscription_management_interface(self, event_bus: MockEventBus):
-        """
-        Test subscription management functionality.
+        """Test subscription management functionality.
 
+        Description of what the test covers.
         Verifies that subscriptions can be managed through various methods
         including bulk unsubscribe operations.
 
         Expected Result:
-            - Individual unsubscribe works correctly
-            - Bulk unsubscribe operations work
-            - Subscription counts are accurate
+        - Individual unsubscribe works correctly.
+        - Bulk unsubscribe operations work.
+        - Subscription counts are accurate.
         """
         # Create multiple subscriptions
         handlers = [lambda e: None for _ in range(5)]
@@ -531,16 +651,16 @@ class TestAbstractEventBusContract(BaseContractTest, AsyncContractTestMixin):
 
     @pytest.mark.asyncio
     async def test_wait_for_event_interface(self, event_bus: MockEventBus):
-        """
-        Test event waiting functionality with timeout.
+        """Test event waiting functionality with timeout.
 
-        Verifies that wait_for can be used to wait for specific events
+        Description of what the test covers.
+        Verifies that `wait_for` can be used to wait for specific events
         with optional timeout and symbol filtering.
 
         Expected Result:
-            - Can wait for and receive specific events
-            - Timeout functionality works correctly
-            - Symbol filtering works in wait_for
+        - Can wait for and receive specific events.
+        - Timeout functionality works correctly.
+        - Symbol filtering works in `wait_for`.
         """
 
         # Test successful event waiting
@@ -584,16 +704,16 @@ class TestAbstractEventBusContract(BaseContractTest, AsyncContractTestMixin):
 
     @pytest.mark.asyncio
     async def test_event_type_filtering(self, event_bus: MockEventBus):
-        """
-        Test that event type filtering works correctly.
+        """Test that event type filtering works correctly.
 
+        Description of what the test covers.
         Verifies that subscribers only receive events of the types
         they subscribed to.
 
         Expected Result:
-            - Event type filtering is accurate
-            - Different event types are handled independently
-            - No cross-contamination between event types
+        - Event type filtering is accurate.
+        - Different event types are handled independently.
+        - No cross-contamination between event types.
         """
         trade_events = []
         kline_events = []
@@ -632,16 +752,16 @@ class TestAbstractEventBusContract(BaseContractTest, AsyncContractTestMixin):
 
     @pytest.mark.asyncio
     async def test_closed_state_handling(self, event_bus: MockEventBus):
-        """
-        Test that operations fail appropriately when event bus is closed.
+        """Test that operations fail appropriately when event bus is closed.
 
+        Description of what the test covers.
         Verifies that attempting to use a closed event bus raises
         appropriate exceptions.
 
         Expected Result:
-            - Operations raise RuntimeError when bus is closed
-            - is_closed property works correctly
-            - Error messages are clear and helpful
+        - Operations raise `RuntimeError` when bus is closed.
+        - `is_closed` property works correctly.
+        - Error messages are clear and helpful.
         """
         # Test initial state
         assert not event_bus.is_closed
@@ -664,16 +784,16 @@ class TestAbstractEventBusContract(BaseContractTest, AsyncContractTestMixin):
 
     @pytest.mark.asyncio
     async def test_handler_error_resilience(self, event_bus: MockEventBus):
-        """
-        Test that handler errors don't break the event bus.
+        """Test that handler errors don't break the event bus.
 
+        Description of what the test covers.
         Verifies that if one handler throws an exception, other handlers
         still get called and the event bus continues to work.
 
         Expected Result:
-            - Handler errors are contained
-            - Other handlers still receive events
-            - Event bus remains operational
+        - Handler errors are contained.
+        - Other handlers still receive events.
+        - Event bus remains operational.
         """
         successful_events = []
 
@@ -706,16 +826,16 @@ class TestAbstractEventBusContract(BaseContractTest, AsyncContractTestMixin):
 
     @pytest.mark.asyncio
     async def test_multiple_subscribers_same_event(self, event_bus: MockEventBus):
-        """
-        Test that multiple subscribers can listen to the same event type.
+        """Test that multiple subscribers can listen to the same event type.
 
+        Description of what the test covers.
         Verifies that events are delivered to all subscribers of the
         same event type.
 
         Expected Result:
-            - All subscribers receive the event
-            - Event delivery is reliable
-            - Order of handler execution is not guaranteed but all are called
+        - All subscribers receive the event.
+        - Event delivery is reliable.
+        - Order of handler execution is not guaranteed but all are called.
         """
         received_counts = {"handler1": 0, "handler2": 0, "handler3": 0}
 

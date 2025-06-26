@@ -9,17 +9,16 @@ from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
 import pytest
-from asset_core.models.kline import Kline, KlineInterval
-from asset_core.storage.kline_repo import AbstractKlineRepository, QueryOptions
-from asset_core.types.common import Symbol
 
-from .base_contract_test import AsyncContractTestMixin, BaseContractTest, \
-    MockImplementationBase
+from src.asset_core.asset_core.models.kline import Kline, KlineInterval
+from src.asset_core.asset_core.storage.kline_repo import AbstractKlineRepository, QueryOptions
+from src.asset_core.asset_core.types.common import Symbol
+
+from .base_contract_test import AsyncContractTestMixin, BaseContractTest, MockImplementationBase
 
 
 class MockKlineRepository(AbstractKlineRepository, MockImplementationBase):
-    """
-    Mock implementation of AbstractKlineRepository for contract testing.
+    """Mock implementation of AbstractKlineRepository for contract testing.
 
     Provides a complete implementation that follows the interface contract
     while using in-memory storage for testing purposes.
@@ -35,7 +34,17 @@ class MockKlineRepository(AbstractKlineRepository, MockImplementationBase):
         return self._name
 
     async def save(self, kline: Kline) -> None:
-        """Save single kline to mock storage."""
+        """Saves a single kline to the mock storage.
+
+        If a kline with the same symbol, interval, and open_time already exists,
+        it will be replaced (simulating a unique constraint).
+
+        Args:
+            kline (Kline): The Kline object to save.
+
+        Raises:
+            RuntimeError: If the repository is closed.
+        """
         self._check_not_closed()
         # Simulate unique constraint - replace existing kline with same key
         existing_index = None
@@ -54,7 +63,17 @@ class MockKlineRepository(AbstractKlineRepository, MockImplementationBase):
             self._klines.append(kline)
 
     async def save_batch(self, klines: list[Kline]) -> int:
-        """Save multiple klines to mock storage."""
+        """Saves multiple klines to the mock storage in a batch operation.
+
+        Args:
+            klines (list[Kline]): A list of Kline objects to save.
+
+        Returns:
+            int: The number of klines successfully saved.
+
+        Raises:
+            RuntimeError: If the repository is closed.
+        """
         self._check_not_closed()
         count = 0
         for kline in klines:
@@ -70,7 +89,21 @@ class MockKlineRepository(AbstractKlineRepository, MockImplementationBase):
         end_time: datetime | None = None,
         options: QueryOptions | None = None,
     ) -> list[Kline]:
-        """Query klines from mock storage."""
+        """Queries klines from the mock storage based on specified criteria.
+
+        Args:
+            symbol (Symbol): The trading symbol.
+            interval (KlineInterval): The Kline interval.
+            start_time (datetime | None): Optional start time for filtering (inclusive).
+            end_time (datetime | None): Optional end time for filtering (exclusive).
+            options (QueryOptions | None): Optional query parameters for ordering and pagination.
+
+        Returns:
+            list[Kline]: A list of matching Kline objects.
+
+        Raises:
+            RuntimeError: If the repository is closed.
+        """
         self._check_not_closed()
 
         results = [k for k in self._klines if k.symbol == symbol and k.interval == interval]
@@ -101,19 +134,42 @@ class MockKlineRepository(AbstractKlineRepository, MockImplementationBase):
         start_time: datetime | None = None,
         end_time: datetime | None = None,
         batch_size: int = 1000,
-    ) -> AsyncIterator[list[Kline]]:
-        """Stream klines in batches."""
+    ) -> AsyncIterator[Kline]:
+        """Streams klines individually from the mock storage.
+
+        Args:
+            symbol (Symbol): The trading symbol.
+            interval (KlineInterval): The Kline interval.
+            start_time (datetime | None): Optional start time for filtering (inclusive).
+            end_time (datetime | None): Optional end time for filtering (exclusive).
+            batch_size (int): The number of klines to fetch in each batch (ignored in this mock).
+
+        Yields:
+            Kline: A Kline object.
+
+        Raises:
+            RuntimeError: If the repository is closed.
+        """
         self._check_not_closed()
 
         all_klines = await self.query(symbol, interval, start_time, end_time)
 
-        for i in range(0, len(all_klines), batch_size):
-            batch = all_klines[i : i + batch_size]
-            if batch:
-                yield batch
+        for kline in all_klines:
+            yield kline
 
     async def get_latest(self, symbol: Symbol, interval: KlineInterval) -> Kline | None:
-        """Get most recent kline."""
+        """Retrieves the most recent kline for a given symbol and interval.
+
+        Args:
+            symbol (Symbol): The trading symbol.
+            interval (KlineInterval): The Kline interval.
+
+        Returns:
+            Kline | None: The latest Kline object, or None if no matching klines are found.
+
+        Raises:
+            RuntimeError: If the repository is closed.
+        """
         self._check_not_closed()
 
         matching = [k for k in self._klines if k.symbol == symbol and k.interval == interval]
@@ -124,7 +180,18 @@ class MockKlineRepository(AbstractKlineRepository, MockImplementationBase):
         return max(matching, key=lambda k: k.open_time)
 
     async def get_oldest(self, symbol: Symbol, interval: KlineInterval) -> Kline | None:
-        """Get oldest kline."""
+        """Retrieves the oldest kline for a given symbol and interval.
+
+        Args:
+            symbol (Symbol): The trading symbol.
+            interval (KlineInterval): The Kline interval.
+
+        Returns:
+            Kline | None: The oldest Kline object, or None if no matching klines are found.
+
+        Raises:
+            RuntimeError: If the repository is closed.
+        """
         self._check_not_closed()
 
         matching = [k for k in self._klines if k.symbol == symbol and k.interval == interval]
@@ -141,14 +208,40 @@ class MockKlineRepository(AbstractKlineRepository, MockImplementationBase):
         start_time: datetime | None = None,
         end_time: datetime | None = None,
     ) -> int:
-        """Count klines matching criteria."""
+        """Counts klines matching criteria in the mock storage.
+
+        Args:
+            symbol (Symbol): The trading symbol.
+            interval (KlineInterval): The Kline interval.
+            start_time (datetime | None): Optional start time for filtering (inclusive).
+            end_time (datetime | None): Optional end time for filtering (exclusive).
+
+        Returns:
+            int: The number of matching klines.
+
+        Raises:
+            RuntimeError: If the repository is closed.
+        """
         self._check_not_closed()
 
         results = await self.query(symbol, interval, start_time, end_time)
         return len(results)
 
     async def delete(self, symbol: Symbol, interval: KlineInterval, start_time: datetime, end_time: datetime) -> int:
-        """Delete klines in time range."""
+        """Deletes klines in a specified time range from the mock storage.
+
+        Args:
+            symbol (Symbol): The trading symbol.
+            interval (KlineInterval): The Kline interval.
+            start_time (datetime): The start time for deletion (inclusive).
+            end_time (datetime): The end time for deletion (exclusive).
+
+        Returns:
+            int: The number of klines deleted.
+
+        Raises:
+            RuntimeError: If the repository is closed.
+        """
         self._check_not_closed()
 
         to_delete = [
@@ -165,7 +258,23 @@ class MockKlineRepository(AbstractKlineRepository, MockImplementationBase):
     async def get_gaps(
         self, symbol: Symbol, interval: KlineInterval, start_time: datetime, end_time: datetime
     ) -> list[tuple[datetime, datetime]]:
-        """Find missing data gaps."""
+        """Finds missing data gaps in the mock storage.
+
+        Note: This is a simplified gap detection for testing purposes.
+
+        Args:
+            symbol (Symbol): The trading symbol.
+            interval (KlineInterval): The Kline interval.
+            start_time (datetime): The start time for gap detection (inclusive).
+            end_time (datetime): The end time for gap detection (exclusive).
+
+        Returns:
+            list[tuple[datetime, datetime]]: A list of tuples, where each tuple represents
+                                             a detected gap (start_time, end_time).
+
+        Raises:
+            RuntimeError: If the repository is closed.
+        """
         self._check_not_closed()
 
         # Simple gap detection - find intervals with no data
@@ -187,7 +296,19 @@ class MockKlineRepository(AbstractKlineRepository, MockImplementationBase):
         return gaps
 
     async def get_statistics(self, symbol: Symbol, interval: KlineInterval) -> dict:
-        """Get storage statistics."""
+        """Retrieves storage statistics for a given symbol and interval.
+
+        Args:
+            symbol (Symbol): The trading symbol.
+            interval (KlineInterval): The Kline interval.
+
+        Returns:
+            dict: A dictionary containing statistics such as count, earliest,
+                  latest, and estimated size in bytes.
+
+        Raises:
+            RuntimeError: If the repository is closed.
+        """
         self._check_not_closed()
 
         matching = [k for k in self._klines if k.symbol == symbol and k.interval == interval]
@@ -203,35 +324,60 @@ class MockKlineRepository(AbstractKlineRepository, MockImplementationBase):
         }
 
     async def close(self) -> None:
-        """Close repository and clean up resources."""
+        """Closes the repository and cleans up resources.
+
+        Sets the internal `_is_closed` flag to True.
+        """
         self._is_closed = True
 
     async def __aenter__(self):
-        """Async context manager entry."""
+        """Asynchronous context manager entry point.
+
+        Returns:
+            MockKlineRepository: The instance of the repository itself.
+        """
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Async context manager exit."""
+        """Asynchronous context manager exit point.
+
+        Ensures that the repository is closed when exiting the `async with` block.
+
+        Args:
+            exc_type (Any): The type of the exception raised, if any.
+            exc_val (Any): The exception instance raised, if any.
+            exc_tb (Any): The traceback object, if an exception was raised.
+
+        Returns:
+            bool: False to propagate any exceptions that occurred within the block.
+        """
         await self.close()
         return False
 
 
 class TestAbstractKlineRepositoryContract(BaseContractTest, AsyncContractTestMixin):
-    """
-    Contract tests for AbstractKlineRepository interface.
+    """Contract tests for AbstractKlineRepository interface.
 
     These tests verify that any implementation of AbstractKlineRepository
-    follows the expected behavioral contracts.
+    follows the expected behavioral contracts and interface specifications.
     """
 
     @pytest.fixture
     async def repo(self) -> MockKlineRepository:
-        """Create a mock repository instance for testing."""
+        """Provides a mock Kline repository instance for testing.
+
+        Returns:
+            MockKlineRepository: An instance of the mock Kline repository.
+        """
         return MockKlineRepository()
 
     @pytest.fixture
     def sample_kline(self) -> Kline:
-        """Create a sample kline for testing."""
+        """Provides a sample Kline object for testing.
+
+        Returns:
+            Kline: A sample Kline object with predefined values.
+        """
         return Kline(
             symbol="BTCUSDT",
             interval=KlineInterval.HOUR_1,
@@ -247,15 +393,15 @@ class TestAbstractKlineRepositoryContract(BaseContractTest, AsyncContractTestMix
         )
 
     def test_required_methods_defined(self):
-        """
-        Test that all required abstract methods are defined in the interface.
+        """Test that all required abstract methods are defined in the interface.
 
-        Verifies that AbstractKlineRepository declares all necessary methods
+        Description of what the test covers.
+        Verifies that `AbstractKlineRepository` declares all necessary methods
         as abstract and that they have the correct signatures.
 
         Expected Result:
-            - All required methods are present as abstract methods
-            - Method signatures match the expected interface
+        - All required methods are present as abstract methods.
+        - Method signatures match the expected interface.
         """
         abstract_methods = self.get_abstract_methods(AbstractKlineRepository)
 
@@ -279,15 +425,15 @@ class TestAbstractKlineRepositoryContract(BaseContractTest, AsyncContractTestMix
         )
 
     def test_method_signatures(self):
-        """
-        Test that all abstract methods have correct signatures.
+        """Test that all abstract methods have correct signatures.
 
+        Description of what the test covers.
         Verifies parameter types, return types, and async/sync designation
         for all methods in the interface.
 
         Expected Result:
-            - All methods have correct parameter and return type annotations
-            - Async methods are properly marked as async
+        - All methods have correct parameter and return type annotations.
+        - Async methods are properly marked as async.
         """
         # Test key method signatures
         save_sig = self.get_method_signature(AbstractKlineRepository, "save")
@@ -305,30 +451,30 @@ class TestAbstractKlineRepositoryContract(BaseContractTest, AsyncContractTestMix
         assert self.is_async_method(AbstractKlineRepository, "close")
 
     def test_async_context_manager_protocol(self):
-        """
-        Test that the repository implements async context manager protocol.
+        """Test that the repository implements async context manager protocol.
 
-        Verifies that __aenter__ and __aexit__ methods are present and
+        Description of what the test covers.
+        Verifies that `__aenter__` and `__aexit__` methods are present and
         that they work correctly for resource management.
 
         Expected Result:
-            - Repository has __aenter__ and __aexit__ methods
-            - Can be used in async with statements
+        - Repository has `__aenter__` and `__aexit__` methods.
+        - Can be used in `async with` statements.
         """
         assert self.has_async_context_manager(AbstractKlineRepository)
 
     @pytest.mark.asyncio
     async def test_mock_implementation_completeness(self, repo: MockKlineRepository):
-        """
-        Test that the mock implementation provides complete interface coverage.
+        """Test that the mock implementation provides complete interface coverage.
 
+        Description of what the test covers.
         Creates a complete mock implementation and verifies that all methods
         work correctly and follow the expected behavioral contracts.
 
         Expected Result:
-            - All abstract methods are implemented
-            - Methods return expected types
-            - State transitions work correctly
+        - All abstract methods are implemented.
+        - Methods return expected types.
+        - State transitions work correctly.
         """
         # Test that all abstract methods are implemented
         abstract_methods = self.get_abstract_methods(AbstractKlineRepository)
@@ -339,26 +485,26 @@ class TestAbstractKlineRepositoryContract(BaseContractTest, AsyncContractTestMix
 
     @pytest.mark.asyncio
     async def test_basic_crud_operations(self, repo: MockKlineRepository, sample_kline: Kline):
-        """
-        Test basic CRUD operations work correctly.
+        """Test basic CRUD operations work correctly.
 
+        Description of what the test covers.
         Tests the fundamental create, read, update, delete operations
         to ensure the repository behaves as expected.
 
         Preconditions:
-            - Repository is initialized and not closed
+        - Repository is initialized and not closed.
 
         Steps:
-            - Save a kline
-            - Query it back
-            - Update it
-            - Delete it
-            - Verify it's gone
+        - Save a kline.
+        - Query it back.
+        - Update it.
+        - Delete it.
+        - Verify it's gone.
 
         Expected Result:
-            - All operations complete successfully
-            - Data consistency is maintained
-            - Return values match expectations
+        - All operations complete successfully.
+        - Data consistency is maintained.
+        - Return values match expectations.
         """
         # Test save operation
         await repo.save(sample_kline)
@@ -391,17 +537,22 @@ class TestAbstractKlineRepositoryContract(BaseContractTest, AsyncContractTestMix
 
     @pytest.mark.asyncio
     async def test_batch_operations(self, repo: MockKlineRepository):
-        """
-        Test batch operations for performance and consistency.
+        """Test batch operations for performance and consistency.
 
+        Description of what the test covers.
         Tests that batch operations work correctly and return appropriate
-        counts and maintain data consistency.
+        counts and maintain data consistency including error handling.
 
         Expected Result:
-            - Batch save returns correct count
-            - All items are saved consistently
-            - Batch operations are atomic where possible
+        - Batch save returns correct count.
+        - All items are saved consistently.
+        - Batch operations handle duplicates correctly.
+        - Empty batch operations work correctly.
         """
+        # Test empty batch operation
+        empty_result = await repo.save_batch([])
+        assert empty_result == 0
+
         # Create multiple klines
         klines = []
         for i in range(5):
@@ -428,18 +579,50 @@ class TestAbstractKlineRepositoryContract(BaseContractTest, AsyncContractTestMix
         total_count = await repo.count("ETHUSDT", KlineInterval.MINUTE_1)
         assert total_count == 5
 
+        # Test batch operation with duplicates (should replace/update)
+        duplicate_kline = Kline(
+            symbol="ETHUSDT",
+            interval=KlineInterval.MINUTE_1,
+            open_time=datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),  # Same as first kline
+            close_time=datetime(2024, 1, 1, 12, 0, 59, tzinfo=UTC),
+            open_price=4000.0,  # Different price
+            high_price=4100.0,
+            low_price=3900.0,
+            close_price=4050.0,
+            volume=100.0,  # Different volume
+            quote_volume=405000.0,
+            trades_count=1000,
+        )
+
+        duplicate_saved = await repo.save_batch([duplicate_kline])
+        assert duplicate_saved == 1
+
+        # Should still have 5 total (replacement, not addition)
+        total_count_after_duplicate = await repo.count("ETHUSDT", KlineInterval.MINUTE_1)
+        assert total_count_after_duplicate == 5
+
+        # Verify the duplicate was actually updated
+        updated_klines = await repo.query(
+            "ETHUSDT",
+            KlineInterval.MINUTE_1,
+            datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
+            datetime(2024, 1, 1, 12, 1, 0, tzinfo=UTC),
+        )
+        assert len(updated_klines) == 1
+        assert updated_klines[0].open_price == 4000.0  # Should have new price
+
     @pytest.mark.asyncio
     async def test_streaming_interface(self, repo: MockKlineRepository):
-        """
-        Test streaming interface for large datasets.
+        """Test streaming interface for large datasets.
 
-        Verifies that the stream method returns an async iterator
-        and properly batches results.
+        Description of what the test covers.
+        Verifies that the `stream` method returns an async iterator
+        and properly yields individual klines.
 
         Expected Result:
-            - stream() returns an async iterator
-            - Batches are properly sized
-            - All data is returned across batches
+        - `stream()` returns an async iterator.
+        - Individual klines are yielded correctly.
+        - All data is returned through the stream.
         """
         # Add some test data
         klines = []
@@ -461,29 +644,83 @@ class TestAbstractKlineRepositoryContract(BaseContractTest, AsyncContractTestMix
 
         await repo.save_batch(klines)
 
-        # Test streaming with small batch size
-        batches = []
-        async for batch in repo.stream("ADAUSDT", KlineInterval.MINUTE_5, batch_size=3):
-            batches.append(batch)
-            assert len(batch) <= 3  # Batch size should be respected
-            assert all(isinstance(k, Kline) for k in batch)
+        # Test streaming
+        streamed_klines = []
+        async for kline in repo.stream("ADAUSDT", KlineInterval.MINUTE_5, batch_size=3):
+            streamed_klines.append(kline)
+            assert isinstance(kline, Kline)
 
         # All data should be returned
-        total_streamed = sum(len(batch) for batch in batches)
-        assert total_streamed == 10
+        assert len(streamed_klines) == 10
+
+    @pytest.mark.asyncio
+    async def test_async_iterator_protocol(self, repo: MockKlineRepository):
+        """Test that stream method properly implements async iterator protocol.
+
+        Description of what the test covers.
+        Verifies that the stream method returns an object that implements
+        `__aiter__` and `__anext__` methods correctly.
+
+        Expected Result:
+        - `stream()` returns an async iterator.
+        - `__aiter__` and `__anext__` methods work correctly.
+        - `StopAsyncIteration` is raised when done.
+        - Can be used in `async for` loops.
+        """
+        # Add some test data
+        klines = []
+        for i in range(3):
+            kline = Kline(
+                symbol="ITERUSDT",
+                interval=KlineInterval.MINUTE_1,
+                open_time=datetime(2024, 1, 1, 12, i, 0, tzinfo=UTC),
+                close_time=datetime(2024, 1, 1, 12, i, 59, tzinfo=UTC),
+                open_price=1000.0,
+                high_price=1100.0,
+                low_price=900.0,
+                close_price=1050.0,
+                volume=10.0,
+                quote_volume=10500.0,
+                trades_count=10,
+            )
+            klines.append(kline)
+
+        await repo.save_batch(klines)
+
+        # Test async iterator protocol directly
+        stream = repo.stream("ITERUSDT", KlineInterval.MINUTE_1)
+
+        # Test __aiter__ method
+        iterator = stream.__aiter__()
+        assert iterator is stream  # Should return self
+
+        # Test __anext__ method manually
+        first_kline = await iterator.__anext__()
+        assert isinstance(first_kline, Kline)
+
+        second_kline = await iterator.__anext__()
+        assert isinstance(second_kline, Kline)
+
+        third_kline = await iterator.__anext__()
+        assert isinstance(third_kline, Kline)
+
+        # Fourth call should raise StopAsyncIteration
+        with pytest.raises(StopAsyncIteration):
+            await iterator.__anext__()
 
     @pytest.mark.asyncio
     async def test_query_options_interface(self, repo: MockKlineRepository):
-        """
-        Test QueryOptions functionality for pagination and ordering.
+        """Test QueryOptions functionality for pagination and ordering.
 
-        Verifies that QueryOptions properly controls result ordering,
+        Description of what the test covers.
+        Verifies that `QueryOptions` properly controls result ordering,
         pagination, and filtering.
 
         Expected Result:
-            - Ordering works correctly (asc/desc)
-            - Pagination limits and offsets work
-            - Results are consistent
+        - Ordering works correctly (asc/desc).
+        - Pagination limits and offsets work.
+        - `QueryOptions` instance validation works correctly.
+        - Results are consistent.
         """
         # Add test data with different timestamps
         klines = []
@@ -505,7 +742,15 @@ class TestAbstractKlineRepositoryContract(BaseContractTest, AsyncContractTestMix
 
         await repo.save_batch(klines)
 
-        # Test ordering
+        # Test QueryOptions instance creation and validation
+        options = QueryOptions(limit=3, offset=1, order_by="open_time", order_desc=False, include_metadata=True)
+        assert options.limit == 3
+        assert options.offset == 1
+        assert options.order_by == "open_time"
+        assert options.order_desc is False
+        assert options.include_metadata is True
+
+        # Test ordering ascending
         options_asc = QueryOptions(order_by="open_time", order_desc=False)
         results_asc = await repo.query("DOTUSDT", KlineInterval.HOUR_1, options=options_asc)
         assert len(results_asc) == 5
@@ -514,23 +759,40 @@ class TestAbstractKlineRepositoryContract(BaseContractTest, AsyncContractTestMix
         for i in range(len(results_asc) - 1):
             assert results_asc[i].open_time <= results_asc[i + 1].open_time
 
+        # Test ordering descending
+        options_desc = QueryOptions(order_by="open_time", order_desc=True)
+        results_desc = await repo.query("DOTUSDT", KlineInterval.HOUR_1, options=options_desc)
+        assert len(results_desc) == 5
+
+        # Should be ordered by open_time descending
+        for i in range(len(results_desc) - 1):
+            assert results_desc[i].open_time >= results_desc[i + 1].open_time
+
         # Test pagination
         options_paginated = QueryOptions(limit=2, offset=1)
         results_paginated = await repo.query("DOTUSDT", KlineInterval.HOUR_1, options=options_paginated)
         assert len(results_paginated) == 2
 
+        # Test combined ordering and pagination
+        options_combined = QueryOptions(limit=3, offset=1, order_by="open_time", order_desc=True)
+        results_combined = await repo.query("DOTUSDT", KlineInterval.HOUR_1, options=options_combined)
+        assert len(results_combined) == 3
+        # Should still be ordered
+        for i in range(len(results_combined) - 1):
+            assert results_combined[i].open_time >= results_combined[i + 1].open_time
+
     @pytest.mark.asyncio
     async def test_gap_detection_interface(self, repo: MockKlineRepository):
-        """
-        Test gap detection functionality.
+        """Test gap detection functionality.
 
+        Description of what the test covers.
         Verifies that the repository can detect missing data gaps
         in time series data.
 
         Expected Result:
-            - get_gaps() returns list of (start_time, end_time) tuples
-            - Gaps are correctly identified
-            - Method handles edge cases
+        - `get_gaps()` returns list of (start_time, end_time) tuples.
+        - Gaps are correctly identified.
+        - Method handles edge cases.
         """
         # Add some klines with gaps
         klines = [
@@ -579,16 +841,16 @@ class TestAbstractKlineRepositoryContract(BaseContractTest, AsyncContractTestMix
 
     @pytest.mark.asyncio
     async def test_statistics_interface(self, repo: MockKlineRepository):
-        """
-        Test statistics gathering functionality.
+        """Test statistics gathering functionality.
 
-        Verifies that get_statistics returns useful metadata about
+        Description of what the test covers.
+        Verifies that `get_statistics` returns useful metadata about
         stored data.
 
         Expected Result:
-            - Returns dict with count, earliest, latest, size_bytes
-            - Values are accurate for stored data
-            - Handles empty datasets correctly
+        - Returns dict with count, earliest, latest, size_bytes.
+        - Values are accurate for stored data.
+        - Handles empty datasets correctly.
         """
         # Test with empty dataset
         stats_empty = await repo.get_statistics("EMPTY", KlineInterval.MINUTE_1)
@@ -622,30 +884,30 @@ class TestAbstractKlineRepositoryContract(BaseContractTest, AsyncContractTestMix
 
     @pytest.mark.asyncio
     async def test_async_context_manager_behavior(self, repo: MockKlineRepository):
-        """
-        Test async context manager resource management.
+        """Test async context manager resource management.
 
+        Description of what the test covers.
         Ensures that the repository properly implements async context
         manager protocol and handles resource cleanup.
 
         Expected Result:
-            - Can be used in async with statements
-            - Resources are properly cleaned up
-            - Repository is properly closed after context exit
+        - Can be used in `async with` statements.
+        - Resources are properly cleaned up.
+        - Repository is properly closed after context exit.
         """
         await self.assert_async_context_manager_protocol(repo)
 
     @pytest.mark.asyncio
     async def test_closed_state_handling(self, repo: MockKlineRepository):
-        """
-        Test that operations fail appropriately when repository is closed.
+        """Test that operations fail appropriately when repository is closed.
 
+        Description of what the test covers.
         Verifies that attempting to use a closed repository raises
         appropriate exceptions.
 
         Expected Result:
-            - Operations raise RuntimeError when repository is closed
-            - Error messages are clear and helpful
+        - Operations raise `RuntimeError` when repository is closed.
+        - Error messages are clear and helpful.
         """
         # Close the repository
         await repo.close()

@@ -1,4 +1,11 @@
-"""Robust WebSocket client with auto-reconnection and heartbeat."""
+"""Robust WebSocket client with auto-reconnection and heartbeat.
+
+This module provides a `RobustWebSocketClient` class that extends the basic
+WebSocket client functionality with features like automatic reconnection,
+heartbeat (ping/pong) mechanisms, and comprehensive error handling.
+It is designed to maintain a stable and reliable connection for real-time
+data streaming.
+"""
 
 import asyncio
 import builtins
@@ -19,7 +26,13 @@ logger = get_logger(__name__)
 
 
 class RobustWebSocketClient:
-    """WebSocket client with automatic reconnection and heartbeat support, built on top of websockets.ClientConnection."""
+    """A robust WebSocket client with automatic reconnection, heartbeat, and comprehensive error handling.
+
+    This client is built upon `websockets.ClientConnection` and provides enhanced
+    reliability for real-time data streaming applications. It manages connection
+    lifecycle, including initial connection, automatic reconnections on disconnects,
+    and sending/receiving messages with proper error handling.
+    """
 
     def __init__(
         self,
@@ -35,19 +48,25 @@ class RobustWebSocketClient:
         ping_timeout: int = 10,
         headers: dict[str, str] | None = None,
     ) -> None:
-        """Initialize WebSocket client.
+        """Initializes a new RobustWebSocketClient instance.
 
         Args:
-            url: WebSocket URL
-            on_message: Callback for received messages
-            on_connect: Callback for connection established
-            on_disconnect: Callback for connection lost
-            on_error: Callback for errors
-            reconnect_interval: Base interval between reconnection attempts (seconds)
-            max_reconnect_attempts: Maximum number of reconnection attempts
-            ping_interval: Interval between ping messages (seconds)
-            ping_timeout: Timeout for ping responses (seconds)
-            headers: Optional headers to send with connection
+            url: The WebSocket URL to connect to.
+            on_message: An optional callback function to be called when a message is received.
+                        It takes the received message (string) as an argument.
+            on_connect: An optional callback function to be called when the WebSocket connection is successfully established.
+            on_disconnect: An optional callback function to be called when the WebSocket connection is closed.
+            on_error: An optional callback function to be called when an error occurs.
+                      It takes the exception object as an argument.
+            reconnect_interval: The base time in seconds to wait before attempting a reconnection.
+                                This interval increases exponentially with each failed attempt.
+            max_reconnect_attempts: The maximum number of reconnection attempts before giving up.
+                                    Set to -1 for unlimited attempts.
+            ping_interval: The interval in seconds at which ping frames are sent to keep the connection alive.
+                           Set to `None` to disable ping/pong.
+            ping_timeout: The maximum time in seconds to wait for a pong response after sending a ping.
+                          If no pong is received within this time, the connection is considered broken.
+            headers: An optional dictionary of HTTP headers to send during the WebSocket handshake.
         """
         self.url = url
         self.on_message = on_message
@@ -68,7 +87,16 @@ class RobustWebSocketClient:
         self._connect_event = asyncio.Event()
 
     async def connect(self) -> None:
-        """Connect to WebSocket server."""
+        """Establishes the WebSocket connection and starts the connection management loop.
+
+        This method initiates the connection process, including handling initial
+        connection attempts and setting up the background tasks for maintaining
+        the connection and receiving messages.
+
+        Raises:
+            TimeoutError: If the initial connection cannot be established within a timeout period.
+            ConnectionError: If there's a persistent issue preventing connection.
+        """
         with TraceContext() as trace_id:
             if self._running:
                 return
@@ -87,6 +115,13 @@ class RobustWebSocketClient:
                 raise TimeoutError("Failed to establish initial connection")
 
     async def _connection_loop(self) -> None:
+        """Manages the WebSocket connection lifecycle, including reconnection attempts.
+
+        This internal method runs in a separate task and continuously tries to
+        maintain an active WebSocket connection. It handles disconnections,
+        implements exponential backoff for reconnection attempts, and manages
+        the message receiving loop.
+        """
         while self._running:
             try:
                 await self._connect()
@@ -122,6 +157,15 @@ class RobustWebSocketClient:
                 self._running = False
 
     async def _connect(self) -> None:
+        """Performs a single attempt to establish a WebSocket connection.
+
+        This method is called by the `_connection_loop` to try and connect to
+        the WebSocket server. It handles the actual `websockets.connect` call
+        and invokes the `on_connect` callback upon success.
+
+        Raises:
+            ConnectionError: If the connection attempt fails.
+        """
         logger.info("Attempting WebSocket connection", url=self.url, headers=bool(self.headers))
 
         try:
@@ -150,20 +194,43 @@ class RobustWebSocketClient:
             raise ConnectionError(f"Failed to connect: {e}") from e
 
     async def _disconnect(self) -> None:
-        self._connect_event.clear()
+        """Closes the current WebSocket connection.
 
-        if self._ws:
-            try:
+        This internal method handles the graceful shutdown of the underlying
+        WebSocket connection and invokes the `on_disconnect` callback.
+        """
+        try:
+            if self._ws is not None:
+                logger.debug("Closing WebSocket connection")
                 await self._ws.close()
-            except Exception:
-                pass
-            finally:
-                self._ws = None
+                logger.debug("WebSocket connection closed")
+            else:
+                logger.debug("No active WebSocket connection to close")
+        except Exception as e:
+            logger.warning(f"Error closing WebSocket connection: {e}")
+        finally:
+            self._ws = None
+            self._connect_event.clear()
 
-        if self.on_disconnect:
-            self.on_disconnect()
+            # Always call the disconnect callback, even if there was no connection
+            if self.on_disconnect:
+                try:
+                    self.on_disconnect()
+                except Exception as e:
+                    logger.error(f"Error in disconnect callback: {e}")
+                    if self.on_error:
+                        self.on_error(e)
 
     async def _receive_loop(self) -> None:
+        """Continuously receives messages from the WebSocket connection.
+
+        This internal method runs in a separate task and processes incoming
+        messages, invoking the `on_message` callback for each received message.
+        It also handles connection closure and WebSocket-specific errors.
+
+        Raises:
+            WebSocketError: If a WebSocket-specific error occurs during message reception.
+        """
         if not self._ws:
             return
 
@@ -195,6 +262,16 @@ class RobustWebSocketClient:
             raise WebSocketError(f"Receive loop error: {e}") from e
 
     async def send(self, message: str | dict[str, Any]) -> None:
+        """Sends a message over the WebSocket connection.
+
+        The message can be a string or a dictionary (which will be JSON-serialized).
+
+        Args:
+            message: The message to send. Can be a string or a dictionary.
+
+        Raises:
+            WebSocketError: If the client is not connected or if sending the message fails.
+        """
         if not self.is_connected or self._ws is None:
             logger.warning("Attempted to send message while not connected")
             raise WebSocketError("Not connected")
@@ -218,6 +295,11 @@ class RobustWebSocketClient:
             raise WebSocketError(f"Failed to send message: {e}") from e
 
     async def close(self) -> None:
+        """Closes the WebSocket client, terminating all connections and tasks.
+
+        This method ensures a graceful shutdown, cancelling any running tasks
+        and closing the underlying WebSocket connection.
+        """
         logger.info("Closing WebSocket client", is_running=self._running, is_connected=self.is_connected)
         self._running = False
 
@@ -237,11 +319,28 @@ class RobustWebSocketClient:
 
     @property
     def is_connected(self) -> bool:
+        """Checks if the WebSocket client is currently connected.
+
+        Returns:
+            `True` if the underlying WebSocket connection is open, `False` otherwise.
+        """
         return self._ws is not None and self._ws.state is State.OPEN
 
     async def __aenter__(self) -> "RobustWebSocketClient":
+        """Enters the asynchronous context, establishing the WebSocket connection.
+
+        Returns:
+            The `RobustWebSocketClient` instance.
+        """
         await self.connect()
         return self
 
     async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        """Exits the asynchronous context, ensuring the WebSocket client is closed.
+
+        Args:
+            exc_type: The type of the exception that caused the context to be exited.
+            exc_val: The exception instance.
+            exc_tb: The traceback object.
+        """
         await self.close()

@@ -326,20 +326,21 @@ class TestBaseNetworkConfigValidation:
 
         Steps:
         - Attempt to create config with negative reconnect interval
-        - Attempt to create config with negative max attempts
+        - Attempt to create config with invalid negative max attempts (-2, since -1 is allowed)
         - Attempt to create config with negative ping interval
         - Attempt to create config with negative ping timeout
         - Verify ValidationError is raised for each case
 
         Expected Result:
-        - All negative values should be rejected
+        - All invalid negative values should be rejected
         - ValidationError raised for each invalid field
+        - Note: -1 is valid for ws_max_reconnect_attempts (unlimited)
         """
         with pytest.raises(ValidationError):
             BaseNetworkConfig(ws_reconnect_interval=-1)
 
         with pytest.raises(ValidationError):
-            BaseNetworkConfig(ws_max_reconnect_attempts=-1)
+            BaseNetworkConfig(ws_max_reconnect_attempts=-2)
 
         with pytest.raises(ValidationError):
             BaseNetworkConfig(ws_ping_interval=-1)

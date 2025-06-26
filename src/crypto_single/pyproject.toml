@@ -15,6 +15,17 @@ authors = [
 
 dependencies = [
     "asset-core",
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "sqlalchemy[asyncio]>=2.0.0",
+    "alembic>=1.12.0",
+    "asyncpg>=0.29.0",
+    "aiosqlite>=0.19.0",
+    "redis>=5.0.0",
+    "dependency-injector>=4.41.0",
+    "python-multipart>=0.0.6",
+    "python-jose[cryptography]>=3.3.0",
+    "passlib[bcrypt]>=1.7.4",
 ]
 
 [project.optional-dependencies]
@@ -23,9 +34,69 @@ dev = [
     "pytest-asyncio>=0.21.0",
     "pytest-cov>=4.1.0",
     "pytest-mock>=3.11.1",
+    "httpx>=0.25.0",
+    "faker>=19.0.0",
+    "factory-boy>=3.3.0",
 ]
+
+[project.scripts]
+crypto-single = "crypto_single.main:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "--cov=crypto_single",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+    "--cov-fail-under=80",
+]
+markers = [
+    "unit: marks tests as unit tests",
+    "integration: marks tests as integration tests",
+    "slow: marks tests as slow running",
+]
+
+[tool.coverage.run]
+source = ["crypto_single"]
+omit = [
+    "*/tests/*",
+    "*/migrations/*",
+    "*/__pycache__/*",
+]
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+
+[[tool.mypy.overrides]]
+module = [
+    "dependency_injector.*",
+    "redis.*",
+    "sqlalchemy.*",
+    "alembic.*",
+]
+ignore_missing_imports = true
 
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["crypto_single*"]
 exclude = ["tests*"]
+
+[tool.uv.sources]
+asset-core = { path = "../asset_core", editable = true }

@@ -10,10 +10,15 @@ from .common import (
     URL,
     AppName,
     AsyncEventHandler,
+    CacheKey,
+    CacheTTL,
+    CacheValue,
+    CircuitState,
     # Configuration types
     ConfigDict,
     DataFilter,
     DataStream,
+    DeserializedData,
     EnvironmentName,
     EventFilter,
     # Event types
@@ -21,6 +26,9 @@ from .common import (
     ExchangeInfo,
     ExchangeName,
     Failure,
+    FailureThreshold,
+    HealthCheckResult,
+    HealthStatus,
     HostPort,
     # Protocol types
     Identifiable,
@@ -31,7 +39,13 @@ from .common import (
     JsonValue,
     K,
     KlineStream,
+    LogLevel,
+    LogMessage,
     Mapper,
+    MetricName,
+    MetricTags,
+    MetricTimestamp,
+    MetricValue,
     # Optional types
     OptionalPrice,
     OptionalQuantity,
@@ -46,11 +60,20 @@ from .common import (
     PriceLevel,
     PriceList,
     Quantity,
+    RateLimit,
+    RatePeriod,
+    RateWindow,
+    RecoveryTimeout,
     Reducer,
     # Result types
     Result,
+    RetryAttempts,
+    RetryBackoff,
+    RetryDelay,
     Serializable,
     SerializableT,
+    SerializationFormat,
+    SerializedData,
     SubscriptionCallback,
     SubscriptionFilter,
     # Subscription types
@@ -141,6 +164,38 @@ __all__ = [
     "Symbolized",
     "Serializable",
     "Validatable",
+    # Cache types
+    "CacheKey",
+    "CacheValue",
+    "CacheTTL",
+    # Serialization types
+    "SerializedData",
+    "DeserializedData",
+    "SerializationFormat",
+    # Logging types
+    "LogLevel",
+    "LogMessage",
+    "LogContext",
+    # Metrics types
+    "MetricName",
+    "MetricValue",
+    "MetricTags",
+    "MetricTimestamp",
+    # Rate limiting types
+    "RateLimit",
+    "RatePeriod",
+    "RateWindow",
+    # Circuit breaker types
+    "FailureThreshold",
+    "RecoveryTimeout",
+    "CircuitState",
+    # Retry policy types
+    "RetryAttempts",
+    "RetryDelay",
+    "RetryBackoff",
+    # Health check types
+    "HealthStatus",
+    "HealthCheckResult",
     # Functional types
     "Predicate",
     "Transformer",
@@ -166,3 +221,5 @@ __all__ = [
     "SerializableT",
     "ValidatableT",
 ]
+
+from ..observability.logging import LogContext

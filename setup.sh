@@ -45,9 +45,6 @@ setup_venv() {
         uv venv
     fi
     
-    print_status "Syncing dependencies..."
-    uv sync
-    
     print_success "Virtual environment ready"
 }
 
@@ -55,11 +52,8 @@ setup_venv() {
 install_core() {
     print_status "Installing asset_core library..."
     
-    # Install core library in development mode
-    uv add --editable ./src/asset_core
-    
-    # Install development dependencies
-    uv add --editable ./src/asset_core[dev]
+    # Install core library and its dependencies
+    (cd src/asset_core && uv sync --all-groups)
     
     print_success "asset_core installed"
 }
@@ -76,7 +70,7 @@ install_apps() {
     
     # Install crypto_single if it has proper structure
     if [ -f "./src/crypto_single/pyproject.toml" ]; then
-        uv add --editable ./src/crypto_single
+        (cd src/crypto_single && uv sync)
         print_success "crypto_single installed"
     fi
     
@@ -88,7 +82,7 @@ install_apps() {
     
     # Install crypto_cluster if it has proper structure
     if [ -f "./src/crypto_cluster/pyproject.toml" ]; then
-        uv add --editable ./src/crypto_cluster
+        (cd src/crypto_cluster && uv sync)
         print_success "crypto_cluster installed"
     fi
 }
@@ -129,6 +123,9 @@ dev = [
 where = ["."]
 include = ["crypto_single*"]
 exclude = ["tests*"]
+
+[tool.uv.sources]
+asset-core = { path = "../asset_core", editable = true }
 EOF
 
     # Create basic structure
@@ -176,6 +173,9 @@ dev = [
 where = ["."]
 include = ["crypto_cluster*"]
 exclude = ["tests*"]
+
+[tool.uv.sources]
+asset-core = { path = "../asset_core", editable = true }
 EOF
 
     # Create basic structure
@@ -187,6 +187,13 @@ EOF
     print_success "crypto_cluster structure created"
 }
 
+# Sync root project
+sync_root() {
+    print_status "Syncing root project dependencies..."
+    uv sync
+    print_success "Root project synchronized"
+}
+
 # Run setup
 main() {
     echo "🚀 TradingChart Project Setup"
@@ -196,6 +203,7 @@ main() {
     setup_venv
     install_core
     install_apps
+    sync_root
     
     echo ""
     print_success "Installation complete!"

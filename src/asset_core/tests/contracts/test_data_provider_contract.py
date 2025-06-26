@@ -5,23 +5,23 @@ Comprehensive tests to verify that any implementation of AbstractDataProvider
 follows the expected behavioral contracts and interface specifications.
 """
 
+import abc
 import asyncio
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
-from asset_core.models.kline import Kline, KlineInterval
-from asset_core.models.trade import Trade
-from asset_core.providers.base import AbstractDataProvider
 
-from .base_contract_test import AsyncContractTestMixin, BaseContractTest, \
-    MockImplementationBase
+from src.asset_core.asset_core.models.kline import Kline, KlineInterval
+from src.asset_core.asset_core.models.trade import Trade
+from src.asset_core.asset_core.providers.base import AbstractDataProvider
+
+from .base_contract_test import AsyncContractTestMixin, BaseContractTest, MockImplementationBase
 
 
 class MockDataProvider(AbstractDataProvider, MockImplementationBase):
-    """
-    Mock implementation of AbstractDataProvider for contract testing.
+    """Mock implementation of AbstractDataProvider for contract testing.
 
     Provides a complete implementation that follows the interface contract
     while using mock data for testing purposes.
@@ -41,7 +41,13 @@ class MockDataProvider(AbstractDataProvider, MockImplementationBase):
         return self._is_connected
 
     async def connect(self) -> None:
-        """Connect to mock data provider."""
+        """Connects to the mock data provider.
+
+        Simulates a connection process with a small delay.
+
+        Raises:
+            RuntimeError: If the provider is already connected or closed.
+        """
         self._check_not_closed()
         if self._is_connected:
             raise RuntimeError("Already connected")
@@ -51,12 +57,27 @@ class MockDataProvider(AbstractDataProvider, MockImplementationBase):
         self._is_connected = True
 
     async def disconnect(self) -> None:
-        """Disconnect from mock data provider."""
+        """Disconnects from the mock data provider.
+
+        Resets the `is_connected` flag.
+        """
         if self._is_connected:
             self._is_connected = False
 
     async def stream_trades(self, symbol: str, *, start_from: datetime | None = None) -> AsyncIterator[Trade]:
-        """Stream mock real-time trades."""
+        """Streams mock real-time trades for a given symbol.
+
+        Args:
+            symbol (str): The trading symbol for which to stream trades.
+            start_from (datetime | None): Optional datetime to start streaming from.
+                                         (Ignored in this mock implementation).
+
+        Yields:
+            Trade: A mock `Trade` object.
+
+        Raises:
+            RuntimeError: If the provider is not connected or is closed.
+        """
         self._check_connected()
         self._check_not_closed()
 
@@ -78,7 +99,20 @@ class MockDataProvider(AbstractDataProvider, MockImplementationBase):
     async def stream_klines(
         self, symbol: str, interval: KlineInterval, *, start_from: datetime | None = None
     ) -> AsyncIterator[Kline]:
-        """Stream mock real-time klines."""
+        """Streams mock real-time klines for a given symbol and interval.
+
+        Args:
+            symbol (str): The trading symbol for which to stream klines.
+            interval (KlineInterval): The Kline interval.
+            start_from (datetime | None): Optional datetime to start streaming from.
+                                         (Ignored in this mock implementation).
+
+        Yields:
+            Kline: A mock `Kline` object.
+
+        Raises:
+            RuntimeError: If the provider is not connected or is closed.
+        """
         self._check_connected()
         self._check_not_closed()
 
@@ -107,7 +141,20 @@ class MockDataProvider(AbstractDataProvider, MockImplementationBase):
     async def fetch_historical_trades(
         self, symbol: str, start_time: datetime, end_time: datetime, *, limit: int | None = None
     ) -> list[Trade]:
-        """Fetch mock historical trades."""
+        """Fetches mock historical trades for a given symbol within a time range.
+
+        Args:
+            symbol (str): The trading symbol.
+            start_time (datetime): The start time for the historical data.
+            end_time (datetime): The end time for the historical data.
+            limit (int | None): Optional maximum number of trades to fetch.
+
+        Returns:
+            list[Trade]: A list of mock `Trade` objects.
+
+        Raises:
+            RuntimeError: If the provider is not connected or is closed.
+        """
         self._check_connected()
         self._check_not_closed()
 
@@ -143,7 +190,21 @@ class MockDataProvider(AbstractDataProvider, MockImplementationBase):
         *,
         limit: int | None = None,
     ) -> list[Kline]:
-        """Fetch mock historical klines."""
+        """Fetches mock historical klines for a given symbol and interval within a time range.
+
+        Args:
+            symbol (str): The trading symbol.
+            interval (KlineInterval): The Kline interval.
+            start_time (datetime): The start time for the historical data.
+            end_time (datetime): The end time for the historical data.
+            limit (int | None): Optional maximum number of klines to fetch.
+
+        Returns:
+            list[Kline]: A list of mock `Kline` objects.
+
+        Raises:
+            RuntimeError: If the provider is not connected or is closed.
+        """
         self._check_connected()
         self._check_not_closed()
 
@@ -178,7 +239,14 @@ class MockDataProvider(AbstractDataProvider, MockImplementationBase):
         return klines
 
     async def get_exchange_info(self) -> dict[str, any]:
-        """Get mock exchange information."""
+        """Retrieves mock exchange information.
+
+        Returns:
+            dict[str, any]: A dictionary containing mock exchange details.
+
+        Raises:
+            RuntimeError: If the provider is not connected or is closed.
+        """
         self._check_connected()
         self._check_not_closed()
 
@@ -194,7 +262,17 @@ class MockDataProvider(AbstractDataProvider, MockImplementationBase):
         }
 
     async def get_symbol_info(self, symbol: str) -> dict[str, any]:
-        """Get mock symbol-specific information."""
+        """Retrieves mock symbol-specific information.
+
+        Args:
+            symbol (str): The trading symbol for which to retrieve information.
+
+        Returns:
+            dict[str, any]: A dictionary containing mock symbol details.
+
+        Raises:
+            RuntimeError: If the provider is not connected or is closed.
+        """
         self._check_connected()
         self._check_not_closed()
 
@@ -212,7 +290,14 @@ class MockDataProvider(AbstractDataProvider, MockImplementationBase):
         }
 
     async def ping(self) -> float:
-        """Check connectivity and return mock latency."""
+        """Checks connectivity and returns mock latency.
+
+        Returns:
+            float: A mock latency value in milliseconds.
+
+        Raises:
+            RuntimeError: If the provider is not connected or is closed.
+        """
         self._check_connected()
         self._check_not_closed()
 
@@ -221,44 +306,67 @@ class MockDataProvider(AbstractDataProvider, MockImplementationBase):
         return self._ping_latency
 
     async def close(self) -> None:
-        """Close provider and clean up resources."""
+        """Closes the provider and cleans up resources.
+
+        This method disconnects the provider and sets its internal state to closed.
+        """
         await self.disconnect()
         self._is_closed = True
 
     async def __aenter__(self):
-        """Async context manager entry."""
+        """Asynchronous context manager entry point.
+
+        Automatically connects the provider upon entering the `async with` block.
+
+        Returns:
+            MockDataProvider: The instance of the provider itself.
+        """
         await self.connect()
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Async context manager exit."""
+        """Asynchronous context manager exit point.
+
+        Automatically closes the provider upon exiting the `async with` block.
+
+        Args:
+            exc_type (Any): The type of the exception raised, if any.
+            exc_val (Any): The exception instance raised, if any.
+            exc_tb (Any): The traceback object, if an exception was raised.
+
+        Returns:
+            bool: False to propagate any exceptions that occurred within the block.
+        """
         await self.close()
         return False
 
 
 class TestAbstractDataProviderContract(BaseContractTest, AsyncContractTestMixin):
-    """
-    Contract tests for AbstractDataProvider interface.
+    """Contract tests for AbstractDataProvider interface.
 
     These tests verify that any implementation of AbstractDataProvider
-    follows the expected behavioral contracts.
+    follows the expected behavioral contracts and interface specifications.
     """
 
     @pytest.fixture
     async def provider(self) -> MockDataProvider:
-        """Create a mock provider instance for testing."""
+        """Provides a mock data provider instance for testing.
+
+        Returns:
+            MockDataProvider: An instance of the mock data provider.
+        """
         return MockDataProvider("test_provider")
 
     def test_required_methods_defined(self):
-        """
-        Test that all required abstract methods are defined in the interface.
+        """Test that all required abstract methods are defined in the interface.
 
-        Verifies that AbstractDataProvider declares all necessary methods
+        Description of what the test covers.
+        Verifies that `AbstractDataProvider` declares all necessary methods
         as abstract and that they have the correct signatures.
 
         Expected Result:
-            - All required methods are present as abstract methods
-            - Method signatures match the expected interface
+        - All required methods are present as abstract methods.
+        - Method signatures match the expected interface.
         """
         abstract_methods = self.get_abstract_methods(AbstractDataProvider)
 
@@ -274,6 +382,7 @@ class TestAbstractDataProviderContract(BaseContractTest, AsyncContractTestMixin)
             "get_symbol_info",
             "ping",
             "close",
+            "is_connected",
         }
 
         # All required methods should be abstract
@@ -282,15 +391,15 @@ class TestAbstractDataProviderContract(BaseContractTest, AsyncContractTestMixin)
         )
 
     def test_method_signatures(self):
-        """
-        Test that all abstract methods have correct signatures.
+        """Test that all abstract methods have correct signatures.
 
+        Description of what the test covers.
         Verifies parameter types, return types, and async/sync designation
         for all methods in the interface.
 
         Expected Result:
-            - All methods have correct parameter and return type annotations
-            - Async methods are properly marked as async
+        - All methods have correct parameter and return type annotations.
+        - Async methods are properly marked as async.
         """
         # Test key method signatures
         connect_sig = self.get_method_signature(AbstractDataProvider, "connect")
@@ -301,41 +410,81 @@ class TestAbstractDataProviderContract(BaseContractTest, AsyncContractTestMixin)
         assert "symbol" in stream_trades_sig.parameters
         assert "start_from" in stream_trades_sig.parameters
 
+        fetch_historical_trades_sig = self.get_method_signature(AbstractDataProvider, "fetch_historical_trades")
+        assert len(fetch_historical_trades_sig.parameters) == 5  # self, symbol, start_time, end_time, limit
+        assert "symbol" in fetch_historical_trades_sig.parameters
+        assert "start_time" in fetch_historical_trades_sig.parameters
+        assert "end_time" in fetch_historical_trades_sig.parameters
+        assert "limit" in fetch_historical_trades_sig.parameters
+
         # Test that core methods are async
         assert self.is_async_method(AbstractDataProvider, "connect")
+        assert self.is_async_method(AbstractDataProvider, "disconnect")
         assert self.is_async_method(AbstractDataProvider, "stream_trades")
+        assert self.is_async_method(AbstractDataProvider, "stream_klines")
+        assert self.is_async_method(AbstractDataProvider, "fetch_historical_trades")
+        assert self.is_async_method(AbstractDataProvider, "fetch_historical_klines")
+        assert self.is_async_method(AbstractDataProvider, "get_exchange_info")
+        assert self.is_async_method(AbstractDataProvider, "get_symbol_info")
+        assert self.is_async_method(AbstractDataProvider, "ping")
         assert self.is_async_method(AbstractDataProvider, "close")
 
-        # Test that name is a property (not async)
+        # Test that properties are not async methods
         assert not self.is_async_method(AbstractDataProvider, "name")
+        assert not self.is_async_method(AbstractDataProvider, "is_connected")
 
     def test_async_context_manager_protocol(self):
-        """
-        Test that the provider implements async context manager protocol.
+        """Test that the provider implements async context manager protocol.
 
-        Verifies that __aenter__ and __aexit__ methods are present and
+        Description of what the test covers.
+        Verifies that `__aenter__` and `__aexit__` methods are present and
         that they work correctly for resource management.
 
         Expected Result:
-            - Provider has __aenter__ and __aexit__ methods
-            - Can be used in async with statements
+        - Provider has `__aenter__` and `__aexit__` methods.
+        - Can be used in `async with` statements.
         """
-        # Note: AbstractDataProvider should have async context manager protocol
-        # This is typically implemented in concrete classes but the interface should support it
-        assert hasattr(AbstractDataProvider, "__aenter__") or True  # May be implemented in concrete classes
+        # Test that AbstractDataProvider has async context manager methods
+        assert hasattr(AbstractDataProvider, "__aenter__")
+        assert hasattr(AbstractDataProvider, "__aexit__")
+        assert callable(AbstractDataProvider.__aenter__)
+        assert callable(AbstractDataProvider.__aexit__)
+
+        # Test that these methods are async
+        assert self.is_async_method(AbstractDataProvider, "__aenter__")
+        assert self.is_async_method(AbstractDataProvider, "__aexit__")
+
+    def test_inheritance_chain(self):
+        """Test that AbstractDataProvider correctly inherits from abc.ABC.
+
+        Description of what the test covers.
+        Verifies that the abstract provider follows proper inheritance patterns
+        for abstract base classes.
+
+        Expected Result:
+        - `AbstractDataProvider` should inherit from `abc.ABC`.
+        - Should be properly marked as abstract class.
+        """
+
+        # Test inheritance from ABC
+        assert issubclass(AbstractDataProvider, abc.ABC)
+
+        # Test that the class itself is abstract (cannot be instantiated)
+        with pytest.raises(TypeError):
+            AbstractDataProvider()  # Should raise TypeError due to abstract methods
 
     @pytest.mark.asyncio
     async def test_mock_implementation_completeness(self, provider: MockDataProvider):
-        """
-        Test that the mock implementation provides complete interface coverage.
+        """Test that the mock implementation provides complete interface coverage.
 
+        Description of what the test covers.
         Creates a complete mock implementation and verifies that all methods
         work correctly and follow the expected behavioral contracts.
 
         Expected Result:
-            - All abstract methods are implemented
-            - Methods return expected types
-            - State transitions work correctly
+        - All abstract methods are implemented.
+        - Methods return expected types.
+        - State transitions work correctly.
         """
         # Test that all abstract methods are implemented
         abstract_methods = self.get_abstract_methods(AbstractDataProvider)
@@ -359,26 +508,26 @@ class TestAbstractDataProviderContract(BaseContractTest, AsyncContractTestMixin)
 
     @pytest.mark.asyncio
     async def test_connection_state_management(self, provider: MockDataProvider):
-        """
-        Test connection state management and transitions.
+        """Test connection state management and transitions.
 
+        Description of what the test covers.
         Verifies that connection states are properly managed and that
         operations fail appropriately based on connection state.
 
         Preconditions:
-            - Provider is initialized but not connected
+        - Provider is initialized but not connected.
 
         Steps:
-            - Verify initial disconnected state
-            - Connect and verify connected state
-            - Test that operations work when connected
-            - Disconnect and verify disconnected state
-            - Test that operations fail when disconnected
+        - Verify initial disconnected state.
+        - Connect and verify connected state.
+        - Test that operations work when connected.
+        - Disconnect and verify disconnected state.
+        - Test that operations fail when disconnected.
 
         Expected Result:
-            - Connection state is properly tracked
-            - Operations respect connection state requirements
-            - State transitions work correctly
+        - Connection state is properly tracked.
+        - Operations respect connection state requirements.
+        - State transitions work correctly.
         """
         # Test initial state (should be disconnected)
         assert not provider.is_connected
@@ -410,15 +559,15 @@ class TestAbstractDataProviderContract(BaseContractTest, AsyncContractTestMixin)
 
     @pytest.mark.asyncio
     async def test_provider_name_property(self, provider: MockDataProvider):
-        """
-        Test that provider name property works correctly.
+        """Test that provider name property works correctly.
 
-        Verifies that the name property returns a string identifier
+        Description of what the test covers.
+        Verifies that the `name` property returns a string identifier
         for the provider.
 
         Expected Result:
-            - name property returns a non-empty string
-            - name is consistent across calls
+        - `name` property returns a non-empty string.
+        - `name` is consistent across calls.
         """
         name = provider.name
         assert isinstance(name, str)
@@ -429,16 +578,16 @@ class TestAbstractDataProviderContract(BaseContractTest, AsyncContractTestMixin)
 
     @pytest.mark.asyncio
     async def test_trade_streaming_interface(self, provider: MockDataProvider):
-        """
-        Test real-time trade streaming functionality.
+        """Test real-time trade streaming functionality.
 
-        Verifies that stream_trades returns an async iterator that
-        yields Trade objects with correct data.
+        Description of what the test covers.
+        Verifies that `stream_trades` returns an async iterator that
+        yields `Trade` objects with correct data.
 
         Expected Result:
-            - stream_trades returns async iterator
-            - Yields Trade objects with valid data
-            - Stream can be consumed properly
+        - `stream_trades` returns async iterator.
+        - Yields `Trade` objects with valid data.
+        - Stream can be consumed properly.
         """
         await provider.connect()
 
@@ -465,16 +614,16 @@ class TestAbstractDataProviderContract(BaseContractTest, AsyncContractTestMixin)
 
     @pytest.mark.asyncio
     async def test_kline_streaming_interface(self, provider: MockDataProvider):
-        """
-        Test real-time kline streaming functionality.
+        """Test real-time kline streaming functionality.
 
-        Verifies that stream_klines returns an async iterator that
-        yields Kline objects with correct data.
+        Description of what the test covers.
+        Verifies that `stream_klines` returns an async iterator that
+        yields `Kline` objects with correct data.
 
         Expected Result:
-            - stream_klines returns async iterator
-            - Yields Kline objects with valid data
-            - OHLC data is properly formatted
+        - `stream_klines` returns async iterator.
+        - Yields `Kline` objects with valid data.
+        - OHLC data is properly formatted.
         """
         await provider.connect()
 
@@ -505,19 +654,18 @@ class TestAbstractDataProviderContract(BaseContractTest, AsyncContractTestMixin)
 
         assert len(klines_received) >= 2
 
-    @pytest.mark.asyncio
     async def test_historical_trade_fetching(self, provider: MockDataProvider):
-        """
-        Test historical trade data fetching.
+        """Test historical trade data fetching.
 
-        Verifies that fetch_historical_trades returns trade data
+        Description of what the test covers.
+        Verifies that `fetch_historical_trades` returns trade data
         within specified time ranges and limits.
 
         Expected Result:
-            - Returns list of Trade objects
-            - Respects time range parameters
-            - Respects limit parameter
-            - Data is properly formatted
+        - Returns list of `Trade` objects.
+        - Respects time range parameters.
+        - Respects limit parameter.
+        - Data is properly formatted.
         """
         await provider.connect()
 
@@ -542,17 +690,17 @@ class TestAbstractDataProviderContract(BaseContractTest, AsyncContractTestMixin)
 
     @pytest.mark.asyncio
     async def test_historical_kline_fetching(self, provider: MockDataProvider):
-        """
-        Test historical kline data fetching.
+        """Test historical kline data fetching.
 
-        Verifies that fetch_historical_klines returns kline data
+        Description of what the test covers.
+        Verifies that `fetch_historical_klines` returns kline data
         within specified parameters.
 
         Expected Result:
-            - Returns list of Kline objects
-            - Respects time range and interval parameters
-            - Respects limit parameter
-            - Data is properly formatted
+        - Returns list of `Kline` objects.
+        - Respects time range and interval parameters.
+        - Respects limit parameter.
+        - Data is properly formatted.
         """
         await provider.connect()
 
@@ -578,16 +726,16 @@ class TestAbstractDataProviderContract(BaseContractTest, AsyncContractTestMixin)
 
     @pytest.mark.asyncio
     async def test_exchange_info_interface(self, provider: MockDataProvider):
-        """
-        Test exchange information retrieval.
+        """Test exchange information retrieval.
 
-        Verifies that get_exchange_info returns structured
+        Description of what the test covers.
+        Verifies that `get_exchange_info` returns structured
         information about the exchange.
 
         Expected Result:
-            - Returns dictionary with exchange metadata
-            - Contains expected fields
-            - Data is properly formatted
+        - Returns dictionary with exchange metadata.
+        - Contains expected fields.
+        - Data is properly formatted.
         """
         await provider.connect()
 
@@ -598,18 +746,17 @@ class TestAbstractDataProviderContract(BaseContractTest, AsyncContractTestMixin)
         expected_fields = {"exchange", "status", "server_time"}
         assert all(field in exchange_info for field in expected_fields)
 
-    @pytest.mark.asyncio
     async def test_symbol_info_interface(self, provider: MockDataProvider):
-        """
-        Test symbol-specific information retrieval.
+        """Test symbol-specific information retrieval.
 
-        Verifies that get_symbol_info returns detailed information
+        Description of what the test covers.
+        Verifies that `get_symbol_info` returns detailed information
         about a specific trading symbol.
 
         Expected Result:
-            - Returns dictionary with symbol metadata
-            - Contains trading specifications
-            - Data is properly formatted
+        - Returns dictionary with symbol metadata.
+        - Contains trading specifications.
+        - Data is properly formatted.
         """
         await provider.connect()
 
@@ -624,18 +771,17 @@ class TestAbstractDataProviderContract(BaseContractTest, AsyncContractTestMixin)
         expected_fields = {"symbol", "status", "base_asset", "quote_asset"}
         assert all(field in symbol_info for field in expected_fields)
 
-    @pytest.mark.asyncio
     async def test_ping_latency_measurement(self, provider: MockDataProvider):
-        """
-        Test connectivity and latency measurement.
+        """Test connectivity and latency measurement.
 
-        Verifies that ping returns latency measurements in milliseconds
+        Description of what the test covers.
+        Verifies that `ping` returns latency measurements in milliseconds
         and can be used to monitor connection quality.
 
         Expected Result:
-            - Returns numeric latency value
-            - Latency is in reasonable range (0-10000ms)
-            - Consistent measurements over multiple calls
+        - Returns numeric latency value.
+        - Latency is in reasonable range (0-10000ms).
+        - Consistent measurements over multiple calls.
         """
         await provider.connect()
 

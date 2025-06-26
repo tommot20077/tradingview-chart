@@ -1,4 +1,11 @@
-"""Custom validator base classes and utilities."""
+"""Custom validator base classes and utilities.
+
+This module provides a framework for creating reusable and composable data
+validators. It defines abstract base classes for validators and concrete
+implementations for common validation scenarios like range checks, string
+constraints, and datetime validation. It also includes a mixin for integrating
+these custom validators with Pydantic models.
+"""
 
 import re
 from abc import ABC, abstractmethod
@@ -14,27 +21,38 @@ T = TypeVar("T", bound=BaseModel)
 
 
 class BaseValidator(ABC):
-    """Abstract base class for all custom validators."""
+    """Abstract base class for all custom validators.
+
+    All concrete validator implementations should inherit from this class
+    and implement the `validate` method.
+    """
 
     @abstractmethod
     def validate(self, value: Any, field_name: str) -> Any:
-        """Validate a value and return the validated value or raise an error.
+        """Validates a given value and returns the validated result.
+
+        This method should be implemented by concrete validator classes to
+        perform specific validation logic. If validation fails, it should
+        raise a `DataValidationError`.
 
         Args:
-            value: The value to validate
-            field_name: The name of the field being validated
+            value: The value to be validated.
+            field_name: The name of the field being validated, used for error reporting.
 
         Returns:
-            The validated value
+            The validated value, potentially transformed (e.g., stripped string).
 
         Raises:
-            DataValidationError: If validation fails
+            DataValidationError: If the value does not pass validation.
         """
         pass
 
 
 class RangeValidator(BaseValidator):
-    """Validator for numeric ranges."""
+    """A validator for checking if a numeric value falls within a specified range.
+
+    The range can be inclusive or exclusive of its bounds.
+    """
 
     def __init__(
         self,
@@ -42,19 +60,31 @@ class RangeValidator(BaseValidator):
         max_value: int | float | Decimal | None = None,
         inclusive: bool = True,
     ) -> None:
-        """Initialize range validator.
+        """Initializes the RangeValidator.
 
         Args:
-            min_value: Minimum allowed value
-            max_value: Maximum allowed value
-            inclusive: Whether the range is inclusive of the bounds
+            min_value: The minimum allowed value. If `None`, no minimum check is performed.
+            max_value: The maximum allowed value. If `None`, no maximum check is performed.
+            inclusive: If `True`, the range includes `min_value` and `max_value`. If `False`,
+                       the range excludes them. Defaults to `True`.
         """
         self.min_value = min_value
         self.max_value = max_value
         self.inclusive = inclusive
 
     def validate(self, value: Any, field_name: str) -> Any:
-        """Validate that value is within the specified range."""
+        """Validates that the given value is numeric and falls within the specified range.
+
+        Args:
+            value: The numeric value to validate.
+            field_name: The name of the field being validated.
+
+        Returns:
+            The validated numeric value.
+
+        Raises:
+            DataValidationError: If the value is not numeric or is outside the defined range.
+        """
         if not isinstance(value, int | float | Decimal):
             raise DataValidationError(
                 f"Value must be numeric, got {type(value).__name__}",
@@ -94,7 +124,11 @@ class RangeValidator(BaseValidator):
 
 
 class StringValidator(BaseValidator):
-    """Validator for string values."""
+    """A validator for string values, supporting length, regex pattern, and allowed values checks.
+
+    It can enforce minimum and maximum lengths, validate against a regular
+    expression, and restrict values to a predefined list, with optional case sensitivity.
+    """
 
     regex: re.Pattern[str] | None
 
@@ -106,14 +140,15 @@ class StringValidator(BaseValidator):
         allowed_values: list[str] | None = None,
         case_sensitive: bool = True,
     ) -> None:
-        """Initialize string validator.
+        """Initializes the StringValidator.
 
         Args:
-            min_length: Minimum string length
-            max_length: Maximum string length
-            pattern: Regex pattern the string must match
-            allowed_values: List of allowed string values
-            case_sensitive: Whether string comparison is case sensitive
+            min_length: The minimum allowed length for the string. If `None`, no minimum length check.
+            max_length: The maximum allowed length for the string. If `None`, no maximum length check.
+            pattern: A regular expression string that the value must match. If `None`, no pattern check.
+            allowed_values: A list of strings; the value must be one of these. If `None`, no allowed values check.
+            case_sensitive: If `True`, string comparisons (for `allowed_values`) are case-sensitive.
+                            Defaults to `True`.
         """
         self.min_length = min_length
         self.max_length = max_length
@@ -129,7 +164,18 @@ class StringValidator(BaseValidator):
             self.regex = None
 
     def validate(self, value: Any, field_name: str) -> Any:
-        """Validate string value."""
+        """Validates the given value as a string based on configured rules.
+
+        Args:
+            value: The string value to validate.
+            field_name: The name of the field being validated.
+
+        Returns:
+            The validated string value.
+
+        Raises:
+            DataValidationError: If the value is not a string or fails any of the configured checks.
+        """
         if not isinstance(value, str):
             raise DataValidationError(
                 f"Value must be a string, got {type(value).__name__}",
@@ -178,7 +224,11 @@ class StringValidator(BaseValidator):
 
 
 class DateTimeValidator(BaseValidator):
-    """Validator for datetime values."""
+    """A validator for `datetime` objects, supporting range, timezone, and future/past checks.
+
+    It can enforce minimum and maximum datetime values, require timezone
+    information, and restrict dates to be in the past or future.
+    """
 
     def __init__(
         self,
@@ -188,14 +238,14 @@ class DateTimeValidator(BaseValidator):
         future_allowed: bool = True,
         past_allowed: bool = True,
     ) -> None:
-        """Initialize datetime validator.
+        """Initializes the DateTimeValidator.
 
         Args:
-            min_datetime: Minimum allowed datetime
-            max_datetime: Maximum allowed datetime
-            require_timezone: Whether timezone info is required
-            future_allowed: Whether future dates are allowed
-            past_allowed: Whether past dates are allowed
+            min_datetime: The minimum allowed datetime. If `None`, no minimum check.
+            max_datetime: The maximum allowed datetime. If `None`, no maximum check.
+            require_timezone: If `True`, the datetime must be timezone-aware. Defaults to `True`.
+            future_allowed: If `True`, future datetimes are allowed. Defaults to `True`.
+            past_allowed: If `True`, past datetimes are allowed. Defaults to `True`.
         """
         self.min_datetime = min_datetime
         self.max_datetime = max_datetime
@@ -204,7 +254,18 @@ class DateTimeValidator(BaseValidator):
         self.past_allowed = past_allowed
 
     def validate(self, value: Any, field_name: str) -> Any:
-        """Validate datetime value."""
+        """Validates the given value as a datetime object based on configured rules.
+
+        Args:
+            value: The datetime object to validate.
+            field_name: The name of the field being validated.
+
+        Returns:
+            The validated datetime object.
+
+        Raises:
+            DataValidationError: If the value is not a datetime or fails any of the configured checks.
+        """
         if not isinstance(value, datetime):
             raise DataValidationError(
                 f"Value must be a datetime, got {type(value).__name__}",
@@ -256,18 +317,34 @@ class DateTimeValidator(BaseValidator):
 
 
 class CompositeValidator(BaseValidator):
-    """Validator that combines multiple validators."""
+    """A validator that combines multiple `BaseValidator` instances.
+
+    It applies a sequence of validators to a value, passing the result of one
+    validator as the input to the next. This allows for building complex
+    validation pipelines.
+    """
 
     def __init__(self, validators: list[BaseValidator]) -> None:
-        """Initialize composite validator.
+        """Initializes the CompositeValidator.
 
         Args:
-            validators: List of validators to apply in order
+            validators: A list of `BaseValidator` instances to apply in sequence.
         """
         self.validators = validators
 
     def validate(self, value: Any, field_name: str) -> Any:
-        """Apply all validators in sequence."""
+        """Applies all contained validators to the given value in sequence.
+
+        Args:
+            value: The value to validate.
+            field_name: The name of the field being validated.
+
+        Returns:
+            The final validated value after all validators have been applied.
+
+        Raises:
+            DataValidationError: If any of the validators in the sequence fail.
+        """
         result = value
         for validator in self.validators:
             result = validator.validate(result, field_name)
@@ -275,7 +352,12 @@ class CompositeValidator(BaseValidator):
 
 
 class ValidationMixin:
-    """Mixin class to add validation utilities to Pydantic models."""
+    """A mixin class providing utility methods for integrating custom validators with Pydantic models.
+
+    This mixin simplifies the process of using `BaseValidator` instances within
+    Pydantic's validation system, allowing custom validation logic to be applied
+    to model fields.
+    """
 
     @classmethod
     def validate_with_custom_validator(
@@ -284,18 +366,22 @@ class ValidationMixin:
         validator: BaseValidator,
         field_name: str,
     ) -> Any:
-        """Validate a value using a custom validator.
+        """Validates a value using a provided custom `BaseValidator` instance.
+
+        This method wraps the custom validator's logic and converts any
+        `DataValidationError` into a `ValueError` to maintain compatibility
+        with Pydantic's expected exception types.
 
         Args:
-            value: The value to validate
-            validator: The validator to use
-            field_name: The name of the field being validated
+            value: The value to be validated.
+            validator: An instance of a `BaseValidator` to apply.
+            field_name: The name of the field being validated.
 
         Returns:
-            The validated value
+            The validated value.
 
         Raises:
-            ValueError: If validation fails (for Pydantic compatibility)
+            ValueError: If the custom validator raises a `DataValidationError`.
         """
         try:
             return validator.validate(value, field_name)
@@ -305,13 +391,18 @@ class ValidationMixin:
 
     @classmethod
     def create_pydantic_validator(cls, validator: BaseValidator) -> Any:
-        """Create a Pydantic field validator from a custom validator.
+        """Creates a Pydantic field validator function from a custom `BaseValidator`.
+
+        This factory method generates a callable that can be used with Pydantic's
+        `@field_validator` decorator, allowing custom validation logic to be
+        seamlessly integrated into Pydantic models.
 
         Args:
-            validator: The custom validator to wrap
+            validator: An instance of a `BaseValidator` to wrap.
 
         Returns:
-            A function that can be used as a Pydantic field validator
+            A callable that takes `value` and `info` (Pydantic's validation context)
+            and returns the validated value, suitable for Pydantic's validation system.
         """
 
         def pydantic_validator(value: Any, info: Any) -> Any:

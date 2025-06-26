@@ -1,4 +1,10 @@
-"""Loguru-based structured logging configuration with trace ID support."""
+"""Loguru-based structured logging configuration with trace ID support.
+
+This module provides a comprehensive logging solution for the `asset_core` library,
+leveraging Loguru for structured logging, automatic trace ID injection, and flexible
+output formatting. It includes utilities for setting up various log sinks (console,
+file), filtering logs, and integrating with standard Python logging.
+"""
 
 import json
 import sys
@@ -58,7 +64,14 @@ else:
 
 
 class LogFormat(str, Enum):
-    """Available log format options."""
+    """Defines available log output formats.
+
+    Attributes:
+        JSON (str): Logs are formatted as JSON objects, suitable for machine parsing.
+        PRETTY (str): Logs are formatted for human readability with colors and detailed information.
+        COMPACT (str): A more concise human-readable format.
+        DETAILED (str): A highly detailed human-readable format including process and thread info.
+    """
 
     JSON = "json"
     PRETTY = "pretty"
@@ -67,7 +80,11 @@ class LogFormat(str, Enum):
 
 
 class LogFilter:
-    """Custom log filter with various filtering options."""
+    """A flexible log filter allowing filtering by level, module, function, and custom criteria.
+
+    This class enables fine-grained control over which log records are processed
+    by a Loguru sink, based on various attributes of the log record.
+    """
 
     def __init__(
         self,
@@ -79,7 +96,18 @@ class LogFilter:
         exclude_functions: list[str] | None = None,
         custom_filter: Callable[[Record], bool] | None = None,
     ) -> None:
-        """Initialize log filter."""
+        """Initializes the LogFilter with specified filtering criteria.
+
+        Args:
+            min_level: The minimum log level (e.g., "INFO", "DEBUG") for records to be included.
+            max_level: The maximum log level for records to be included.
+            include_modules: A list of module name prefixes; only logs from these modules will be included.
+            exclude_modules: A list of module name prefixes; logs from these modules will be excluded.
+            include_functions: A list of function names; only logs from these functions will be included.
+            exclude_functions: A list of function names; logs from these functions will be excluded.
+            custom_filter: An optional callable that takes a Loguru `Record` and returns a boolean.
+                           If `False`, the record is filtered out.
+        """
         self.min_level = min_level
         self.max_level = max_level
         self.include_modules = include_modules if include_modules is not None else []
@@ -89,13 +117,13 @@ class LogFilter:
         self.custom_filter = custom_filter
 
     def __call__(self, record: Record) -> bool:
-        """Filter log record.
+        """Applies the defined filters to a log record.
 
         Args:
-            record: Log record dictionary
+            record: The Loguru `Record` dictionary to filter.
 
         Returns:
-            True if record should be logged, False otherwise
+            `True` if the record should be logged, `False` otherwise.
         """
         # Level filtering
         if self.min_level and record["level"].no < logger.level(self.min_level).no:
@@ -125,7 +153,14 @@ class LogFilter:
 
 
 def create_performance_filter() -> LogFilter:
-    """Create a filter for performance-related logs only."""
+    """Creates a `LogFilter` instance specifically for performance-related log messages.
+
+    This filter identifies log messages that contain keywords commonly associated
+    with performance metrics (e.g., "performance", "latency", "duration").
+
+    Returns:
+        A `LogFilter` configured to capture performance-related logs.
+    """
 
     def performance_filter(record: Record) -> bool:
         message = record["message"].lower()
@@ -148,17 +183,37 @@ def create_performance_filter() -> LogFilter:
 
 
 def create_error_filter() -> LogFilter:
-    """Create a filter for error and warning logs only."""
+    """Creates a `LogFilter` instance for error and warning level logs.
+
+    This filter includes log messages with a level of `WARNING` or higher.
+
+    Returns:
+        A `LogFilter` configured to capture error and warning logs.
+    """
     return LogFilter(min_level="WARNING")
 
 
 def create_debug_filter() -> LogFilter:
-    """Create a filter for debug logs only."""
+    """Creates a `LogFilter` instance for debug level logs only.
+
+    This filter specifically targets log messages with a `DEBUG` level.
+
+    Returns:
+        A `LogFilter` configured to capture only debug logs.
+    """
     return LogFilter(min_level="DEBUG", max_level="DEBUG")
 
 
 def trace_id_patcher(record: Record) -> None:
-    """Patch log record with trace ID and enhance exception info."""
+    """Loguru patcher to inject trace ID into log records and enhance exception info.
+
+    This function is called by Loguru for each log record. It retrieves the
+    current trace ID (if available) and adds it to the `extra` field of the
+    log record. It also extracts trace ID from exceptions if present.
+
+    Args:
+        record: The Loguru `Record` dictionary to be patched.
+    """
     record["extra"]["trace_id"] = get_trace_id() or "no-trace"
 
     # If there's an exception, try to extract trace ID from it
@@ -170,7 +225,15 @@ def trace_id_patcher(record: Record) -> None:
 
 
 def get_formatter(format_type: LogFormat) -> str | Callable[[Record], str]:
-    """Get formatter based on format type."""
+    """Returns a Loguru formatter string or a callable based on the specified format type.
+
+    Args:
+        format_type: The desired `LogFormat` (e.g., `LogFormat.JSON`, `LogFormat.PRETTY`).
+
+    Returns:
+        A string formatter suitable for Loguru's `add` method, or a callable
+        that formats a log record into a string (e.g., for JSON output).
+    """
     if format_type == LogFormat.PRETTY:
         return (
             "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
@@ -202,7 +265,14 @@ def get_formatter(format_type: LogFormat) -> str | Callable[[Record], str]:
     elif format_type == LogFormat.JSON:
 
         def json_formatter(record: Record) -> str:
-            """Format record as JSON."""
+            """Formats a Loguru record into a JSON string.
+
+            Args:
+                record: The Loguru `Record` dictionary.
+
+            Returns:
+                A JSON string representation of the log record.
+            """
             log_entry = {
                 "timestamp": record["time"].isoformat(),
                 "level": record["level"].name,
@@ -268,7 +338,27 @@ def setup_logging(
     enable_performance_logs: bool = False,
     enable_separate_error_file: bool = False,
 ) -> None:
-    """Setup Loguru-based structured logging with trace ID support."""
+    """Configures Loguru-based structured logging for the application.
+
+    This function sets up various log sinks (console, file), applies formatting,
+    and integrates with trace ID injection and standard Python logging.
+
+    Args:
+        level: The minimum logging level to capture (e.g., "INFO", "DEBUG").
+        enable_console: If `True`, logs will be output to the console.
+        enable_file: If `True`, logs will be written to a file.
+        log_file: The path to the main log file. Defaults to `logs/app.log`.
+        app_name: An optional name for the application, added as an extra field.
+        environment: An optional environment name (e.g., "production", "development"), added as an extra field.
+        additional_fields: A dictionary of additional key-value pairs to include in every log record.
+        console_format: The `LogFormat` to use for console output.
+        file_format: The `LogFormat` to use for file output.
+        log_filter: An optional `LogFilter` instance to apply custom filtering rules.
+        enable_performance_logs: If `True`, a separate log file (`logs/performance.log`)
+                                 will be created for performance-related messages.
+        enable_separate_error_file: If `True`, a separate log file (`logs/errors.log`)
+                                    will be created for warning and error messages.
+    """
     # Remove default handler
     logger.remove()
 
@@ -383,10 +473,20 @@ def setup_logging(
     import logging
 
     class InterceptHandler(logging.Handler):
-        """Intercept standard library logging and redirect to Loguru."""
+        """A custom logging handler that intercepts standard Python logging records
+        and redirects them to Loguru.
+
+        This ensures that all log messages, regardless of their origin (standard
+        library `logging` module or Loguru), are processed by Loguru's configured
+        sinks and formatters.
+        """
 
         def emit(self, record: logging.LogRecord) -> None:
-            """Emit log record through Loguru."""
+            """Emits a log record by redirecting it to Loguru.
+
+            Args:
+                record: The standard `logging.LogRecord` to be emitted.
+            """
             # Get corresponding Loguru level
             try:
                 level = logger.level(record.levelname).name
@@ -410,7 +510,19 @@ def setup_logging(
 
 
 def get_logger(_: str, **kwargs: Any) -> Logger:
-    """Get a Loguru logger with optional extra fields."""
+    """Retrieves a Loguru logger instance, optionally with bound extra fields.
+
+    This function acts as a wrapper around Loguru's global logger, allowing
+    for the attachment of context-specific data that will be included in all
+    subsequent log messages from this logger instance.
+
+    Args:
+        _: Placeholder for a name, as Loguru's global logger doesn't require one.
+        **kwargs: Arbitrary keyword arguments representing extra fields to bind to the logger.
+
+    Returns:
+        A Loguru `Logger` instance.
+    """
     if kwargs:
         # Bind extra fields to logger
         return logger.bind(**kwargs)
@@ -420,12 +532,35 @@ def get_logger(_: str, **kwargs: Any) -> Logger:
 
 # Convenience function for backward compatibility
 def get_structured_logger(name: str, **extra_fields: Any) -> Logger:
-    """Get a structured logger with extra fields."""
+    """Retrieves a structured logger with specified extra fields.
+
+    This is a convenience function for backward compatibility, equivalent to `get_logger`.
+
+    Args:
+        name: The name of the logger (though not directly used by Loguru's global logger).
+        **extra_fields: Additional key-value pairs to include in log records.
+
+    Returns:
+        A Loguru `Logger` instance with bound extra fields.
+    """
     return get_logger(name, **extra_fields)
 
 
 def log_performance(func_name: str | None = None, level: str = "INFO") -> Callable[..., Any]:
-    """Decorator to log function performance metrics."""
+    """A decorator to log the execution time and success/failure of a function.
+
+    This decorator can be applied to both synchronous and asynchronous functions.
+    It measures the duration of the function call and logs it, along with
+    information about whether the function completed successfully or raised an error.
+
+    Args:
+        func_name: Optional. A custom name to use in the log message for the function.
+                   If `None`, the function's actual name will be used.
+        level: The logging level at which to log the performance metrics (e.g., "INFO", "DEBUG").
+
+    Returns:
+        A decorator that wraps the function to add performance logging.
+    """
     import functools
     import time
 
@@ -498,26 +633,59 @@ def log_performance(func_name: str | None = None, level: str = "INFO") -> Callab
 
 
 class LogContext:
-    """Context manager for adding temporary log context."""
+    """A context manager for temporarily adding extra fields to log records.
+
+    When entering the context, any keyword arguments provided to the constructor
+    are bound to the Loguru logger, meaning they will be included in all log
+    messages emitted within that context. This is useful for adding request-specific
+    or operation-specific context to logs.
+    """
 
     def __init__(self, **context: Any) -> None:
-        """Initialize log context."""
+        """Initializes the LogContext with the given context fields.
+
+        Args:
+            **context: Arbitrary keyword arguments representing the context fields
+                       to add to log records within this context.
+        """
         self.context = context
         self.original_logger: Logger | None = None
 
     def __enter__(self) -> Logger:
-        """Enter context and bind extra fields."""
+        """Enters the context, binding the provided context fields to the logger.
+
+        Returns:
+            The Loguru `Logger` instance with the new context bound.
+        """
         self.original_logger = logger
         return logger.bind(**self.context)
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-        """Exit context."""
-        # Logger binding is automatically handled by loguru
-        pass
+        """Exits the context.
+
+        Loguru automatically handles the unbinding of context fields when the
+        context manager exits.
+
+        Args:
+            exc_type: The type of the exception that caused the context to be exited.
+            exc_val: The exception instance.
+            exc_tb: The traceback object.
+        """
 
 
 def log_function_calls(include_args: bool = False, include_result: bool = False) -> Callable[..., Any]:
-    """Decorator to log function calls."""
+    """A decorator to log the entry and exit of a function, including arguments and results.
+
+    This decorator provides visibility into function execution flow, which can be
+    useful for debugging and understanding program behavior.
+
+    Args:
+        include_args: If `True`, function arguments will be included in the log.
+        include_result: If `True`, the function's return value will be included in the log.
+
+    Returns:
+        A decorator that wraps the function to add call logging.
+    """
     import functools
 
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -581,7 +749,12 @@ def log_function_calls(include_args: bool = False, include_result: bool = False)
 
 
 def configure_third_party_logging() -> None:
-    """Configure third-party library logging levels to reduce noise."""
+    """Configures logging levels for common third-party libraries to reduce log noise.
+
+    This function sets more restrictive logging levels (e.g., WARNING) for
+    libraries that tend to produce a large volume of INFO or DEBUG level logs,
+    making the application logs cleaner and more focused.
+    """
     import logging
 
     # Set more restrictive levels for noisy libraries
@@ -605,7 +778,17 @@ def configure_third_party_logging() -> None:
 
 
 def log_with_trace_id(level: str, message: str, trace_id: str | None = None, **kwargs: Any) -> None:
-    """Log a message with explicit trace ID."""
+    """Logs a message with an explicit trace ID.
+
+    If a `trace_id` is provided, it will be used for the log record. Otherwise,
+    the currently active trace ID from the `TraceContext` will be used.
+
+    Args:
+        level: The logging level (e.g., "INFO", "ERROR").
+        message: The log message string.
+        trace_id: Optional. An explicit trace ID to associate with this log entry.
+        **kwargs: Additional keyword arguments to include as extra fields in the log record.
+    """
     from .trace_id import TraceContext
 
     if trace_id:
@@ -616,7 +799,18 @@ def log_with_trace_id(level: str, message: str, trace_id: str | None = None, **k
 
 
 def log_exception_with_context(exc: Exception, level: str = "ERROR", message: str | None = None, **kwargs: Any) -> None:
-    """Log an exception with full context and trace ID information."""
+    """Logs an exception with rich context, including trace ID and custom error details.
+
+    This function enhances standard exception logging by extracting relevant
+    information from `CoreError` instances (like error codes and details)
+    and associating them with the log record.
+
+    Args:
+        exc: The exception object to log.
+        level: The logging level for the exception (e.g., "ERROR", "CRITICAL").
+        message: Optional. A custom message to prepend to the exception log.
+        **kwargs: Additional keyword arguments to include as extra fields in the log record.
+    """
     from ..exceptions import CoreError
 
     log_message = message or f"Exception occurred: {exc}"
@@ -634,7 +828,19 @@ def log_exception_with_context(exc: Exception, level: str = "ERROR", message: st
 
 
 def create_traced_logger(name: str, **default_fields: Any) -> Logger:
-    """Create a logger that always includes trace ID and default fields."""
+    """Creates a Loguru logger instance that automatically includes a trace ID and default fields.
+
+    This logger is useful for components that consistently need to log with
+    a specific component name and other predefined context, while also ensuring
+    traceability through a trace ID.
+
+    Args:
+        name: The name of the component or module associated with this logger.
+        **default_fields: Default key-value pairs to include in every log record from this logger.
+
+    Returns:
+        A Loguru `Logger` instance with bound fields and trace ID patching enabled.
+    """
 
     # Add trace ID to default fields
     fields = {"component": name, **default_fields}
@@ -643,15 +849,31 @@ def create_traced_logger(name: str, **default_fields: Any) -> Logger:
 
 
 class TraceableLogger:
-    """Logger wrapper that ensures trace ID is always present."""
+    """A wrapper around Loguru's logger that ensures a trace ID is always present in log records.
+
+    This class provides a convenient interface for logging within components
+    that require all their log messages to be associated with a trace ID,
+    facilitating distributed tracing and debugging.
+    """
 
     def __init__(self, name: str, **default_fields: Any) -> None:
+        """Initializes the TraceableLogger.
+
+        Args:
+            name: The name of the logger, typically the module or component name.
+            **default_fields: Default key-value pairs to include in every log record.
+        """
         self.name = name
-        self.default_fields = default_fields
-        self._logger = create_traced_logger(name, **default_fields)
+        self.default_fields = {"component": name, **default_fields}
 
     def _log(self, level: str, message: str, **kwargs: Any) -> None:
-        """Internal log method that ensures trace ID is present."""
+        """Internal method to log a message, ensuring trace ID is present.
+
+        Args:
+            level: The logging level (e.g., "DEBUG", "INFO").
+            message: The log message string.
+            **kwargs: Additional keyword arguments to include as extra fields.
+        """
         from .trace_id import ensure_trace_id
 
         # Ensure we have a trace ID
@@ -665,33 +887,68 @@ class TraceableLogger:
         bound_logger.log(level, message)
 
     def debug(self, message: str, **kwargs: Any) -> None:
-        """Log debug message."""
+        """Logs a debug-level message.
+
+        Args:
+            message: The debug message string.
+            **kwargs: Additional keyword arguments to include as extra fields.
+        """
         self._log("DEBUG", message, **kwargs)
 
     def info(self, message: str, **kwargs: Any) -> None:
-        """Log info message."""
+        """Logs an info-level message.
+
+        Args:
+            message: The info message string.
+            **kwargs: Additional keyword arguments to include as extra fields.
+        """
         self._log("INFO", message, **kwargs)
 
     def warning(self, message: str, **kwargs: Any) -> None:
-        """Log warning message."""
+        """Logs a warning-level message.
+
+        Args:
+            message: The warning message string.
+            **kwargs: Additional keyword arguments to include as extra fields.
+        """
         self._log("WARNING", message, **kwargs)
 
     def error(self, message: str, exc: Exception | None = None, **kwargs: Any) -> None:
-        """Log error message with optional exception."""
+        """Logs an error-level message, optionally with an exception.
+
+        Args:
+            message: The error message string.
+            exc: Optional. The exception object to log.
+            **kwargs: Additional keyword arguments to include as extra fields.
+        """
         if exc:
             log_exception_with_context(exc, "ERROR", message, **kwargs)
         else:
             self._log("ERROR", message, **kwargs)
 
     def critical(self, message: str, exc: Exception | None = None, **kwargs: Any) -> None:
-        """Log critical message with optional exception."""
+        """Logs a critical-level message, optionally with an exception.
+
+        Args:
+            message: The critical message string.
+            exc: Optional. The exception object to log.
+            **kwargs: Additional keyword arguments to include as extra fields.
+        """
         if exc:
             log_exception_with_context(exc, "CRITICAL", message, **kwargs)
         else:
             self._log("CRITICAL", message, **kwargs)
 
     def exception(self, message: str, **kwargs: Any) -> None:
-        """Log exception with traceback (should be called from exception handler)."""
+        """Logs an exception message, typically used within an exception handler.
+
+        This method automatically captures exception information from the current
+        execution context and logs it at the ERROR level.
+
+        Args:
+            message: The message to log alongside the exception.
+            **kwargs: Additional keyword arguments to include as extra fields.
+        """
         import sys
 
         exc_info = sys.exc_info()

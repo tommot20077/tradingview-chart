@@ -20,24 +20,23 @@ from src.asset_core.asset_core.config.storage import BaseStorageConfig
 
 
 class TestConfigurationEdgeCases:
-    """
-    Tests for configuration edge cases and boundary conditions.
+    """Test cases for configuration edge cases and boundary conditions.
 
     Verifies that configuration classes handle unusual inputs,
     malformed data, and edge cases gracefully.
     """
 
     def test_missing_required_config_fields(self):
-        """
-        Test behavior when required configuration fields are missing.
+        """Test behavior when required configuration fields are missing.
 
+        Description of what the test covers.
         Verifies that clear error messages are provided when required
         fields are not provided in various scenarios.
 
         Expected Result:
-            - ValidationError raised for missing required fields
-            - Error messages clearly indicate which fields are missing
-            - Multiple missing fields are all reported
+        - `ValidationError` raised for missing required fields.
+        - Error messages clearly indicate which fields are missing.
+        - Multiple missing fields are all reported.
         """
 
         # Test a config class with truly required fields
@@ -77,16 +76,16 @@ class TestConfigurationEdgeCases:
         assert expected_missing.issubset(missing_fields)
 
     def test_invalid_type_coercion_scenarios(self):
-        """
-        Test invalid type coercion and conversion scenarios.
+        """Test invalid type coercion and conversion scenarios.
 
+        Description of what the test covers.
         Verifies that type conversion failures are handled gracefully
         and provide meaningful error messages.
 
         Expected Result:
-            - Type conversion errors provide clear messages
-            - Invalid types are rejected appropriately
-            - Edge cases in type conversion are handled
+        - Type conversion errors provide clear messages.
+        - Invalid types are rejected appropriately.
+        - Edge cases in type conversion are handled.
         """
         # Test invalid integer coercion
         with pytest.raises(ValidationError) as exc_info:
@@ -129,16 +128,16 @@ class TestConfigurationEdgeCases:
             )
 
     def test_circular_dependency_config_scenarios(self):
-        """
-        Test configuration scenarios with potential circular dependencies.
+        """Test configuration scenarios with potential circular dependencies.
 
+        Description of what the test covers.
         Verifies that configurations don't create circular dependencies
         or infinite recursion in validation or serialization.
 
         Expected Result:
-            - No circular dependencies in configuration loading
-            - Serialization completes without infinite recursion
-            - Validation doesn't cause stack overflow
+        - No circular dependencies in configuration loading.
+        - Serialization completes without infinite recursion.
+        - Validation doesn't cause stack overflow.
         """
 
         # Create a config that references itself (potential circular dependency)
@@ -168,16 +167,16 @@ class TestConfigurationEdgeCases:
         assert isinstance(nested_data, dict)
 
     def test_extremely_large_config_values(self):
-        """
-        Test configuration with extremely large values.
+        """Test configuration with extremely large values.
 
+        Description of what the test covers.
         Verifies that very large values are handled appropriately
         and don't cause memory or performance issues.
 
         Expected Result:
-            - Large strings are handled correctly
-            - Large numbers are validated appropriately
-            - Memory usage remains reasonable
+        - Large strings are handled correctly.
+        - Large numbers are validated appropriately.
+        - Memory usage remains reasonable.
         """
         # Test very long strings
         very_long_string = "x" * 10000
@@ -202,16 +201,16 @@ class TestConfigurationEdgeCases:
         assert len(serialized["database_url"]) > 1000
 
     def test_special_characters_in_config_values(self):
-        """
-        Test configuration with special characters and Unicode.
+        """Test configuration with special characters and Unicode.
 
+        Description of what the test covers.
         Verifies that special characters, Unicode, and encoded strings
         are handled correctly in configuration values.
 
         Expected Result:
-            - Unicode characters are preserved correctly
-            - Special characters don't break validation
-            - Encoding issues are handled gracefully
+        - Unicode characters are preserved correctly.
+        - Special characters don't break validation.
+        - Encoding issues are handled gracefully.
         """
         # Test Unicode characters
         unicode_app_name = "应用程序名称_тест_アプリ"
@@ -244,16 +243,16 @@ class TestConfigurationEdgeCases:
         assert isinstance(json_string, str)
 
     def test_malformed_env_file_handling(self):
-        """
-        Test handling of malformed .env files.
+        """Test handling of malformed .env files.
 
+        Description of what the test covers.
         Verifies that malformed .env files are handled gracefully
         without crashing the application.
 
         Expected Result:
-            - Malformed .env files don't crash configuration loading
-            - Valid entries in malformed files are still processed
-            - Clear error messages for parsing issues
+        - Malformed .env files don't crash configuration loading.
+        - Valid entries in malformed files are still processed.
+        - Clear error messages for parsing issues.
         """
         # Create a malformed .env file
         malformed_env_content = """
@@ -293,16 +292,16 @@ DEBUG=true
             os.unlink(env_file_path)
 
     def test_environment_variable_injection_security(self):
-        """
-        Test security aspects of environment variable injection.
+        """Test security aspects of environment variable injection.
 
+        Description of what the test covers.
         Verifies that environment variable loading doesn't create
         security vulnerabilities or allow code injection.
 
         Expected Result:
-            - Environment variables are treated as data, not code
-            - No code execution from environment values
-            - Proper sanitization of dangerous characters
+        - Environment variables are treated as data, not code.
+        - No code execution from environment values.
+        - Proper sanitization of dangerous characters.
         """
         # Test potentially dangerous environment variable values
         dangerous_env_vars = {
@@ -335,16 +334,16 @@ DEBUG=true
         assert "$(rm -rf /)" in str(serialized)
 
     def test_configuration_encoding_edge_cases(self):
-        """
-        Test configuration handling with different text encodings.
+        """Test configuration handling with different text encodings.
 
+        Description of what the test covers.
         Verifies that configurations handle various text encodings
         correctly without data corruption.
 
         Expected Result:
-            - Different encodings are handled correctly
-            - No data corruption during encoding conversion
-            - Proper fallback for unsupported encodings
+        - Different encodings are handled correctly.
+        - No data corruption during encoding conversion.
+        - Proper fallback for unsupported encodings.
         """
         # Test UTF-8 with BOM
         utf8_bom_content = "APP_NAME=utf8_bom_app\nENVIRONMENT=production\n"
@@ -387,16 +386,16 @@ DEBUG=true
             os.unlink(env_file_path)
 
     def test_configuration_memory_usage_limits(self):
-        """
-        Test configuration behavior under memory constraints.
+        """Test configuration behavior under memory constraints.
 
+        Description of what the test covers.
         Verifies that configuration loading doesn't consume
         excessive memory even with large configurations.
 
         Expected Result:
-            - Memory usage remains reasonable
-            - Large configurations don't cause memory exhaustion
-            - Proper cleanup of temporary objects
+        - Memory usage remains reasonable.
+        - Large configurations don't cause memory exhaustion.
+        - Proper cleanup of temporary objects.
         """
         import gc
 
@@ -427,16 +426,16 @@ DEBUG=true
         gc.collect()
 
     def test_configuration_thread_safety_concerns(self):
-        """
-        Test configuration behavior in multi-threaded scenarios.
+        """Test configuration behavior in multi-threaded scenarios.
 
+        Description of what the test covers.
         Verifies that configuration loading and validation
         is thread-safe and doesn't cause race conditions.
 
         Expected Result:
-            - No race conditions in configuration loading
-            - Thread-safe validation and serialization
-            - Consistent behavior across threads
+        - No race conditions in configuration loading.
+        - Thread-safe validation and serialization.
+        - Consistent behavior across threads.
         """
         import time
         from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -491,16 +490,16 @@ DEBUG=true
             assert isinstance(result["serialized"], dict)
 
     def test_configuration_performance_with_large_inheritance_chains(self):
-        """
-        Test configuration performance with deep inheritance chains.
+        """Test configuration performance with deep inheritance chains.
 
+        Description of what the test covers.
         Verifies that deep inheritance chains don't cause
         significant performance degradation.
 
         Expected Result:
-            - Performance remains acceptable with deep inheritance
-            - No exponential time complexity
-            - Memory usage scales linearly
+        - Performance remains acceptable with deep inheritance.
+        - No exponential time complexity.
+        - Memory usage scales linearly.
         """
         import time
 

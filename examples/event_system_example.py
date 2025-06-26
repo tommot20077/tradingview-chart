@@ -15,8 +15,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from src.asset_core.asset_core.events.bus import AbstractEventBus, AsyncEventHandler, \
-    EventHandler
+from src.asset_core.asset_core.events.bus import AbstractEventBus, AsyncEventHandler, EventHandler
 from src.asset_core.asset_core.models.events import (
     BaseEvent,
     ConnectionEvent,

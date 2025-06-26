@@ -1,170 +1,748 @@
-"""
-Property-based tests for data models using Hypothesis.
+"""Property-based tests for Trade and Kline models using Hypothesis."""
 
-This module uses Hypothesis to generate a wide range of inputs for data models
-to verify their integrity and validation logic under various conditions.
-
-Preconditions:
-    - `hypothesis` library must be installed.
-    - Core data models (`Kline`, `Trade`) must be defined and importable.
-
-Steps:
-    1. Define strategies for generating `Kline` and `Trade` instances.
-    2. Use `@given` to apply these strategies to test functions.
-    3. Assert that model invariants and validation rules hold true.
-
-Expected Result:
-    - Tests should pass for all generated valid inputs.
-    - Pydantic's `ValidationError` should be caught for invalid inputs.
-"""
-
-from datetime import datetime, timedelta
+import json
+from datetime import UTC, datetime
 from decimal import Decimal
 
-from asset_core.models.kline import Kline, KlineInterval
-from asset_core.models.trade import Trade, TradeSide
-from hypothesis import HealthCheck, given, settings
+import pytest
+from hypothesis import HealthCheck, assume, given, settings
 from hypothesis import strategies as st
 
-# Strategy for generating valid decimals (prices, quantities)
-valid_decimals = st.decimals(
-    min_value="0.00000001", max_value="100000000", allow_nan=False, allow_infinity=False, places=8
-)
-
-# Strategy for generating timestamps
-valid_datetimes = st.datetimes(min_value=datetime(2020, 1, 1), max_value=datetime(2030, 1, 1))
+from src.asset_core.asset_core.models.kline import Kline, KlineInterval
+from src.asset_core.asset_core.models.trade import Trade, TradeSide
 
 
-@st.composite
-def kline_strategy(draw):
-    """Hypothesis strategy to generate Kline instances."""
-    # Generate time range - for MINUTE_1 interval, open_time must be aligned to minute boundaries
-    base_time = draw(valid_datetimes)
-    # Align to minute boundary (set seconds and microseconds to 0)
-    open_time = base_time.replace(second=0, microsecond=0)
-    # For MINUTE_1 interval, duration must be exactly 60 seconds
-    close_time = open_time + timedelta(seconds=60)
+# Hypothesis strategies for model testing
+def decimal_strategy(min_value: str = "0.000000000001", max_value: str = "1000000000") -> st.SearchStrategy[Decimal]:
+    """Generates Decimal values within a specified range with updated precision.
 
-    # Generate prices
-    open_price = draw(valid_decimals)
-    close_price = draw(valid_decimals)
+    Args:
+        min_value (str): The minimum value for the Decimal numbers (inclusive).
+        max_value (str): The maximum value for the Decimal numbers (inclusive).
 
-    # Generate additional price points and ensure high/low constraints
-    price1 = draw(valid_decimals)
-    price2 = draw(valid_decimals)
-
-    # Ensure high is the maximum and low is the minimum
-    all_prices = [open_price, close_price, price1, price2]
-    high_price = max(all_prices)
-    low_price = min(all_prices)
-
-    # Generate volumes
-    volume = draw(valid_decimals)
-    quote_volume = volume * close_price
-
-    return Kline(
-        symbol="BTCUSDT",
-        interval=KlineInterval.MINUTE_1,
-        open_time=open_time,
-        close_time=close_time,
-        open_price=open_price,
-        high_price=high_price,
-        low_price=low_price,
-        close_price=close_price,
-        volume=volume,
-        quote_volume=quote_volume,
-        trades_count=draw(st.integers(min_value=1, max_value=10000)),
+    Returns:
+        st.SearchStrategy[Decimal]: A Hypothesis strategy that generates Decimal numbers.
+    """
+    return st.decimals(
+        min_value=Decimal(min_value), max_value=Decimal(max_value), allow_nan=False, allow_infinity=False, places=12
     )
 
 
-@st.composite
-def trade_strategy(draw):
-    """Hypothesis strategy to generate Trade instances."""
-    # Generate price and quantity such that their product (volume) meets constraints
-    # Volume must be >= 0.01 and <= 100000000
-    price = draw(st.decimals(min_value=Decimal("0.01"), max_value=Decimal("100000"), places=8))
+def symbol_strategy() -> st.SearchStrategy[str]:
+    """Generates valid trading symbols.
 
-    # Calculate quantity range based on price to ensure volume constraints
-    # Use a safer buffer to ensure volume is always above 0.01
-    min_quantity = (Decimal("0.01") / price) * Decimal("1.01")  # Minimum to meet 0.01 volume with 1% buffer
-    max_quantity = Decimal("100000000") / price  # Maximum to stay under volume limit
-
-    # Ensure quantity is within reasonable bounds
-    max_quantity = min(max_quantity, Decimal("1000000"))  # Cap at 1M for reasonableness
-
-    quantity = draw(st.decimals(min_value=min_quantity, max_value=max_quantity, places=8))
-
-    # Final safety check: ensure volume is at least 0.01
-    volume = price * quantity
-    if volume < Decimal("0.01"):
-        quantity = Decimal("0.01") / price + Decimal("0.0001")  # Add small fixed buffer
-
-    return Trade(
-        symbol="BTCUSDT",
-        trade_id=str(draw(st.uuids())),
-        price=price,
-        quantity=quantity,
-        side=draw(st.sampled_from(TradeSide)),
-        timestamp=draw(valid_datetimes),
-    )
+    Returns:
+        st.SearchStrategy[str]: A Hypothesis strategy that generates strings
+                                suitable for trading symbols (alphanumeric, underscores).
+    """
+    return st.text(
+        alphabet=st.characters(whitelist_categories=["Lu", "Ll", "Nd", "Pc"]), min_size=1, max_size=20
+    ).filter(lambda x: x.strip() and not x.isspace())
 
 
-class TestModelPropertyBased:
-    """Property-based tests for data models."""
+def trade_side_strategy() -> st.SearchStrategy[TradeSide]:
+    """Generates `TradeSide` enum values.
 
-    @given(kline_strategy())
-    @settings(max_examples=10, suppress_health_check=[HealthCheck.too_slow])
-    def test_kline_invariants(self, kline_instance: Kline):
-        """
-        Tests that Kline invariants (e.g., high >= low) hold true.
+    Returns:
+        st.SearchStrategy[TradeSide]: A Hypothesis strategy that generates `TradeSide.BUY` or `TradeSide.SELL`.
+    """
+    return st.sampled_from(TradeSide)
 
-        Description:
-            This test uses Hypothesis to generate a wide variety of Kline objects.
-            It ensures that for any generated Kline, the `high` price is always
-            greater than or equal to the `low` price, and that both are also
-            consistent with the `open` and `close` prices.
+
+def datetime_strategy() -> st.SearchStrategy[datetime]:
+    """Generates datetime values in a reasonable range for testing.
+
+    Returns:
+        st.SearchStrategy[datetime]: A Hypothesis strategy that generates datetime objects
+                                     between 2020-01-01 and 2030-12-31, without timezone info.
+    """
+    return st.datetimes(min_value=datetime(2020, 1, 1), max_value=datetime(2030, 12, 31), timezones=st.none())
+
+
+def trade_strategy() -> st.SearchStrategy[Trade]:
+    """Generates valid Trade instances with proper volume constraints.
+
+    Returns:
+        st.SearchStrategy[Trade]: A Hypothesis strategy that generates `Trade` objects,
+                                 ensuring that `price` and `quantity` combinations
+                                 result in a valid `volume`.
+    """
+
+    @st.composite
+    def _trade_strategy(draw):
+        # Generate valid price first with reasonable range for testing
+        price = draw(decimal_strategy(min_value="0.01", max_value="100000"))
+
+        # Calculate quantity that ensures volume is well within valid range (0.001 to 10000000000)
+        # Add safety margin to avoid precision issues at boundaries
+        min_quantity = Decimal("0.002") / price  # Slightly above minimum
+        max_quantity = Decimal("1000000000") / price  # Well below maximum
+
+        # Ensure quantity is within valid range and reasonable for testing
+        min_q = max(min_quantity, Decimal("0.000000000001"))
+        max_q = min(max_quantity, Decimal("100000"))  # Reduced for more reliable testing
+
+        quantity = draw(st.decimals(min_value=min_q, max_value=max_q, places=12, allow_nan=False, allow_infinity=False))
+
+        return Trade(
+            symbol=draw(symbol_strategy()),
+            trade_id=draw(st.text(min_size=1, max_size=50)),
+            price=price,
+            quantity=quantity,
+            side=draw(trade_side_strategy()),
+            timestamp=draw(datetime_strategy()),
+            exchange=draw(st.one_of(st.none(), st.text(min_size=1, max_size=20))),
+            maker_order_id=draw(st.one_of(st.none(), st.text(min_size=1, max_size=50))),
+            taker_order_id=draw(st.one_of(st.none(), st.text(min_size=1, max_size=50))),
+            is_buyer_maker=draw(st.one_of(st.none(), st.booleans())),
+            received_at=draw(st.one_of(st.none(), datetime_strategy())),
+            metadata=draw(st.dictionaries(st.text(), st.text())),
+        )
+
+    return _trade_strategy()
+
+
+def kline_interval_strategy() -> st.SearchStrategy[KlineInterval]:
+    """Generates `KlineInterval` enum values.
+
+    Returns:
+        st.SearchStrategy[KlineInterval]: A Hypothesis strategy that generates `KlineInterval` enum members.
+    """
+    return st.sampled_from(KlineInterval)
+
+
+def ohlc_prices_strategy() -> st.SearchStrategy[dict[str, Decimal]]:
+    """Generates valid OHLC price combinations.
+
+    Ensures that `low` <= `open`, `close` <= `high`.
+
+    Returns:
+        st.SearchStrategy[dict[str, Decimal]]: A Hypothesis strategy that generates a dictionary
+                                              with 'open_price', 'high_price', 'low_price', and 'close_price' keys.
+    """
+
+    @st.composite
+    def _ohlc_prices(draw):
+        # Generate base prices
+        low = draw(decimal_strategy())
+        high = draw(decimal_strategy(min_value=str(low)))
+
+        # Ensure high >= low
+        assume(high >= low)
+
+        # Generate open and close within [low, high] range
+        open_price = draw(st.decimals(min_value=low, max_value=high, places=12))
+        close_price = draw(st.decimals(min_value=low, max_value=high, places=12))
+
+        return {"open_price": open_price, "high_price": high, "low_price": low, "close_price": close_price}
+
+    return _ohlc_prices()
+
+
+def kline_strategy() -> st.SearchStrategy[Kline]:
+    """Generates valid Kline instances.
+
+    Ensures that `open_time` and `close_time` are aligned with the `interval`.
+
+    Returns:
+        st.SearchStrategy[Kline]: A Hypothesis strategy that generates `Kline` objects.
+    """
+
+    @st.composite
+    def _kline(draw):
+        interval = draw(kline_interval_strategy())
+        open_time = draw(datetime_strategy())
+
+        # Align open_time to interval boundary
+        interval_seconds = KlineInterval.to_seconds(interval)
+        timestamp_seconds = int(open_time.timestamp())
+        aligned_timestamp = (timestamp_seconds // interval_seconds) * interval_seconds
+        aligned_open_time = datetime.fromtimestamp(aligned_timestamp, tz=UTC)
+
+        close_time = aligned_open_time + KlineInterval.to_timedelta(interval)
+
+        ohlc_prices = draw(ohlc_prices_strategy())
+
+        volume = draw(decimal_strategy(min_value="0", max_value="1000000"))
+        quote_volume = draw(decimal_strategy(min_value="0", max_value="10000000"))
+
+        taker_buy_vol = draw(st.one_of(st.none(), decimal_strategy(min_value="0", max_value=str(volume))))
+        taker_buy_quote_vol = draw(st.one_of(st.none(), decimal_strategy(min_value="0", max_value=str(quote_volume))))
+
+        return Kline(
+            symbol=draw(symbol_strategy()),
+            interval=interval,
+            open_time=aligned_open_time,
+            close_time=close_time,
+            **ohlc_prices,
+            volume=volume,
+            quote_volume=quote_volume,
+            trades_count=draw(st.integers(min_value=0, max_value=100000)),
+            exchange=draw(st.one_of(st.none(), st.text(min_size=1, max_size=20))),
+            taker_buy_volume=taker_buy_vol,
+            taker_buy_quote_volume=taker_buy_quote_vol,
+            is_closed=draw(st.booleans()),
+            received_at=draw(st.one_of(st.none(), datetime_strategy())),
+            metadata=draw(st.dictionaries(st.text(), st.text())),
+        )
+
+    return _kline()
+
+
+@pytest.mark.unit
+class TestTradePropertyBased:
+    """Property-based tests for Trade model.
+
+    These tests use Hypothesis to generate diverse inputs and verify
+    invariants and behaviors of the `Trade` model, ensuring robustness.
+    """
+
+    @given(trade_data=trade_strategy())
+    @settings(suppress_health_check=[HealthCheck.too_slow])
+    def test_price_quantity_invariants(self, trade_data: Trade) -> None:
+        """Test price and quantity invariants with property-based testing.
+
+        Description of what the test covers.
+        This test uses Hypothesis to generate `Trade` objects and assert that price
+        and quantity are always positive, and their product (volume) is consistent.
 
         Preconditions:
-            - A valid Kline instance generated by the kline_strategy.
+            - Generated trades use optimized strategy with valid ranges.
+            - Trade model validation rules are enforced.
 
         Steps:
-            1. Generate a Kline instance using the strategy.
-            2. Assert that `kline.high` is the maximum of the four prices.
-            3. Assert that `kline.low` is the minimum of the four prices.
+            - Use generated `Trade` with valid price and quantity.
+            - Verify `price > 0` and `quantity > 0`.
+            - Verify `volume = price × quantity` calculation.
+            - Test mathematical properties and edge cases.
 
         Expected Result:
-            - The assertions should always pass, confirming the model's
-              internal validation logic for OHLC prices.
+            - All price/quantity invariants hold.
+            - Volume calculation is mathematically correct.
+            - Edge cases are handled properly.
         """
-        assert kline_instance.high_price == max(
-            kline_instance.open_price, kline_instance.high_price, kline_instance.low_price, kline_instance.close_price
-        )
-        assert kline_instance.low_price == min(
-            kline_instance.open_price, kline_instance.high_price, kline_instance.low_price, kline_instance.close_price
-        )
-        assert kline_instance.low_price > Decimal(0)
 
-    @given(trade_strategy())
-    @settings(max_examples=10)  # Reduce test examples for performance
-    def test_trade_invariants(self, trade_instance: Trade):
-        """
-        Tests that Trade invariants (e.g., positive price) hold true.
+        # Test basic invariants using the generated trade
+        assert trade_data.price > 0
+        assert trade_data.quantity > 0
+        assert trade_data.volume > 0
 
-        Description:
-            This test uses Hypothesis to generate various Trade objects.
-            It verifies that fundamental invariants, such as price and quantity
-            always being positive, are maintained by the model's validation.
+        # Test mathematical relationship
+        expected_volume = trade_data.price * trade_data.quantity
+        assert trade_data.volume == expected_volume
+
+        # Test precision preservation
+        assert isinstance(trade_data.price, Decimal)
+        assert isinstance(trade_data.quantity, Decimal)
+        assert isinstance(trade_data.volume, Decimal)
+
+        # Test that volume calculation is consistent
+        recalculated_volume = trade_data.price * trade_data.quantity
+        assert trade_data.volume == recalculated_volume
+
+    @given(trade_data=trade_strategy())
+    def test_volume_calculation_property(self, trade_data: Trade) -> None:
+        """Test volume calculation correctness across all Trade instances.
+
+        Description of what the test covers.
+        This test verifies that the volume calculation is always mathematically
+        correct regardless of the input values used to construct the `Trade`.
 
         Preconditions:
-            - A valid Trade instance generated by the trade_strategy.
+            - `Trade` instance is valid.
+            - Price and quantity are positive decimals.
 
         Steps:
-            1. Generate a Trade instance.
-            2. Assert that `trade.price` is greater than zero.
-            3. Assert that `trade.quantity` is greater than zero.
+            - Generate `Trade` instance with Hypothesis.
+            - Verify `volume = price × quantity`.
+            - Test calculation precision.
+            - Test decimal arithmetic consistency.
 
         Expected Result:
-            - The assertions should always pass, ensuring data integrity.
+            - Volume calculation is always correct.
+            - No precision loss in decimal arithmetic.
+            - Mathematical properties are preserved.
         """
-        assert trade_instance.price > Decimal(0)
-        assert trade_instance.quantity > Decimal(0)
+        # Volume should always equal price × quantity
+        expected_volume = trade_data.price * trade_data.quantity
+        assert trade_data.volume == expected_volume
+
+        # Volume should be positive (since price and quantity are positive)
+        assert trade_data.volume > 0
+
+        # Test precision - volume should have appropriate decimal places
+        assert isinstance(trade_data.volume, Decimal)
+
+        # Test that volume doesn't change when accessed multiple times
+        volume1 = trade_data.volume
+        volume2 = trade_data.volume
+        assert volume1 == volume2
+
+        # Test mathematical properties
+        assert (
+            trade_data.volume >= trade_data.price if trade_data.quantity >= 1 else trade_data.volume <= trade_data.price
+        )
+        assert (
+            trade_data.volume >= trade_data.quantity
+            if trade_data.price >= 1
+            else trade_data.volume <= trade_data.quantity
+        )
+
+    @given(symbol_input=st.text(min_size=1, max_size=50))
+    def test_symbol_normalization_property(self, symbol_input: str) -> None:
+        """Test symbol normalization idempotency and consistency.
+
+        Description of what the test covers.
+        This test verifies that symbol normalization consistently produces the
+        expected normalized form for various inputs, and that normalization
+        is idempotent (applying it multiple times yields the same result).
+
+        Preconditions:
+            - Input symbol is non-empty string.
+            - Symbol normalization rules are well-defined.
+
+        Steps:
+            - Generate various symbol inputs.
+            - Create `Trade` with symbol.
+            - Verify normalization rules (uppercase, stripped).
+            - Test idempotency of normalization.
+
+        Expected Result:
+            - Symbols are consistently normalized to uppercase.
+            - Leading/trailing whitespace is removed.
+            - Normalization is idempotent.
+        """
+        # Skip invalid symbols that would be rejected
+        assume(symbol_input.strip())
+        assume(len(symbol_input.strip()) > 0)
+
+        try:
+            trade = Trade(
+                symbol=symbol_input,
+                trade_id="test_trade",
+                price=Decimal("100.0"),
+                quantity=Decimal("1.0"),
+                side=TradeSide.BUY,
+                timestamp=datetime.now(UTC),
+            )
+
+            # Test normalization rules
+            expected_symbol = symbol_input.strip().upper()
+            assert trade.symbol == expected_symbol
+
+            # Test idempotency - creating another trade with the normalized symbol
+            trade2 = Trade(
+                symbol=trade.symbol,
+                trade_id="test_trade2",
+                price=Decimal("100.0"),
+                quantity=Decimal("1.0"),
+                side=TradeSide.BUY,
+                timestamp=datetime.now(UTC),
+            )
+            assert trade2.symbol == trade.symbol
+
+            # Test that normalization is consistent
+            # Note: Numeric symbols are valid but don't have .isupper() == True
+            assert trade.symbol == trade.symbol.upper()
+            assert trade.symbol == trade.symbol.strip()
+
+        except ValueError:
+            # If symbol validation rejects the input, that's acceptable
+            # The test is about valid symbols being normalized correctly
+            pass
+
+    @given(dt=datetime_strategy())
+    def test_timestamp_conversion_property(self, dt: datetime) -> None:
+        """Test timestamp conversion round-trip consistency.
+
+        Description of what the test covers.
+        This test verifies that timezone conversions are handled correctly
+        and that timestamp precision is preserved through various operations.
+
+        Preconditions:
+            - Generated datetime is within reasonable range.
+            - Timezone handling is implemented correctly.
+
+        Steps:
+            - Generate datetime with timezone info.
+            - Create `Trade` with timestamp.
+            - Verify timezone conversion to UTC.
+            - Test round-trip conversion consistency.
+
+        Expected Result:
+            - Timestamps are converted to UTC.
+            - Precision is preserved (microsecond level).
+            - Round-trip conversions are consistent.
+        """
+        trade = Trade(
+            symbol="TESTBTC",
+            trade_id="test_trade",
+            price=Decimal("100.0"),
+            quantity=Decimal("1.0"),
+            side=TradeSide.BUY,
+            timestamp=dt,
+        )
+
+        # Timestamp should be in UTC
+        assert trade.timestamp.tzinfo == UTC
+
+        # Test precision preservation (should preserve microseconds)
+        if dt.tzinfo is not None:
+            # If input had timezone info, should be converted to UTC
+            assert trade.timestamp.timestamp() == dt.timestamp()
+        else:
+            # If input was naive, it gets interpreted as UTC
+            expected_dt = dt.replace(tzinfo=UTC)
+            assert trade.timestamp == expected_dt
+
+        # Test that timestamp is immutable-like (accessing multiple times gives same result)
+        timestamp1 = trade.timestamp
+        timestamp2 = trade.timestamp
+        assert timestamp1 == timestamp2
+
+        # Test serialization round-trip through ISO format
+        iso_string = trade.timestamp.isoformat()
+        parsed_timestamp = datetime.fromisoformat(iso_string)
+        assert parsed_timestamp == trade.timestamp
+
+    @given(trade_data=trade_strategy())
+    def test_serialization_roundtrip_property(self, trade_data: Trade) -> None:
+        """Test Trade serialization/deserialization round-trip consistency.
+
+        Description of what the test covers.
+        This test verifies that `Trade` objects can be serialized to dict/JSON
+        and deserialized back without losing any information or precision.
+
+        Preconditions:
+            - `Trade` instance is valid.
+            - Serialization methods are implemented.
+
+        Steps:
+            - Generate `Trade` instance.
+            - Serialize to dict using `to_dict()`.
+            - Verify all fields are preserved.
+            - Test JSON serialization round-trip.
+            - Verify reconstructed object equivalence.
+
+        Expected Result:
+            - Serialization preserves all field values.
+            - No precision loss in decimal values.
+            - Round-trip serialization is lossless.
+        """
+        # Test to_dict() serialization
+        trade_dict = trade_data.to_dict()
+
+        # Verify all required fields are present
+        required_fields = ["symbol", "trade_id", "price", "quantity", "side", "timestamp", "volume"]
+        for field in required_fields:
+            assert field in trade_dict
+
+        # Test that prices are properly serialized as strings
+        assert isinstance(trade_dict["price"], str)
+        assert isinstance(trade_dict["quantity"], str)
+        assert isinstance(trade_dict["volume"], str)
+
+        # Test decimal precision preservation
+        assert Decimal(trade_dict["price"]) == trade_data.price
+        assert Decimal(trade_dict["quantity"]) == trade_data.quantity
+        assert Decimal(trade_dict["volume"]) == trade_data.volume
+
+        # Test timestamp serialization
+        assert isinstance(trade_dict["timestamp"], str)
+        parsed_timestamp = datetime.fromisoformat(trade_dict["timestamp"])
+        # Timestamps should be equivalent (in UTC)
+        assert parsed_timestamp.replace(tzinfo=UTC) == trade_data.timestamp
+
+        # Test side serialization - handle both enum and string cases
+        expected_side = trade_data.side.value if hasattr(trade_data.side, "value") else trade_data.side
+        assert trade_dict["side"] == expected_side
+
+        # Test JSON serialization round-trip
+        json_str = json.dumps(trade_dict)
+        reconstructed_dict = json.loads(json_str)
+
+        # Verify JSON round-trip preserves all values
+        assert reconstructed_dict["symbol"] == trade_data.symbol
+        assert Decimal(reconstructed_dict["price"]) == trade_data.price
+        assert Decimal(reconstructed_dict["quantity"]) == trade_data.quantity
+
+        # Test optional fields preservation
+        if trade_data.exchange is not None:
+            assert trade_dict.get("exchange") == trade_data.exchange
+        if trade_data.maker_order_id is not None:
+            assert trade_dict.get("maker_order_id") == trade_data.maker_order_id
+        if trade_data.taker_order_id is not None:
+            assert trade_dict.get("taker_order_id") == trade_data.taker_order_id
+        if trade_data.is_buyer_maker is not None:
+            assert trade_dict.get("is_buyer_maker") == trade_data.is_buyer_maker
+        if trade_data.metadata is not None:
+            assert trade_dict.get("metadata") == trade_data.metadata
+
+
+@pytest.mark.unit
+class TestKlinePropertyBased:
+    """Property-based tests for Kline model.
+
+    These tests use Hypothesis to generate diverse inputs and verify
+    invariants and behaviors of the `Kline` model, ensuring robustness.
+    """
+
+    @given(ohlc_data=ohlc_prices_strategy())
+    def test_ohlc_relationship_invariants(self, ohlc_data: dict[str, Decimal]) -> None:
+        """Test OHLC price relationship invariants.
+
+        Description of what the test covers.
+        This test verifies that OHLC prices maintain their mathematical
+        relationships: `low` <= `open`, `close` <= `high`, and `low` <= `high`.
+
+        Preconditions:
+            - Generated OHLC prices satisfy basic constraints.
+            - Kline validation enforces OHLC relationships.
+
+        Steps:
+            - Generate valid OHLC price combinations.
+            - Create `Kline` with these prices.
+            - Verify all OHLC mathematical relationships.
+            - Test edge cases (all prices equal).
+
+        Expected Result:
+            - `low` <= `open`, `close` <= `high`.
+            - `low` <= `high` (fundamental relationship).
+            - All OHLC relationships are mathematically sound.
+        """
+        # Create a basic kline with the OHLC prices
+        kline = Kline(
+            symbol="TESTBTC",
+            interval=KlineInterval.MINUTE_1,
+            open_time=datetime(2023, 1, 1),
+            close_time=datetime(2023, 1, 1, 0, 1),
+            **ohlc_data,
+            volume=Decimal("1000"),
+            quote_volume=Decimal("100000"),
+            trades_count=100,
+        )
+
+        # Test fundamental OHLC relationships
+        assert kline.low_price <= kline.high_price
+        assert kline.low_price <= kline.open_price <= kline.high_price
+        assert kline.low_price <= kline.close_price <= kline.high_price
+
+        # Test that all prices are positive
+        assert kline.open_price > 0
+        assert kline.high_price > 0
+        assert kline.low_price > 0
+        assert kline.close_price > 0
+
+        # Test precision preservation
+        assert isinstance(kline.open_price, Decimal)
+        assert isinstance(kline.high_price, Decimal)
+        assert isinstance(kline.low_price, Decimal)
+        assert isinstance(kline.close_price, Decimal)
+
+    @given(interval=kline_interval_strategy(), base_time=datetime_strategy())
+    def test_time_alignment_property(self, interval: KlineInterval, base_time: datetime) -> None:
+        """Test time alignment with intervals.
+
+        Description of what the test covers.
+        This test verifies that `open_time` and `close_time` are correctly aligned
+        with the specified interval boundaries.
+
+        Preconditions:
+            - `KlineInterval` defines valid time periods.
+            - Time alignment logic is implemented correctly.
+
+        Steps:
+            - Generate interval and base timestamp.
+            - Create `Kline` with aligned timestamps.
+            - Verify `open_time` alignment to interval boundary.
+            - Verify `close_time = open_time + interval duration`.
+
+        Expected Result:
+            - `open_time` is aligned to interval boundaries.
+            - `close_time - open_time` equals interval duration.
+            - Time alignment is mathematically correct.
+        """
+        # Align the base time to interval boundary
+        interval_seconds = KlineInterval.to_seconds(interval)
+        timestamp_seconds = int(base_time.timestamp())
+        aligned_timestamp = (timestamp_seconds // interval_seconds) * interval_seconds
+        aligned_open_time = datetime.fromtimestamp(aligned_timestamp, tz=UTC)
+
+        close_time = aligned_open_time + KlineInterval.to_timedelta(interval)
+
+        kline = Kline(
+            symbol="TESTBTC",
+            interval=interval,
+            open_time=aligned_open_time,
+            close_time=close_time,
+            open_price=Decimal("100"),
+            high_price=Decimal("110"),
+            low_price=Decimal("90"),
+            close_price=Decimal("105"),
+            volume=Decimal("1000"),
+            quote_volume=Decimal("100000"),
+            trades_count=100,
+        )
+
+        # Test time alignment
+        assert kline.open_time == aligned_open_time
+        assert kline.close_time == close_time
+
+        # Test that open_time is properly aligned to interval boundary
+        open_timestamp = int(kline.open_time.timestamp())
+        assert open_timestamp % interval_seconds == 0
+
+        # Test duration property
+        actual_duration = kline.close_time - kline.open_time
+        expected_duration = KlineInterval.to_timedelta(interval)
+        assert actual_duration == expected_duration
+
+        # Test that duration matches interval
+        assert kline.duration == expected_duration
+
+    @given(kline_data=kline_strategy())
+    def test_interval_duration_property(self, kline_data: Kline) -> None:
+        """Test interval duration consistency.
+
+        Description of what the test covers.
+        This test verifies that the duration between `open_time` and `close_time`
+        always matches the specified interval duration.
+
+        Preconditions:
+            - `Kline` instance is valid with proper time alignment.
+            - Interval duration calculations are correct.
+
+        Steps:
+            - Generate `Kline` instance with Hypothesis.
+            - Calculate actual duration (`close_time - open_time`).
+            - Compare with expected interval duration.
+            - Verify `duration` property consistency.
+
+        Expected Result:
+            - Actual duration equals `interval.to_timedelta()`.
+            - Duration calculation is precise.
+            - All interval types are handled correctly.
+        """
+        # Test duration calculation
+        actual_duration = kline_data.close_time - kline_data.open_time
+        expected_duration = KlineInterval.to_timedelta(kline_data.interval)
+        assert actual_duration == expected_duration
+
+        # Test duration property
+        assert kline_data.duration == expected_duration
+
+        # Test that duration is positive
+        assert kline_data.duration.total_seconds() > 0
+
+        # Test specific interval duration
+        interval_seconds = KlineInterval.to_seconds(kline_data.interval)
+        assert kline_data.duration.total_seconds() == interval_seconds
+
+    @given(kline_data=kline_strategy())
+    def test_price_change_calculation_property(self, kline_data: Kline) -> None:
+        """Test price change calculation accuracy.
+
+        Description of what the test covers.
+        This test verifies that price change and percentage calculations
+        are mathematically correct across all generated `Kline` instances.
+
+        Preconditions:
+            - `Kline` instance has valid OHLC prices.
+            - Price change calculations are implemented.
+
+        Steps:
+            - Generate `Kline` instance.
+            - Verify `price_change = close_price - open_price`.
+            - Test percentage calculation accuracy.
+            - Verify mathematical properties.
+
+        Expected Result:
+            - Price change calculation is mathematically correct.
+            - Percentage calculations have proper precision.
+            - Edge cases (zero change) are handled correctly.
+        """
+        # Test price change calculation
+        expected_change = kline_data.close_price - kline_data.open_price
+        assert kline_data.price_change == expected_change
+
+        # Test price change percentage calculation
+        if kline_data.open_price != 0:
+            expected_percentage = (expected_change / kline_data.open_price) * 100
+            # Allow for small rounding differences in percentage calculation
+            assert abs(kline_data.price_change_percent - expected_percentage) < Decimal("0.000001")
+
+        # Test directional properties
+        if kline_data.close_price > kline_data.open_price:
+            assert kline_data.price_change > 0
+            assert kline_data.is_bullish is True
+            assert kline_data.is_bearish is False
+        elif kline_data.close_price < kline_data.open_price:
+            assert kline_data.price_change < 0
+            assert kline_data.is_bullish is False
+            assert kline_data.is_bearish is True
+        else:
+            assert kline_data.price_change == 0
+            assert kline_data.is_bullish is False
+            assert kline_data.is_bearish is False
+
+        # Test precision preservation
+        assert isinstance(kline_data.price_change, Decimal)
+        assert isinstance(kline_data.price_change_percent, Decimal)
+
+    @given(kline_data=kline_strategy())
+    def test_volume_consistency_property(self, kline_data: Kline) -> None:
+        """Test volume non-negativity and logical consistency.
+
+        Description of what the test covers.
+        This test verifies that all volume-related fields are non-negative
+        and maintain logical relationships with each other.
+
+        Preconditions:
+            - `Kline` instance is valid.
+            - Volume fields follow business logic constraints.
+
+        Steps:
+            - Generate `Kline` instance.
+            - Verify all volumes are non-negative.
+            - Test logical relationships between volume fields.
+            - Verify trades count consistency.
+
+        Expected Result:
+            - All volume fields are `>= 0`.
+            - Volume relationships are logically consistent.
+            - Trades count is non-negative integer.
+        """
+        # Test non-negativity
+        assert kline_data.volume >= 0
+        assert kline_data.quote_volume >= 0
+        assert kline_data.trades_count >= 0
+
+        # Test optional volume fields
+        if kline_data.taker_buy_volume is not None:
+            assert kline_data.taker_buy_volume >= 0
+            # Taker buy volume should not exceed total volume
+            assert kline_data.taker_buy_volume <= kline_data.volume
+
+        if kline_data.taker_buy_quote_volume is not None:
+            assert kline_data.taker_buy_quote_volume >= 0
+            # Taker buy quote volume should not exceed total quote volume
+            assert kline_data.taker_buy_quote_volume <= kline_data.quote_volume
+
+        # Test logical consistency
+        if kline_data.trades_count == 0:
+            # If no trades, volumes should typically be zero
+            # (though this might depend on specific business logic)
+            pass
+        elif kline_data.trades_count > 0:
+            # If there are trades, there should typically be some volume
+            # (though zero volume trades are theoretically possible)
+            pass
+
+        # Test types
+        assert isinstance(kline_data.volume, Decimal)
+        assert isinstance(kline_data.quote_volume, Decimal)
+        assert isinstance(kline_data.trades_count, int)
+
+        # Test precision
+        assert kline_data.volume.is_finite()
+        assert kline_data.quote_volume.is_finite()

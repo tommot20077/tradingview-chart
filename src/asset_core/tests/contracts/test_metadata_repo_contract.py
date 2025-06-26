@@ -9,16 +9,15 @@ from datetime import UTC, datetime
 from typing import Any
 
 import pytest
-from asset_core.storage.metadata_repo import AbstractMetadataRepository
-from asset_core.types.common import Symbol
 
-from .base_contract_test import AsyncContractTestMixin, BaseContractTest, \
-    MockImplementationBase
+from src.asset_core.asset_core.storage.metadata_repo import AbstractMetadataRepository
+from src.asset_core.asset_core.types.common import Symbol
+
+from .base_contract_test import AsyncContractTestMixin, BaseContractTest, MockImplementationBase
 
 
 class MockMetadataRepository(AbstractMetadataRepository, MockImplementationBase):
-    """
-    Mock implementation of AbstractMetadataRepository for contract testing.
+    """Mock implementation of AbstractMetadataRepository for contract testing.
 
     Provides a complete implementation that follows the interface contract
     while using in-memory storage for testing purposes.
@@ -37,19 +36,43 @@ class MockMetadataRepository(AbstractMetadataRepository, MockImplementationBase)
         return self._name
 
     def _is_expired(self, key: str) -> bool:
-        """Check if a key with TTL has expired."""
+        """Checks if a key with TTL has expired.
+
+        Args:
+            key (str): The key to check.
+
+        Returns:
+            bool: True if the key has expired or does not have a TTL, False otherwise.
+        """
         if key not in self._ttl_data:
             return False
         return datetime.now(UTC) > self._ttl_data[key]
 
     def _cleanup_expired(self, key: str) -> None:
-        """Remove expired data."""
+        """Removes expired data associated with a given key.
+
+        If the key has expired according to `_is_expired`, its entry is removed
+        from both the metadata storage and the TTL tracking.
+
+        Args:
+            key (str): The key to clean up.
+        """
         if self._is_expired(key):
             self._metadata.pop(key, None)
             self._ttl_data.pop(key, None)
 
     async def set(self, key: str, value: dict[str, Any]) -> None:
-        """Store metadata as JSON-serializable dict."""
+        """Stores metadata as a JSON-serializable dictionary.
+
+        Args:
+            key (str): The key under which to store the metadata.
+            value (dict[str, Any]): The metadata value, which must be a dictionary
+                                    and JSON-serializable.
+
+        Raises:
+            ValueError: If `value` is not a dictionary or is not JSON-serializable.
+            RuntimeError: If the repository is closed.
+        """
         self._check_not_closed()
 
         if not isinstance(value, dict):
@@ -66,21 +89,51 @@ class MockMetadataRepository(AbstractMetadataRepository, MockImplementationBase)
         self._metadata[key] = value.copy()
 
     async def get(self, key: str) -> dict[str, Any] | None:
-        """Retrieve metadata by key."""
+        """Retrieves metadata by its key.
+
+        Args:
+            key (str): The key of the metadata to retrieve.
+
+        Returns:
+            dict[str, Any] | None: The metadata dictionary, or None if the key is not found or has expired.
+
+        Raises:
+            RuntimeError: If the repository is closed.
+        """
         self._check_not_closed()
         self._cleanup_expired(key)
 
         return self._metadata.get(key)
 
     async def exists(self, key: str) -> bool:
-        """Check key existence."""
+        """Checks if a metadata key exists in the repository.
+
+        Args:
+            key (str): The key to check for existence.
+
+        Returns:
+            bool: True if the key exists and is not expired, False otherwise.
+
+        Raises:
+            RuntimeError: If the repository is closed.
+        """
         self._check_not_closed()
         self._cleanup_expired(key)
 
         return key in self._metadata
 
     async def delete(self, key: str) -> bool:
-        """Remove metadata, return True if key existed."""
+        """Removes a metadata entry by its key.
+
+        Args:
+            key (str): The key of the metadata to delete.
+
+        Returns:
+            bool: True if the key was found and deleted, False otherwise.
+
+        Raises:
+            RuntimeError: If the repository is closed.
+        """
         self._check_not_closed()
 
         existed = key in self._metadata
@@ -90,7 +143,17 @@ class MockMetadataRepository(AbstractMetadataRepository, MockImplementationBase)
         return existed
 
     async def list_keys(self, prefix: str | None = None) -> list[str]:
-        """List keys with optional prefix filter."""
+        """Lists all metadata keys, optionally filtered by a prefix.
+
+        Args:
+            prefix (str | None): An optional prefix to filter the keys.
+
+        Returns:
+            list[str]: A sorted list of matching metadata keys.
+
+        Raises:
+            RuntimeError: If the repository is closed.
+        """
         self._check_not_closed()
 
         # Cleanup expired keys first
@@ -106,7 +169,21 @@ class MockMetadataRepository(AbstractMetadataRepository, MockImplementationBase)
         return sorted(keys)
 
     async def set_with_ttl(self, key: str, value: dict[str, Any], ttl_seconds: int) -> None:
-        """Store with expiration time."""
+        """Stores metadata with a time-to-live (TTL).
+
+        The data will automatically expire after `ttl_seconds`.
+
+        Args:
+            key (str): The key under which to store the metadata.
+            value (dict[str, Any]): The metadata value, which must be a dictionary
+                                    and JSON-serializable.
+            ttl_seconds (int): The time-to-live in seconds. Must be a positive integer.
+
+        Raises:
+            ValueError: If `ttl_seconds` is not positive, or if `value` is not
+                        a dictionary or is not JSON-serializable.
+            RuntimeError: If the repository is closed.
+        """
         self._check_not_closed()
 
         if ttl_seconds <= 0:
@@ -121,7 +198,18 @@ class MockMetadataRepository(AbstractMetadataRepository, MockImplementationBase)
         self._ttl_data[key] = expiry_time
 
     async def get_last_sync_time(self, symbol: Symbol) -> datetime | None:
-        """Get synchronization timestamp."""
+        """Retrieves the last synchronization timestamp for a given symbol.
+
+        Args:
+            symbol (Symbol): The trading symbol.
+
+        Returns:
+            datetime | None: The last synchronization time as a datetime object,
+                             or None if no sync time is recorded for the symbol.
+
+        Raises:
+            RuntimeError: If the repository is closed.
+        """
         self._check_not_closed()
 
         sync_data = await self.get(f"sync_time:{symbol}")
@@ -134,7 +222,16 @@ class MockMetadataRepository(AbstractMetadataRepository, MockImplementationBase)
         return None
 
     async def set_last_sync_time(self, symbol: Symbol, timestamp: datetime) -> None:
-        """Update synchronization timestamp."""
+        """Updates the last synchronization timestamp for a given symbol.
+
+        Args:
+            symbol (Symbol): The trading symbol.
+            timestamp (datetime): The datetime object representing the last sync time.
+
+        Raises:
+            RuntimeError: If the repository is closed.
+            ValueError: If the provided timestamp is not JSON-serializable.
+        """
         self._check_not_closed()
 
         sync_data = {"timestamp": timestamp.isoformat(), "symbol": symbol}
@@ -142,13 +239,34 @@ class MockMetadataRepository(AbstractMetadataRepository, MockImplementationBase)
         await self.set(f"sync_time:{symbol}", sync_data)
 
     async def get_backfill_status(self, symbol: Symbol) -> dict[str, Any] | None:
-        """Get backfill progress information."""
+        """Retrieves backfill progress information for a given symbol.
+
+        Args:
+            symbol (Symbol): The trading symbol.
+
+        Returns:
+            dict[str, Any] | None: A dictionary containing backfill status details,
+                                   or None if no backfill status is recorded.
+
+        Raises:
+            RuntimeError: If the repository is closed.
+        """
         self._check_not_closed()
 
         return await self.get(f"backfill:{symbol}")
 
     async def set_backfill_status(self, symbol: Symbol, status: dict[str, Any]) -> None:
-        """Update backfill progress."""
+        """Updates backfill progress information for a given symbol.
+
+        Args:
+            symbol (Symbol): The trading symbol.
+            status (dict[str, Any]): A dictionary containing the backfill status.
+                                    Must include "status", "progress", and "last_updated" fields.
+
+        Raises:
+            ValueError: If `status` is not a dictionary or is missing required fields.
+            RuntimeError: If the repository is closed.
+        """
         self._check_not_closed()
 
         if not isinstance(status, dict):
@@ -162,38 +280,67 @@ class MockMetadataRepository(AbstractMetadataRepository, MockImplementationBase)
         await self.set(f"backfill:{symbol}", status)
 
     async def close(self) -> None:
-        """Close repository and clean up resources."""
+        """Closes the repository and cleans up resources.
+
+        Sets the internal `_is_closed` flag to True and clears all stored metadata
+        and TTL data.
+        """
         self._is_closed = True
         self._metadata.clear()
         self._ttl_data.clear()
 
     async def __aenter__(self) -> "MockMetadataRepository":
-        """Async context manager entry."""
+        """Asynchronous context manager entry point.
+
+        Returns:
+            MockMetadataRepository: The instance of the repository itself.
+        """
         return self
 
     async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> bool:
-        """Async context manager exit."""
+        """Asynchronous context manager exit point.
+
+        Ensures that the repository is closed when exiting the `async with` block.
+
+        Args:
+            exc_type (Any): The type of the exception raised, if any.
+            exc_val (Any): The exception instance raised, if any.
+            exc_tb (Any): The traceback object, if an exception was raised.
+
+        Returns:
+            bool: False to propagate any exceptions that occurred within the block.
+        """
         await self.close()
         return False
 
 
 @pytest.fixture(scope="function")
 async def repo() -> MockMetadataRepository:
-    """Create a mock repository instance for testing."""
+    """Provides a mock metadata repository instance for testing.
+
+    The repository is created with function scope, ensuring a clean state
+    for each test function.
+
+    Returns:
+        MockMetadataRepository: An instance of the mock metadata repository.
+    """
     return MockMetadataRepository()
 
 
 class TestAbstractMetadataRepositoryContract(BaseContractTest, AsyncContractTestMixin):
-    """
-    Contract tests for AbstractMetadataRepository interface.
+    """Contract tests for AbstractMetadataRepository interface.
 
     These tests verify that any implementation of AbstractMetadataRepository
-    follows the expected behavioral contracts.
+    follows the expected behavioral contracts and interface specifications.
     """
 
     @pytest.fixture
     def sample_metadata(self) -> dict[str, Any]:
-        """Create sample metadata for testing."""
+        """Provides sample metadata for testing.
+
+        Returns:
+            dict[str, Any]: A dictionary containing sample metadata.
+        """
         return {
             "version": "1.0",
             "created_at": "2024-01-01T12:00:00Z",
@@ -202,15 +349,15 @@ class TestAbstractMetadataRepositoryContract(BaseContractTest, AsyncContractTest
         }
 
     def test_required_methods_defined(self):
-        """
-        Test that all required abstract methods are defined in the interface.
+        """Test that all required abstract methods are defined in the interface.
 
-        Verifies that AbstractMetadataRepository declares all necessary methods
+        Description of what the test covers.
+        Verifies that `AbstractMetadataRepository` declares all necessary methods
         as abstract and that they have the correct signatures.
 
         Expected Result:
-            - All required methods are present as abstract methods
-            - Method signatures match the expected interface
+        - All required methods are present as abstract methods.
+        - Method signatures match the expected interface.
         """
         abstract_methods = self.get_abstract_methods(AbstractMetadataRepository)
 
@@ -234,15 +381,15 @@ class TestAbstractMetadataRepositoryContract(BaseContractTest, AsyncContractTest
         )
 
     def test_method_signatures(self):
-        """
-        Test that all abstract methods have correct signatures.
+        """Test that all abstract methods have correct signatures.
 
+        Description of what the test covers.
         Verifies parameter types, return types, and async/sync designation
         for all methods in the interface.
 
         Expected Result:
-            - All methods have correct parameter and return type annotations
-            - Async methods are properly marked as async
+        - All methods have correct parameter and return type annotations.
+        - Async methods are properly marked as async.
         """
         # Test key method signatures
         set_sig = self.get_method_signature(AbstractMetadataRepository, "set")
@@ -260,30 +407,50 @@ class TestAbstractMetadataRepositoryContract(BaseContractTest, AsyncContractTest
         assert self.is_async_method(AbstractMetadataRepository, "close")
 
     def test_async_context_manager_protocol(self):
-        """
-        Test that the repository implements async context manager protocol.
+        """Test that the repository implements async context manager protocol.
 
-        Verifies that __aenter__ and __aexit__ methods are present and
+        Description of what the test covers.
+        Verifies that `__aenter__` and `__aexit__` methods are present and
         that they work correctly for resource management.
 
         Expected Result:
-            - Repository has __aenter__ and __aexit__ methods
-            - Can be used in async with statements
+        - Repository has `__aenter__` and `__aexit__` methods.
+        - Can be used in `async with` statements.
         """
         assert self.has_async_context_manager(AbstractMetadataRepository)
 
+    def test_inheritance_chain(self):
+        """Test that AbstractMetadataRepository correctly inherits from abc.ABC.
+
+        Description of what the test covers.
+        Verifies that the abstract repository follows proper inheritance patterns
+        for abstract base classes.
+
+        Expected Result:
+        - `AbstractMetadataRepository` should inherit from `abc.ABC`.
+        - Should be properly marked as abstract class.
+        """
+        import abc
+
+        # Test inheritance from ABC
+        assert issubclass(AbstractMetadataRepository, abc.ABC)
+
+        # Test that the class itself is abstract (cannot be instantiated)
+        with pytest.raises(TypeError):
+            AbstractMetadataRepository()  # Should raise TypeError due to abstract methods
+
     @pytest.mark.asyncio
     async def test_mock_implementation_completeness(self, repo: MockMetadataRepository):
-        """
-        Test that the mock implementation provides complete interface coverage.
+        """Test that the mock implementation provides complete interface coverage.
 
+        Description of what the test covers.
         Creates a complete mock implementation and verifies that all methods
         work correctly and follow the expected behavioral contracts.
 
         Expected Result:
-            - All abstract methods are implemented
-            - Methods return expected types
-            - State transitions work correctly
+        - All abstract methods are implemented.
+        - Methods return expected types.
+        - State transitions work correctly.
         """
         # Test that all abstract methods are implemented
         abstract_methods = self.get_abstract_methods(AbstractMetadataRepository)
@@ -294,27 +461,27 @@ class TestAbstractMetadataRepositoryContract(BaseContractTest, AsyncContractTest
 
     @pytest.mark.asyncio
     async def test_basic_crud_operations(self, repo: MockMetadataRepository, sample_metadata: dict[str, Any]):
-        """
-        Test basic CRUD operations work correctly.
+        """Test basic CRUD operations work correctly.
 
+        Description of what the test covers.
         Tests the fundamental create, read, update, delete operations
         to ensure the repository behaves as expected.
 
         Preconditions:
-            - Repository is initialized and not closed
+        - Repository is initialized and not closed.
 
         Steps:
-            - Set metadata
-            - Get it back
-            - Check existence
-            - Update it
-            - Delete it
-            - Verify it's gone
+        - Set metadata.
+        - Get it back.
+        - Check existence.
+        - Update it.
+        - Delete it.
+        - Verify it's gone.
 
         Expected Result:
-            - All operations complete successfully
-            - Data consistency is maintained
-            - Return values match expectations
+        - All operations complete successfully.
+        - Data consistency is maintained.
+        - Return values match expectations.
         """
         test_key = "test:config"
 
@@ -355,16 +522,16 @@ class TestAbstractMetadataRepositoryContract(BaseContractTest, AsyncContractTest
 
     @pytest.mark.asyncio
     async def test_json_serializable_validation(self, repo: MockMetadataRepository):
-        """
-        Test that only JSON-serializable values are accepted.
+        """Test that only JSON-serializable values are accepted.
 
+        Description of what the test covers.
         Verifies that the repository validates that all stored values
         can be serialized to JSON.
 
         Expected Result:
-            - Valid JSON-serializable dicts are accepted
-            - Non-serializable values raise ValueError
-            - Non-dict values raise ValueError
+        - Valid JSON-serializable dicts are accepted.
+        - Non-serializable values raise `ValueError`.
+        - Non-dict values raise `ValueError`.
         """
         # Test valid JSON-serializable dict
         valid_data = {
@@ -396,16 +563,16 @@ class TestAbstractMetadataRepositoryContract(BaseContractTest, AsyncContractTest
 
     @pytest.mark.asyncio
     async def test_key_listing_and_prefix_filtering(self, repo: MockMetadataRepository):
-        """
-        Test key listing functionality with prefix filtering.
+        """Test key listing functionality with prefix filtering.
 
-        Verifies that list_keys returns all keys and properly filters
+        Description of what the test covers.
+        Verifies that `list_keys` returns all keys and properly filters
         by prefix when specified.
 
         Expected Result:
-            - list_keys() returns all keys
-            - Prefix filtering works correctly
-            - Keys are returned in consistent order
+        - `list_keys()` returns all keys.
+        - Prefix filtering works correctly.
+        - Keys are returned in consistent order.
         """
         # Add test data with different prefixes
         test_data = {
@@ -444,16 +611,16 @@ class TestAbstractMetadataRepositoryContract(BaseContractTest, AsyncContractTest
 
     @pytest.mark.asyncio
     async def test_ttl_functionality(self, repo: MockMetadataRepository):
-        """
-        Test TTL (Time To Live) functionality.
+        """Test TTL (Time To Live) functionality.
 
-        Verifies that set_with_ttl properly sets expiration times
+        Description of what the test covers.
+        Verifies that `set_with_ttl` properly sets expiration times
         and that expired data is cleaned up correctly.
 
         Expected Result:
-            - TTL values are accepted and stored
-            - Expired data is not returned
-            - Invalid TTL values raise exceptions
+        - TTL values are accepted and stored.
+        - Expired data is not returned.
+        - Invalid TTL values raise exceptions.
         """
         ttl_data = {"temporary": "data", "expires": True}
 
@@ -480,16 +647,16 @@ class TestAbstractMetadataRepositoryContract(BaseContractTest, AsyncContractTest
 
     @pytest.mark.asyncio
     async def test_sync_time_management_interface(self, repo: MockMetadataRepository):
-        """
-        Test synchronization time management functionality.
+        """Test synchronization time management functionality.
 
+        Description of what the test covers.
         Verifies that sync time can be stored and retrieved correctly
         for different symbols.
 
         Expected Result:
-            - Sync times can be set and retrieved
-            - Different symbols have independent sync times
-            - Returns None for non-existent sync times
+        - Sync times can be set and retrieved.
+        - Different symbols have independent sync times.
+        - Returns None for non-existent sync times.
         """
         symbol1 = "BTCUSDT"
         symbol2 = "ETHUSDT"
@@ -514,16 +681,16 @@ class TestAbstractMetadataRepositoryContract(BaseContractTest, AsyncContractTest
 
     @pytest.mark.asyncio
     async def test_backfill_status_management_interface(self, repo: MockMetadataRepository):
-        """
-        Test backfill status management functionality.
+        """Test backfill status management functionality.
 
+        Description of what the test covers.
         Verifies that backfill progress can be tracked and updated
         for different symbols.
 
         Expected Result:
-            - Backfill status can be set and retrieved
-            - Status validation works correctly
-            - Different symbols have independent status
+        - Backfill status can be set and retrieved.
+        - Status validation works correctly.
+        - Different symbols have independent status.
         """
         symbol = "ADAUSDT"
 
@@ -559,30 +726,30 @@ class TestAbstractMetadataRepositoryContract(BaseContractTest, AsyncContractTest
 
     @pytest.mark.asyncio
     async def test_async_context_manager_behavior(self, repo: MockMetadataRepository):
-        """
-        Test async context manager resource management.
+        """Test async context manager resource management.
 
+        Description of what the test covers.
         Ensures that the repository properly implements async context
         manager protocol and handles resource cleanup.
 
         Expected Result:
-            - Can be used in async with statements
-            - Resources are properly cleaned up
-            - Repository is properly closed after context exit
+        - Can be used in `async with` statements.
+        - Resources are properly cleaned up.
+        - Repository is properly closed after context exit.
         """
         await self.assert_async_context_manager_protocol(repo)
 
     @pytest.mark.asyncio
     async def test_closed_state_handling(self, repo: MockMetadataRepository):
-        """
-        Test that operations fail appropriately when repository is closed.
+        """Test that operations fail appropriately when repository is closed.
 
+        Description of what the test covers.
         Verifies that attempting to use a closed repository raises
         appropriate exceptions.
 
         Expected Result:
-            - Operations raise RuntimeError when repository is closed
-            - Error messages are clear and helpful
+        - Operations raise `RuntimeError` when repository is closed.
+        - Error messages are clear and helpful.
         """
         # Close the repository
         await repo.close()

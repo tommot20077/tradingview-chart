@@ -1,4 +1,10 @@
-"""Exception definitions for asset_core."""
+"""Exception definitions for asset_core.
+
+This module defines the base exception class `CoreError` and various
+specific exception types used throughout the `asset_core` library.
+It also provides utilities for enhancing exceptions with trace IDs
+for improved observability and debugging.
+"""
 
 from datetime import datetime
 from types import TracebackType
@@ -8,7 +14,18 @@ from ..observability.trace_id import get_formatted_trace_id
 
 
 class CoreError(Exception):
-    """Base exception for all asset_core errors."""
+    """Base exception for all asset_core errors.
+
+    All custom exceptions within the `asset_core` library should inherit from this class.
+    It provides standardized fields for error messages, error codes, and detailed information,
+    including an automatically generated or provided trace ID for easier debugging and logging.
+
+    Attributes:
+        message (str): A human-readable error message.
+        error_code (str): A standardized code for the error, defaulting to the class name.
+        details (dict[str, Any]): A dictionary for additional, context-specific error details.
+        trace_id (str): A unique identifier for tracing the error through system logs.
+    """
 
     def __init__(
         self,
@@ -18,13 +35,17 @@ class CoreError(Exception):
         details: dict[str, Any] | None = None,
         trace_id: str | None = None,
     ) -> None:
-        """Initialize CoreError.
+        """Initializes a new instance of the `CoreError` exception.
 
         Args:
-            message: Error message
-            error_code: Optional error code for categorization
-            details: Optional additional error details
-            trace_id: Optional trace ID. If None, uses current trace ID
+            message (str): A human-readable description of the error.
+            error_code (str | None): An optional, standardized code for the error.
+                                     If `None`, the class name of the exception will be used.
+            details (dict[str, Any] | None): An optional dictionary containing additional, context-specific
+                                            details about the error. This can include any relevant data
+                                            that helps in debugging or understanding the error.
+            trace_id (str | None): An optional trace ID to associate with this error.
+                                   If `None`, a new trace ID will be automatically generated and assigned.
         """
         super().__init__(message)
         self.message = message
@@ -38,7 +59,15 @@ class CoreError(Exception):
         self.details["trace_id"] = self.trace_id
 
     def __str__(self) -> str:
-        """String representation of the error."""
+        """Returns a user-friendly string representation of the error.
+
+        This method formats the error message to include the trace ID, error code (if different
+        from the class name), the main message, and any additional details, making it suitable
+        for logging and display to end-users.
+
+        Returns:
+            str: A formatted string representing the error.
+        """
         parts = []
 
         # Add trace ID at the beginning for easy identification
@@ -60,7 +89,15 @@ class CoreError(Exception):
         return " ".join(parts)
 
     def __repr__(self) -> str:
-        """Developer-friendly representation of the error."""
+        """Returns a developer-friendly string representation of the error.
+
+        This method provides a detailed representation of the `CoreError` instance,
+        including its class name, message, error code, trace ID, and all details,
+        which is useful for debugging and internal logging.
+
+        Returns:
+            str: A string that can be used to recreate the `CoreError` instance.
+        """
         return (
             f"{self.__class__.__name__}("
             f"message='{self.message}', "
@@ -72,31 +109,56 @@ class CoreError(Exception):
 
 
 class ConfigurationError(CoreError):
-    """Raised when there's a configuration error."""
+    """Raised when an issue related to application configuration occurs.
+
+    This exception indicates problems such as missing required settings,
+    invalid configuration values, or malformed configuration files.
+    """
 
     pass
 
 
 class DataProviderError(CoreError):
-    """Base exception for data provider errors."""
+    """Base exception for errors originating from data providers.
+
+    This exception serves as a superclass for all errors related to interacting
+    with external data sources, such as exchanges or market data APIs.
+    Specific subclasses provide more granular error types.
+    """
 
     pass
 
 
 class ConnectionError(DataProviderError):
-    """Raised when connection to data provider fails."""
+    """Raised when a connection to a data provider fails or is lost.
+
+    This exception specifically indicates issues with network connectivity
+    to the data source, preventing data exchange.
+    """
 
     pass
 
 
 class AuthenticationError(DataProviderError):
-    """Raised when authentication with data provider fails."""
+    """Raised when authentication with a data provider fails.
+
+    This exception signifies that the provided credentials (e.g., API keys,
+    secrets) are invalid or insufficient to access the data provider's services.
+    """
 
     pass
 
 
 class RateLimitError(DataProviderError):
-    """Raised when rate limit is exceeded."""
+    """Raised when an operation is rejected due to exceeding a rate limit.
+
+    This exception indicates that the system has sent too many requests to an
+    external service (e.g., an exchange API) within a given time frame.
+    It may include a `retry_after` field suggesting when to retry.
+
+    Attributes:
+        retry_after (int | None): The number of seconds to wait before retrying the operation.
+    """
 
     def __init__(
         self,
@@ -105,12 +167,13 @@ class RateLimitError(DataProviderError):
         retry_after: int | None = None,
         **kwargs: Any,
     ) -> None:
-        """Initialize RateLimitError.
+        """Initializes a new instance of the `RateLimitError` exception.
 
         Args:
-            message: Error message
-            retry_after: Seconds to wait before retry
-            **kwargs: Additional arguments for CoreError
+            message (str): A human-readable description of the error.
+            retry_after (int | None): Optional. The number of seconds to wait before retrying the operation.
+                                      This value is typically provided by the rate-limited service.
+            **kwargs (Any): Additional keyword arguments to pass to the base `CoreError` constructor.
         """
         super().__init__(message, **kwargs)
         self.retry_after = retry_after
@@ -119,61 +182,107 @@ class RateLimitError(DataProviderError):
 
 
 class StorageError(CoreError):
-    """Base exception for storage errors."""
+    """Base exception for errors related to data storage operations.
+
+    This exception serves as a superclass for all errors that occur during
+    interactions with storage backends, such as databases, file systems,
+    or object storage. Specific subclasses provide more granular error types.
+    """
 
     pass
 
 
 class StorageConnectionError(StorageError):
-    """Raised when connection to storage fails."""
+    """Raised when a connection to the storage backend fails or is lost.
+
+    This error specifically indicates issues with establishing or maintaining
+    connectivity to the data persistence layer.
+    """
 
     pass
 
 
 class StorageWriteError(StorageError):
-    """Raised when writing to storage fails."""
+    """Raised when an attempt to write data to storage fails.
+
+    This can occur due to various reasons such as insufficient permissions,
+    disk full conditions, data integrity violations, or issues with the
+    storage medium itself.
+    """
 
     pass
 
 
 class StorageReadError(StorageError):
-    """Raised when reading from storage fails."""
+    """Raised when an attempt to read data from storage fails.
+
+    This can occur due to reasons such as data not found, corrupted data,
+    access permissions issues, or problems with the storage medium.
+    """
 
     pass
 
 
 class EventBusError(CoreError):
-    """Base exception for event bus errors."""
+    """Base exception for errors related to the event bus.
+
+    This exception serves as a superclass for all errors that occur during
+    event publishing, subscription, or processing within the event bus system.
+    """
 
     pass
 
 
 class ValidationError(CoreError):
-    """Raised when data validation fails."""
+    """Raised when data validation fails.
+
+    This exception indicates that input data or an object's state does not
+    conform to expected rules or constraints.
+    """
 
     pass
 
 
 class NetworkError(CoreError):
-    """Base exception for network-related errors."""
+    """Base exception for network-related errors.
+
+    This exception serves as a superclass for all errors that occur during
+    network communication, such as issues with sockets, protocols, or connectivity.
+    """
 
     pass
 
 
 class WebSocketError(NetworkError):
-    """Raised when WebSocket operations fail."""
+    """Raised when an operation involving WebSockets fails.
+
+    This exception indicates issues specific to WebSocket communication,
+    such as protocol errors, unexpected disconnections, or message handling problems.
+    """
 
     pass
 
 
 class TimeoutError(NetworkError):
-    """Raised when an operation times out."""
+    """Raised when an operation exceeds its allotted time limit.
+
+    This exception indicates that a network request or other time-sensitive
+    operation did not complete within the expected duration.
+    """
 
     pass
 
 
 class DataValidationError(ValidationError):
-    """Raised when data validation fails."""
+    """Raised when specific data fields fail validation.
+
+    This exception extends `ValidationError` by providing more context about
+    which field failed validation and what its invalid value was.
+
+    Attributes:
+        field_name (str | None): The name of the field that failed validation.
+        field_value (Any | None): The value of the field that failed validation.
+    """
 
     def __init__(
         self,
@@ -183,13 +292,13 @@ class DataValidationError(ValidationError):
         field_value: Any | None = None,
         **kwargs: Any,
     ) -> None:
-        """Initialize DataValidationError.
+        """Initializes a new instance of the `DataValidationError`.
 
         Args:
-            message: Error message
-            field_name: Name of the field that failed validation
-            field_value: Value that failed validation
-            **kwargs: Additional arguments for CoreError
+            message: A human-readable description of the validation error.
+            field_name: Optional. The name of the field that caused the validation failure.
+            field_value: Optional. The value of the field that failed validation.
+            **kwargs: Additional keyword arguments to pass to the base `CoreError` constructor.
         """
         super().__init__(message, **kwargs)
         self.field_name = field_name
@@ -201,7 +310,16 @@ class DataValidationError(ValidationError):
 
 
 class ResourceExhaustedError(CoreError):
-    """Raised when system resources are exhausted."""
+    """Raised when a system resource limit has been reached or exceeded.
+
+    This exception indicates that an operation cannot proceed because a critical
+    resource (e.g., memory, file handles, connections) is fully utilized.
+
+    Attributes:
+        resource_type (str | None): The type of resource that was exhausted (e.g., "memory", "connections").
+        current_usage (float | None): The current usage level of the resource.
+        limit (float | None): The maximum allowed limit for the resource.
+    """
 
     def __init__(
         self,
@@ -212,14 +330,14 @@ class ResourceExhaustedError(CoreError):
         limit: float | None = None,
         **kwargs: Any,
     ) -> None:
-        """Initialize ResourceExhaustedError.
+        """Initializes a new instance of the `ResourceExhaustedError`.
 
         Args:
-            message: Error message
-            resource_type: Type of resource that is exhausted (e.g., 'memory', 'connections')
-            current_usage: Current resource usage
-            limit: Resource limit
-            **kwargs: Additional arguments for CoreError
+            message: A human-readable description of the error.
+            resource_type: Optional. The type of resource that was exhausted (e.g., 'memory', 'connections').
+            current_usage: Optional. The current usage level of the resource.
+            limit: Optional. The maximum allowed limit for the resource.
+            **kwargs: Additional keyword arguments to pass to the base `CoreError` constructor.
         """
         super().__init__(message, **kwargs)
         self.resource_type = resource_type
@@ -234,7 +352,17 @@ class ResourceExhaustedError(CoreError):
 
 
 class CircuitBreakerError(CoreError):
-    """Raised when circuit breaker is triggered."""
+    """Raised when a circuit breaker is open, preventing an operation.
+
+    This exception indicates that a service or component is temporarily unavailable
+    because its circuit breaker has tripped, typically due to a high rate of failures.
+
+    Attributes:
+        service_name (str | None): The name of the service or component that is circuit-broken.
+        failure_count (int | None): The current number of consecutive failures that led to the circuit breaking.
+        failure_threshold (int | None): The threshold of failures that triggers the circuit breaker.
+        next_retry_time (datetime | None): The UTC time when the circuit breaker will next allow a retry attempt.
+    """
 
     def __init__(
         self,
@@ -246,15 +374,15 @@ class CircuitBreakerError(CoreError):
         next_retry_time: datetime | None = None,
         **kwargs: Any,
     ) -> None:
-        """Initialize CircuitBreakerError.
+        """Initializes a new instance of the `CircuitBreakerError`.
 
         Args:
-            message: Error message
-            service_name: Name of the service that is circuit broken
-            failure_count: Current failure count
-            failure_threshold: Failure threshold that triggered the circuit breaker
-            next_retry_time: When the circuit breaker will next allow a retry
-            **kwargs: Additional arguments for CoreError
+            message: A human-readable description of the error.
+            service_name: Optional. The name of the service or component that is circuit-broken.
+            failure_count: Optional. The current number of consecutive failures.
+            failure_threshold: Optional. The failure threshold that triggered the circuit breaker.
+            next_retry_time: Optional. The UTC time when the circuit breaker will next allow a retry.
+            **kwargs: Additional keyword arguments to pass to the base `CoreError` constructor.
         """
         super().__init__(message, **kwargs)
         self.service_name = service_name
@@ -272,15 +400,18 @@ class CircuitBreakerError(CoreError):
 
 
 def create_traced_exception(exc_class: type[Exception], message: str, **kwargs: Any) -> Exception:
-    """Create an exception with automatic trace ID injection.
+    """Creates an exception instance, ensuring it includes trace ID information.
+
+    If `exc_class` is a subclass of `CoreError`, the trace ID is handled internally.
+    Otherwise, the trace ID is prepended to the exception message.
 
     Args:
-        exc_class: Exception class to instantiate
-        message: Error message
-        **kwargs: Additional arguments for the exception
+        exc_class: The exception class to instantiate.
+        message: The primary error message for the exception.
+        **kwargs: Additional keyword arguments to pass to the exception's constructor.
 
     Returns:
-        Exception instance with trace ID
+        An instance of the specified exception class, enhanced with trace ID.
     """
     if issubclass(exc_class, CoreError):
         return exc_class(message, **kwargs)
@@ -292,13 +423,17 @@ def create_traced_exception(exc_class: type[Exception], message: str, **kwargs: 
 
 
 def enhance_exception_with_trace_id(exc: BaseException) -> BaseException:
-    """Enhance an existing exception with trace ID information.
+    """Enhances an existing exception object by adding trace ID information to its message.
+
+    If the exception is already a `CoreError` (which inherently supports trace IDs),
+    it is returned as is. For other exception types, the current trace ID is prepended
+    to the exception's message.
 
     Args:
-        exc: The exception to enhance
+        exc: The exception instance to enhance.
 
     Returns:
-        Enhanced exception (may be the same instance if already enhanced)
+        The enhanced exception instance (may be the same instance if already enhanced).
     """
     if isinstance(exc, CoreError):
         # Already has trace ID
@@ -320,20 +455,33 @@ def enhance_exception_with_trace_id(exc: BaseException) -> BaseException:
 
 
 class TraceIdExceptionHandler:
-    """Global exception handler that ensures all exceptions include trace ID."""
+    """A global exception handler that automatically injects trace IDs into uncaught exceptions.
+
+    This handler intercepts exceptions that are not caught by application code
+    and enhances them with the current trace ID, making it easier to correlate
+    errors in logs with specific requests or operations.
+    """
 
     def __init__(self) -> None:
         self._original_handler: Any = None
 
     def install(self) -> None:
-        """Install the global exception handler."""
+        """Installs this handler as the global exception hook.
+
+        This replaces `sys.excepthook` with the handler's `_handle_exception` method,
+        ensuring all uncaught exceptions are processed.
+        """
         import sys
 
         self._original_handler = sys.excepthook
         sys.excepthook = self._handle_exception
 
     def uninstall(self) -> None:
-        """Uninstall the global exception handler."""
+        """Uninstalls the global exception handler, restoring the original hook.
+
+        This should be called to clean up the exception hook when the application
+        is shutting down or the handler is no longer needed.
+        """
         import sys
 
         if self._original_handler:
@@ -345,7 +493,16 @@ class TraceIdExceptionHandler:
     def _handle_exception(
         self, exc_type: type[BaseException], exc_value: BaseException, exc_traceback: TracebackType | None
     ) -> None:
-        """Handle uncaught exceptions by adding trace ID."""
+        """Internal method to handle uncaught exceptions.
+
+        This method is set as `sys.excepthook`. It enhances the exception with
+        trace ID information and then calls the original exception handler.
+
+        Args:
+            exc_type: The type of the exception.
+            exc_value: The exception instance.
+            exc_traceback: The traceback object.
+        """
         # Enhance the exception with trace ID
         enhanced_exc = enhance_exception_with_trace_id(exc_value)
 
@@ -364,7 +521,11 @@ _global_exception_handler = TraceIdExceptionHandler()
 
 
 def install_global_exception_handler() -> None:
-    """Install global exception handler to add trace IDs to all uncaught exceptions."""
+    """Installs the global exception handler to automatically add trace IDs to uncaught exceptions.
+
+    This function should be called early in the application's lifecycle to ensure
+    all unhandled errors are traceable.
+    """
     _global_exception_handler.install()
 
 

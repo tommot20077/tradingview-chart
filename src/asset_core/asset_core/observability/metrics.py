@@ -1,4 +1,10 @@
-"""Prometheus metrics registry and helpers."""
+"""Prometheus metrics registry and helpers.
+
+This module provides a `PrometheusMetricsRegistry` class for managing and exposing
+Prometheus metrics within the `asset_core` library. It simplifies the creation
+and registration of various metric types (Counter, Gauge, Histogram, Summary, Info)
+and includes functionality to start an HTTP server for exposing these metrics.
+"""
 
 from typing import Any
 
@@ -16,13 +22,24 @@ from prometheus_client import (
 
 
 class PrometheusMetricsRegistry:
-    """Wrapper for Prometheus metrics registry with convenience methods."""
+    """Wrapper for Prometheus metrics registry with convenience methods.
+
+    This class provides a simplified interface for creating, registering, and
+    managing Prometheus metrics (Counters, Gauges, Histograms, Summaries, Info).
+    It encapsulates the `prometheus_client` library and offers methods to generate
+    metrics data and start an HTTP server for exposing metrics.
+
+    Attributes:
+        registry (CollectorRegistry): The underlying Prometheus collector registry.
+        namespace (str | None): An optional namespace prefix for all metrics created by this registry.
+    """
 
     def __init__(self, namespace: str | None = None) -> None:
-        """Initialize metrics registry.
+        """Initializes a new PrometheusMetricsRegistry instance.
 
         Args:
-            namespace: Optional namespace prefix for all metrics
+            namespace: An optional string to prefix all metric names created by this registry.
+                       Useful for distinguishing metrics from different applications or services.
         """
         self.registry = CollectorRegistry()
         self.namespace = namespace
@@ -35,16 +52,18 @@ class PrometheusMetricsRegistry:
         labels: list[str] | None = None,
         **kwargs: Any,
     ) -> Counter:
-        """Create or get a counter metric.
+        """Creates or retrieves a Prometheus Counter metric.
+
+        Counters are cumulative metrics that only ever go up.
 
         Args:
-            name: Metric name
-            description: Metric description
-            labels: Optional label names
-            **kwargs: Additional arguments for Counter
+            name: The base name of the metric.
+            description: A brief explanation of the metric.
+            labels: An optional list of label names (e.g., ["status", "code"]).
+            **kwargs: Additional keyword arguments passed to the `prometheus_client.Counter` constructor.
 
         Returns:
-            Counter instance
+            A `Counter` instance.
         """
         metric_name = self._format_name(name)
         if metric_name not in self._metrics:
@@ -65,16 +84,18 @@ class PrometheusMetricsRegistry:
         labels: list[str] | None = None,
         **kwargs: Any,
     ) -> Gauge:
-        """Create or get a gauge metric.
+        """Creates or retrieves a Prometheus Gauge metric.
+
+        Gauges represent a single numerical value that can arbitrarily go up and down.
 
         Args:
-            name: Metric name
-            description: Metric description
-            labels: Optional label names
-            **kwargs: Additional arguments for Gauge
+            name: The base name of the metric.
+            description: A brief explanation of the metric.
+            labels: An optional list of label names.
+            **kwargs: Additional keyword arguments passed to the `prometheus_client.Gauge` constructor.
 
         Returns:
-            Gauge instance
+            A `Gauge` instance.
         """
         metric_name = self._format_name(name)
         if metric_name not in self._metrics:
@@ -96,17 +117,20 @@ class PrometheusMetricsRegistry:
         buckets: tuple[float, ...] | None = None,
         **kwargs: Any,
     ) -> Histogram:
-        """Create or get a histogram metric.
+        """Creates or retrieves a Prometheus Histogram metric.
+
+        Histograms sample observations (e.g., request durations) and count them
+        in configurable buckets.
 
         Args:
-            name: Metric name
-            description: Metric description
-            labels: Optional label names
-            buckets: Optional histogram buckets
-            **kwargs: Additional arguments for Histogram
+            name: The base name of the metric.
+            description: A brief explanation of the metric.
+            labels: An optional list of label names.
+            buckets: An optional tuple of bucket upper bounds. If `None`, default buckets are used.
+            **kwargs: Additional keyword arguments passed to the `prometheus_client.Histogram` constructor.
 
         Returns:
-            Histogram instance
+            A `Histogram` instance.
         """
         metric_name = self._format_name(name)
         if metric_name not in self._metrics:
@@ -131,16 +155,18 @@ class PrometheusMetricsRegistry:
         labels: list[str] | None = None,
         **kwargs: Any,
     ) -> Summary:
-        """Create or get a summary metric.
+        """Creates or retrieves a Prometheus Summary metric.
+
+        Summaries observe individual events and provide quantiles over a sliding time window.
 
         Args:
-            name: Metric name
-            description: Metric description
-            labels: Optional label names
-            **kwargs: Additional arguments for Summary
+            name: The base name of the metric.
+            description: A brief explanation of the metric.
+            labels: An optional list of label names.
+            **kwargs: Additional keyword arguments passed to the `prometheus_client.Summary` constructor.
 
         Returns:
-            Summary instance
+            A `Summary` instance.
         """
         metric_name = self._format_name(name)
         if metric_name not in self._metrics:
@@ -160,15 +186,17 @@ class PrometheusMetricsRegistry:
         description: str,
         **kwargs: Any,
     ) -> Info:
-        """Create or get an info metric.
+        """Creates or retrieves a Prometheus Info metric.
+
+        Info metrics are used to expose static, unchanging information about the target.
 
         Args:
-            name: Metric name
-            description: Metric description
-            **kwargs: Additional arguments for Info
+            name: The base name of the metric.
+            description: A brief explanation of the metric.
+            **kwargs: Additional keyword arguments passed to the `prometheus_client.Info` constructor.
 
         Returns:
-            Info instance
+            An `Info` instance.
         """
         metric_name = self._format_name(name)
         if metric_name not in self._metrics:
@@ -182,26 +210,41 @@ class PrometheusMetricsRegistry:
         return self._metrics[metric_name]  # type: ignore
 
     def _format_name(self, name: str) -> str:
-        """Format metric name."""
+        """Formats a metric name to be Prometheus-compliant.
+
+        Replaces non-alphanumeric characters (like hyphens and dots) with underscores.
+
+        Args:
+            name: The original metric name.
+
+        Returns:
+            The formatted, Prometheus-compliant metric name.
+        """
         # Replace non-alphanumeric characters with underscores
         return name.replace("-", "_").replace(".", "_")
 
     def generate_metrics(self) -> bytes:
-        """Generate metrics in Prometheus format.
+        """Generates the current metrics data in Prometheus text exposition format.
 
         Returns:
-            Metrics data in Prometheus text format
+            A `bytes` object containing the metrics data, ready to be served.
         """
         return generate_latest(self.registry)
 
     async def start_http_server(self, port: int = 9090) -> web.AppRunner:
-        """Start HTTP server for metrics endpoint.
+        """Starts a simple HTTP server to expose the Prometheus metrics endpoint.
+
+        This server listens on all interfaces (`0.0.0.0`) and serves the metrics
+        at the `/metrics` path.
 
         Args:
-            port: Port to listen on
+            port: The port number on which the HTTP server will listen. Defaults to 9090.
 
         Returns:
-            AppRunner instance for server management
+            An `aiohttp.web.AppRunner` instance, which can be used to manage the server's lifecycle.
+
+        Raises:
+            OSError: If the specified port is already in use or other network issues occur.
         """
         app = web.Application()
         app.router.add_get("/metrics", self._handle_metrics)
@@ -214,7 +257,17 @@ class PrometheusMetricsRegistry:
         return runner
 
     async def _handle_metrics(self, _: web.Request) -> web.Response:
-        """Handle metrics endpoint request."""
+        """Handles HTTP requests to the `/metrics` endpoint.
+
+        This method generates the current Prometheus metrics and returns them
+        as an `aiohttp.web.Response`.
+
+        Args:
+            _: The `aiohttp.web.Request` object (unused).
+
+        Returns:
+            An `aiohttp.web.Response` containing the metrics data.
+        """
         metrics_data = self.generate_metrics()
         return web.Response(
             body=metrics_data,
@@ -226,13 +279,16 @@ class PrometheusMetricsRegistry:
 def create_common_metrics(
     registry: PrometheusMetricsRegistry,
 ) -> dict[str, Counter | Gauge | Histogram | Summary | Info]:
-    """Create common metrics for monitoring.
+    """Creates and registers a set of common, predefined metrics for application monitoring.
+
+    These metrics cover various aspects such as WebSocket connections, data processing
+    (trades, klines), storage operations, and error rates.
 
     Args:
-        registry: Metrics registry
+        registry: The `PrometheusMetricsRegistry` instance to which the metrics will be added.
 
     Returns:
-        Dictionary of common metrics
+        A dictionary mapping metric names (strings) to their corresponding Prometheus metric objects.
     """
     metrics = {
         # WebSocket metrics

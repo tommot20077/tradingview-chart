@@ -1,4 +1,10 @@
-"""Abstract kline repository interface."""
+"""Abstract kline repository interface.
+
+This module defines the abstract base class for Kline (candlestick) data
+repositories. It provides a standardized interface for storing, querying,
+streaming, and managing historical and real-time Kline data, enabling
+various storage backends to be used interchangeably.
+"""
 
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
@@ -9,7 +15,19 @@ from ..models.kline import Kline, KlineInterval
 
 
 class QueryOptions:
-    """Options for querying klines."""
+    """Options for querying klines.
+
+    This class encapsulates various parameters that can be used to refine
+    Kline data queries, such as limiting results, offsetting, ordering,
+    and including additional metadata.
+
+    Attributes:
+        limit (int | None): The maximum number of results to return.
+        offset (int | None): The number of results to skip from the beginning.
+        order_by (str): The field by which to order the results (e.g., "open_time").
+        order_desc (bool): If True, results are ordered in descending order; otherwise, ascending.
+        include_metadata (bool): If True, additional metadata associated with Klines will be included.
+    """
 
     def __init__(
         self,
@@ -19,14 +37,19 @@ class QueryOptions:
         order_desc: bool = False,
         include_metadata: bool = False,
     ) -> None:
-        """Initialize query options.
+        """Initializes a new instance of `QueryOptions`.
 
         Args:
-            limit: Maximum number of results
-            offset: Number of results to skip
-            order_by: Field to order by
-            order_desc: Whether to order descending
-            include_metadata: Whether to include metadata
+            limit (int | None): Optional. The maximum number of Kline results to retrieve.
+                                If `None`, no limit is applied.
+            offset (int | None): Optional. The number of Kline results to skip from the beginning.
+                                 Useful for pagination. If `None`, no offset is applied.
+            order_by (str): Optional. The field name to use for ordering the results.
+                            Defaults to "open_time".
+            order_desc (bool): Optional. If `True`, results are ordered in descending order.
+                               If `False`, results are ordered in ascending order. Defaults to `False`.
+            include_metadata (bool): Optional. If `True`, additional metadata associated with each
+                                     Kline will be included in the results. Defaults to `False`.
         """
         self.limit = limit
         self.offset = offset
@@ -36,26 +59,44 @@ class QueryOptions:
 
 
 class AbstractKlineRepository(ABC):
-    """Abstract interface for kline storage implementations."""
+    """Abstract interface for a repository managing Kline data.
+
+    This abstract base class defines a standard contract for Kline (candlestick)
+    data storage and retrieval. It supports operations like saving, querying,
+    streaming, and deleting Kline data, as well as more advanced features like
+    gap detection and statistical analysis.
+    """
 
     @abstractmethod
     async def save(self, kline: Kline) -> None:
-        """Save a single kline.
+        """Saves a single Kline object to the repository.
+
+        This method is idempotent. If a Kline with the same symbol, interval,
+        and open time already exists, it will be overwritten.
 
         Args:
-            kline: Kline to save
+            kline: The `Kline` object to save.
+
+        Raises:
+            StorageError: If the operation fails due to a backend issue.
         """
         pass
 
     @abstractmethod
     async def save_batch(self, klines: list[Kline]) -> int:
-        """Save multiple klines in a batch.
+        """Saves a batch of Kline objects in a single transaction.
+
+        This method is designed for efficient bulk insertion of Kline data.
+        Like `save`, this operation should be idempotent.
 
         Args:
-            klines: List of klines to save
+            klines: A list of `Kline` objects to save.
 
         Returns:
-            Number of klines successfully saved
+            The number of klines successfully saved.
+
+        Raises:
+            StorageError: If the batch operation fails.
         """
         pass
 
@@ -69,17 +110,21 @@ class AbstractKlineRepository(ABC):
         *,
         options: QueryOptions | None = None,
     ) -> list[Kline]:
-        """Query klines.
+        """Queries for Kline data within a specified time range.
 
         Args:
-            symbol: Trading pair symbol
-            interval: Kline interval
-            start_time: Start time (inclusive)
-            end_time: End time (exclusive)
-            options: Optional query options
+            symbol: The trading symbol to query (e.g., "BTCUSDT").
+            interval: The Kline interval (e.g., KlineInterval.ONE_MINUTE).
+            start_time: The inclusive start of the time range.
+            end_time: The exclusive end of the time range.
+            options: Optional `QueryOptions` to customize the query (e.g., limit, order).
 
         Returns:
-            List of klines matching the query
+            A list of `Kline` objects matching the query criteria.
+
+        Raises:
+            InvalidQueryError: If the query parameters are invalid.
+            StorageError: If the operation fails.
         """
         pass
 
@@ -93,17 +138,22 @@ class AbstractKlineRepository(ABC):
         *,
         batch_size: int = 1000,
     ) -> AsyncIterator[Kline]:
-        """Stream klines.
+        """Streams Kline data for a given time range, yielding results iteratively.
+
+        This method is useful for processing large datasets that may not fit into memory.
 
         Args:
-            symbol: Trading pair symbol
-            interval: Kline interval
-            start_time: Start time (inclusive)
-            end_time: End time (exclusive)
-            batch_size: Number of klines to fetch per batch
+            symbol: The trading symbol to stream (e.g., "BTCUSDT").
+            interval: The Kline interval.
+            start_time: The inclusive start of the time range.
+            end_time: The exclusive end of the time range.
+            batch_size: The number of klines to fetch from the database in each batch.
 
         Yields:
-            Klines matching the query
+            An asynchronous iterator of `Kline` objects.
+
+        Raises:
+            StorageError: If the streaming operation fails.
         """
         pass
 
@@ -113,14 +163,17 @@ class AbstractKlineRepository(ABC):
         symbol: str,
         interval: KlineInterval,
     ) -> Kline | None:
-        """Get the latest kline.
+        """Retrieves the most recent Kline for a given symbol and interval.
 
         Args:
-            symbol: Trading pair symbol
-            interval: Kline interval
+            symbol: The trading symbol.
+            interval: The Kline interval.
 
         Returns:
-            Latest kline or None if not found
+            The latest `Kline` object, or `None` if no data exists.
+
+        Raises:
+            StorageError: If the operation fails.
         """
         pass
 
@@ -130,14 +183,17 @@ class AbstractKlineRepository(ABC):
         symbol: str,
         interval: KlineInterval,
     ) -> Kline | None:
-        """Get the oldest kline.
+        """Retrieves the earliest Kline for a given symbol and interval.
 
         Args:
-            symbol: Trading pair symbol
-            interval: Kline interval
+            symbol: The trading symbol.
+            interval: The Kline interval.
 
         Returns:
-            Oldest kline or None if not found
+            The oldest `Kline` object, or `None` if no data exists.
+
+        Raises:
+            StorageError: If the operation fails.
         """
         pass
 
@@ -149,16 +205,21 @@ class AbstractKlineRepository(ABC):
         start_time: datetime | None = None,
         end_time: datetime | None = None,
     ) -> int:
-        """Count klines.
+        """Counts the number of Klines for a given symbol and interval.
+
+        If a time range is provided, the count is restricted to that range.
 
         Args:
-            symbol: Trading pair symbol
-            interval: Kline interval
-            start_time: Optional start time (inclusive)
-            end_time: Optional end time (exclusive)
+            symbol: The trading symbol.
+            interval: The Kline interval.
+            start_time: Optional inclusive start of the time range.
+            end_time: Optional exclusive end of the time range.
 
         Returns:
-            Number of klines
+            The total number of `Kline` objects matching the criteria.
+
+        Raises:
+            StorageError: If the operation fails.
         """
         pass
 
@@ -170,16 +231,19 @@ class AbstractKlineRepository(ABC):
         start_time: datetime,
         end_time: datetime,
     ) -> int:
-        """Delete klines.
+        """Deletes Kline data within a specified time range.
 
         Args:
-            symbol: Trading pair symbol
-            interval: Kline interval
-            start_time: Start time (inclusive)
-            end_time: End time (exclusive)
+            symbol: The trading symbol.
+            interval: The Kline interval.
+            start_time: The inclusive start of the time range for deletion.
+            end_time: The exclusive end of the time range for deletion.
 
         Returns:
-            Number of klines deleted
+            The number of klines that were deleted.
+
+        Raises:
+            StorageError: If the deletion fails.
         """
         pass
 
@@ -191,16 +255,22 @@ class AbstractKlineRepository(ABC):
         start_time: datetime,
         end_time: datetime,
     ) -> list[tuple[datetime, datetime]]:
-        """Find gaps in kline data.
+        """Identifies and returns any time gaps in the Kline data.
+
+        A gap is a period where klines are expected but are missing from storage.
 
         Args:
-            symbol: Trading pair symbol
-            interval: Kline interval
-            start_time: Start time (inclusive)
-            end_time: End time (exclusive)
+            symbol: The trading symbol.
+            interval: The Kline interval.
+            start_time: The inclusive start of the time range to check for gaps.
+            end_time: The exclusive end of the time range to check for gaps.
 
         Returns:
-            List of (gap_start, gap_end) tuples
+            A list of tuples, where each tuple contains the start and end
+            datetime of a detected gap.
+
+        Raises:
+            StorageError: If the operation fails.
         """
         pass
 
@@ -212,28 +282,38 @@ class AbstractKlineRepository(ABC):
         start_time: datetime | None = None,
         end_time: datetime | None = None,
     ) -> dict[str, Any]:
-        """Get statistics about stored klines.
+        """Retrieves statistical information about the stored Kline data.
+
+        Statistics can include total count, date ranges, and other
+        backend-specific metrics.
 
         Args:
-            symbol: Trading pair symbol
-            interval: Kline interval
-            start_time: Optional start time (inclusive)
-            end_time: Optional end time (exclusive)
+            symbol: The trading symbol.
+            interval: The Kline interval.
+            start_time: Optional inclusive start of the time range.
+            end_time: Optional exclusive end of the time range.
 
         Returns:
-            Dictionary with statistics (count, date range, etc.)
+            A dictionary containing statistical data.
+
+        Raises:
+            StorageError: If the operation fails.
         """
         pass
 
     @abstractmethod
     async def close(self) -> None:
-        """Close the repository and clean up resources."""
+        """Closes the repository and releases any underlying resources.
+
+        This method should be called to gracefully shut down the repository,
+        closing database connections or file handles.
+        """
         pass
 
     async def __aenter__(self) -> "AbstractKlineRepository":
-        """Async context manager entry."""
+        """Enters the asynchronous context, returning the repository instance."""
         return self
 
     async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-        """Async context manager exit."""
+        """Exits the asynchronous context, ensuring the repository is closed."""
         await self.close()
