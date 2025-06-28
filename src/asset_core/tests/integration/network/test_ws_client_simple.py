@@ -9,8 +9,8 @@ import pytest
 from websockets import State
 from websockets.exceptions import ConnectionClosed, WebSocketException
 
-from src.asset_core.asset_core.exceptions import ConnectionError, WebSocketError
-from src.asset_core.asset_core.network.ws_client import RobustWebSocketClient
+from asset_core.exceptions import ConnectionError, WebSocketError
+from asset_core.network.ws_client import RobustWebSocketClient
 
 
 @pytest.mark.integration

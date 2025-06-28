@@ -5,7 +5,7 @@ from decimal import Decimal
 
 import pytest
 
-from src.asset_core.asset_core.models import (
+from asset_core.models import (
     BaseEvent,
     EventPriority,
     EventType,

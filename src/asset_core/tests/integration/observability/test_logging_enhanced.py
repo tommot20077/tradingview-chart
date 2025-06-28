@@ -7,8 +7,8 @@ from io import StringIO
 import pytest
 from loguru import logger
 
-from src.asset_core.asset_core.exceptions import CoreError
-from src.asset_core.asset_core.observability.logging import (
+from asset_core.exceptions import CoreError
+from asset_core.observability.logging import (
     TraceableLogger,
     create_traced_logger,
     log_exception_with_context,
@@ -16,7 +16,7 @@ from src.asset_core.asset_core.observability.logging import (
     setup_logging,
     trace_id_patcher,
 )
-from src.asset_core.asset_core.observability.trace_id import clear_trace_id, set_trace_id
+from asset_core.observability.trace_id import clear_trace_id, set_trace_id
 
 
 @pytest.mark.integration
@@ -1062,7 +1062,7 @@ class TestLogContextPropagation:
             - Different trace IDs should appear in nested contexts.
             - Original context should be restored after nesting.
         """
-        from src.asset_core.asset_core.observability.trace_id import TraceContext
+        from asset_core.observability.trace_id import TraceContext
 
         output = StringIO()
         logger.remove()
@@ -1615,12 +1615,27 @@ class TestLogSanitization:
 def cleanup_logging_and_trace_id():
     """Cleans up logging and trace ID after each test.
 
-    This fixture ensures that the global state of Loguru logger and
-    trace ID context is reset after each test, preventing interference
-    between tests.
+    Description of what the fixture covers:
+    This fixture is automatically used by all tests (`autouse=True`)
+    to ensure a clean and isolated environment for each test function.
+    It clears any set trace ID and resets the Loguru logger to its default
+    state (removing all handlers and re-adding a basic stderr handler),
+    preventing interference between tests.
 
-    Yields:
-        None: Yields control to the test function.
+    Preconditions:
+    - `clear_trace_id` function is available.
+    - Loguru `logger` is available.
+    - `sys.stderr` is available.
+
+    Steps:
+    - Yields control to the test function.
+    - After the test function completes, calls `clear_trace_id()`.
+    - Removes all existing Loguru handlers.
+    - Adds a default Loguru handler to `sys.stderr` with a basic format.
+
+    Expected Result:
+    - The trace ID context is reset to a clean state after every test.
+    - The Loguru logger is reset to a default, clean configuration after every test.
     """
     yield
     clear_trace_id()

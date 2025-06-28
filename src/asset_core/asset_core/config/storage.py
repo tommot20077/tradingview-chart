@@ -56,3 +56,6 @@ class BaseStorageConfig(BaseSettings):
         Returns:
             The value cast to an integer if it was a float, otherwise the original value.
         """
+        if isinstance(v, float) and v.is_integer():
+            return int(v)
+        return v

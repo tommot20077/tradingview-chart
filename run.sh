@@ -325,8 +325,8 @@ Examples:
     $0 test --no-cov                            # Run tests without coverage (but with quality checks)
 
   Test Targeting:
-    $0 test tests/units/config/                   # Run specific test directory
-    $0 test tests/units/models/test_kline.py      # Run specific test file
+    $0 test src/asset_core/tests/units/config/                   # Run specific test directory
+    $0 test src/asset_core/tests/units/models/test_kline.py      # Run specific test file
     $0 test units --timeout=30 --no-cov           # Fast unit test run (with quality checks)
 
   Fast Development Testing:

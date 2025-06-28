@@ -8,7 +8,7 @@ from unittest.mock import patch
 import pytest
 from pydantic import ValidationError
 
-from src.asset_core.asset_core.config.base import BaseCoreSettings
+from asset_core.config.base import BaseCoreSettings
 
 
 @pytest.mark.unit
@@ -470,6 +470,23 @@ ENVIRONMENT=staging
             - environment should be "development" (default)
             - debug should be False (default)
         """
+        # Ensure no .env file exists
+        original_cwd = os.getcwd()
+
+        try:
+            # Create a temporary directory without .env file
+            import tempfile
+
+            with tempfile.TemporaryDirectory() as temp_dir:
+                os.chdir(temp_dir)
+
+                settings = BaseCoreSettings()
+
+                assert settings.app_name == "asset-core"
+                assert settings.environment == "development"
+                assert settings.debug is False
+        finally:
+            os.chdir(original_cwd)
         # Ensure no .env file exists
         original_cwd = os.getcwd()
 

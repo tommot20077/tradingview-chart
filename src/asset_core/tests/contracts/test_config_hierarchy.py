@@ -12,10 +12,10 @@ from unittest.mock import patch
 import pytest
 from pydantic import Field, ValidationError
 
-from src.asset_core.asset_core.config.base import BaseCoreSettings
-from src.asset_core.asset_core.config.network import BaseNetworkConfig
-from src.asset_core.asset_core.config.observability import BaseObservabilityConfig
-from src.asset_core.asset_core.config.storage import BaseStorageConfig
+from asset_core.config.base import BaseCoreSettings
+from asset_core.config.network import BaseNetworkConfig
+from asset_core.config.observability import BaseObservabilityConfig
+from asset_core.config.storage import BaseStorageConfig
 
 
 class CompositeApplicationConfig(BaseCoreSettings, BaseNetworkConfig, BaseObservabilityConfig, BaseStorageConfig):

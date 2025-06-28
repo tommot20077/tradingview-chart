@@ -8,8 +8,8 @@ import pytest
 from hypothesis import HealthCheck, assume, given, settings
 from hypothesis import strategies as st
 
-from src.asset_core.asset_core.models.kline import Kline, KlineInterval
-from src.asset_core.asset_core.models.trade import Trade, TradeSide
+from asset_core.models.kline import Kline, KlineInterval
+from asset_core.models.trade import Trade, TradeSide
 
 
 # Hypothesis strategies for model testing
@@ -31,9 +31,26 @@ def decimal_strategy(min_value: str = "0.000000000001", max_value: str = "100000
 def symbol_strategy() -> st.SearchStrategy[str]:
     """Generates valid trading symbols.
 
+    Description of what the function covers:
+    This function creates a Hypothesis strategy for generating valid trading symbols.
+    It produces alphanumeric strings with optional underscores, ensuring they are
+    non-empty and not composed solely of whitespace.
+
+    Preconditions:
+    - `hypothesis.strategies` module is imported as `st`.
+
     Returns:
         st.SearchStrategy[str]: A Hypothesis strategy that generates strings
                                 suitable for trading symbols (alphanumeric, underscores).
+
+    Steps:
+    - Uses `st.text` to generate strings with a whitelist of alphanumeric and underscore characters.
+    - Sets `min_size` to 1 and `max_size` to 20.
+    - Filters out strings that are empty or contain only whitespace using a `lambda` function.
+
+    Expected Result:
+    - A Hypothesis strategy that generates valid, non-empty, and non-whitespace-only
+      trading symbol strings.
     """
     return st.text(
         alphabet=st.characters(whitelist_categories=["Lu", "Ll", "Nd", "Pc"]), min_size=1, max_size=20
@@ -43,8 +60,22 @@ def symbol_strategy() -> st.SearchStrategy[str]:
 def trade_side_strategy() -> st.SearchStrategy[TradeSide]:
     """Generates `TradeSide` enum values.
 
+    Description of what the function covers:
+    This function creates a Hypothesis strategy for generating random `TradeSide`
+    enum values (`BUY` or `SELL`).
+
+    Preconditions:
+    - `TradeSide` enum is defined and imported.
+    - `hypothesis.strategies` module is imported as `st`.
+
     Returns:
         st.SearchStrategy[TradeSide]: A Hypothesis strategy that generates `TradeSide.BUY` or `TradeSide.SELL`.
+
+    Steps:
+    - Uses `st.sampled_from` to pick randomly from the `TradeSide` enum members.
+
+    Expected Result:
+    - A Hypothesis strategy that generates either `TradeSide.BUY` or `TradeSide.SELL`.
     """
     return st.sampled_from(TradeSide)
 
@@ -52,20 +83,62 @@ def trade_side_strategy() -> st.SearchStrategy[TradeSide]:
 def datetime_strategy() -> st.SearchStrategy[datetime]:
     """Generates datetime values in a reasonable range for testing.
 
+    Description of what the function covers:
+    This function creates a Hypothesis strategy for generating `datetime` objects.
+    It produces datetimes within a predefined reasonable range (2020 to 2030)
+    and ensures they are timezone-naive (no timezone information).
+
+    Preconditions:
+    - `datetime` type from the `datetime` module is available.
+    - `hypothesis.strategies` module is imported as `st`.
+
     Returns:
         st.SearchStrategy[datetime]: A Hypothesis strategy that generates datetime objects
                                      between 2020-01-01 and 2030-12-31, without timezone info.
+
+    Steps:
+    - Uses `st.datetimes` with `min_value` and `max_value` set to specific dates.
+    - Sets `timezones` to `st.none()` to ensure naive datetimes.
+
+    Expected Result:
+    - A Hypothesis strategy that generates timezone-naive `datetime` objects within the specified range.
     """
     return st.datetimes(min_value=datetime(2020, 1, 1), max_value=datetime(2030, 12, 31), timezones=st.none())
 
-
 def trade_strategy() -> st.SearchStrategy[Trade]:
     """Generates valid Trade instances with proper volume constraints.
+
+    Description of what the function covers:
+    This function creates a Hypothesis strategy for generating valid `Trade` objects.
+    It ensures that the combination of `price` and `quantity` results in a `volume`
+    that adheres to the `Trade` model's validation rules (e.g., positive volume,
+    within reasonable bounds). It also generates values for all optional fields.
+
+    Preconditions:
+    - `Trade` model is defined and imported.
+    - `decimal_strategy`, `symbol_strategy`, `trade_side_strategy`, `datetime_strategy` are available.
+    - `hypothesis.strategies` module is imported as `st`.
 
     Returns:
         st.SearchStrategy[Trade]: A Hypothesis strategy that generates `Trade` objects,
                                  ensuring that `price` and `quantity` combinations
                                  result in a valid `volume`.
+
+    Steps:
+    - Uses `@st.composite` to create a composite strategy.
+    - Draws `price` from `decimal_strategy` within a test-friendly range.
+    - Calculates `min_quantity` and `max_quantity` dynamically based on `price`
+      to ensure the resulting `volume` is within valid bounds, adding safety margins.
+    - Draws `quantity` from `st.decimals` using the calculated `min_q` and `max_q`.
+    - Draws values for `symbol`, `trade_id`, `side`, `timestamp`, and all optional fields
+      (`exchange`, `maker_order_id`, `taker_order_id`, `is_buyer_maker`, `received_at`, `metadata`)
+      from their respective strategies or `st.one_of(st.none(), ...)`.
+    - Constructs and returns a `Trade` instance with the drawn values.
+
+    Expected Result:
+    - A Hypothesis strategy that generates `Trade` objects that are consistently valid
+      according to the `Trade` model's rules, especially concerning `volume` constraints.
+    - Generated trades include a diverse set of values for all fields, including optional ones.
     """
 
     @st.composite
@@ -105,8 +178,22 @@ def trade_strategy() -> st.SearchStrategy[Trade]:
 def kline_interval_strategy() -> st.SearchStrategy[KlineInterval]:
     """Generates `KlineInterval` enum values.
 
+    Description of what the function covers:
+    This function creates a Hypothesis strategy for generating random `KlineInterval`
+    enum values.
+
+    Preconditions:
+    - `KlineInterval` enum is defined and imported.
+    - `hypothesis.strategies` module is imported as `st`.
+
     Returns:
         st.SearchStrategy[KlineInterval]: A Hypothesis strategy that generates `KlineInterval` enum members.
+
+    Steps:
+    - Uses `st.sampled_from` to pick randomly from the `KlineInterval` enum members.
+
+    Expected Result:
+    - A Hypothesis strategy that generates any valid `KlineInterval` enum member.
     """
     return st.sampled_from(KlineInterval)
 
@@ -114,11 +201,30 @@ def kline_interval_strategy() -> st.SearchStrategy[KlineInterval]:
 def ohlc_prices_strategy() -> st.SearchStrategy[dict[str, Decimal]]:
     """Generates valid OHLC price combinations.
 
-    Ensures that `low` <= `open`, `close` <= `high`.
+    Description of what the function covers:
+    This function creates a Hypothesis strategy for generating valid Open, High, Low, Close (OHLC) price combinations.
+    It ensures that the fundamental OHLC relationships are maintained: `low_price` is always less than or equal to
+    `open_price`, `close_price`, and `high_price`, and `high_price` is always greater than or equal to `open_price` and `close_price`.
+
+    Preconditions:
+    - `decimal_strategy` is available for generating `Decimal` prices.
+    - `hypothesis.strategies` module is imported as `st`.
+    - `hypothesis.assume` is available for filtering invalid combinations.
 
     Returns:
         st.SearchStrategy[dict[str, Decimal]]: A Hypothesis strategy that generates a dictionary
                                               with 'open_price', 'high_price', 'low_price', and 'close_price' keys.
+
+    Steps:
+    - Uses `@st.composite` to create a composite strategy.
+    - Draws `low` and `high` prices using `decimal_strategy`, ensuring `high` is greater than or equal to `low`.
+    - Uses `assume` to filter out cases where `high` is less than `low` (though `decimal_strategy` should prevent this).
+    - Draws `open_price` and `close_price` from `st.decimals` within the `[low, high]` range.
+    - Returns a dictionary containing the generated OHLC prices.
+
+    Expected Result:
+    - A Hypothesis strategy that generates dictionaries of OHLC prices where `low` <= `open`, `close` <= `high`, and `low` <= `high`.
+    - All generated prices are `Decimal` instances.
     """
 
     @st.composite
@@ -142,10 +248,36 @@ def ohlc_prices_strategy() -> st.SearchStrategy[dict[str, Decimal]]:
 def kline_strategy() -> st.SearchStrategy[Kline]:
     """Generates valid Kline instances.
 
-    Ensures that `open_time` and `close_time` are aligned with the `interval`.
+    Description of what the function covers:
+    This function creates a Hypothesis strategy for generating valid `Kline` objects.
+    It ensures that `open_time` and `close_time` are correctly aligned with the
+    specified `interval` boundaries, and that all other `Kline` fields are valid.
+
+    Preconditions:
+    - `Kline` model is defined and imported.
+    - `kline_interval_strategy`, `datetime_strategy`, `ohlc_prices_strategy`,
+      `decimal_strategy`, `symbol_strategy` are available.
+    - `KlineInterval.to_seconds` and `KlineInterval.to_timedelta` are available.
+    - `hypothesis.strategies` module is imported as `st`.
 
     Returns:
         st.SearchStrategy[Kline]: A Hypothesis strategy that generates `Kline` objects.
+
+    Steps:
+    - Uses `@st.composite` to create a composite strategy.
+    - Draws `interval` from `kline_interval_strategy` and `open_time` from `datetime_strategy`.
+    - Aligns `open_time` to the `interval` boundary using `KlineInterval.to_seconds`.
+    - Calculates `close_time` based on the aligned `open_time` and `interval` duration.
+    - Draws `ohlc_prices` from `ohlc_prices_strategy`.
+    - Draws `volume`, `quote_volume`, `trades_count`, `exchange`, optional `taker_buy_volume`,
+      `taker_buy_quote_volume`, `is_closed`, `received_at`, and `metadata` from their
+      respective strategies or `st.one_of(st.none(), ...)`.
+    - Constructs and returns a `Kline` instance with the drawn values.
+
+    Expected Result:
+    - A Hypothesis strategy that generates `Kline` objects that are consistently valid
+      according to the `Kline` model's rules, especially concerning time alignment and OHLC relationships.
+    - Generated klines include a diverse set of values for all fields, including optional ones.
     """
 
     @st.composite

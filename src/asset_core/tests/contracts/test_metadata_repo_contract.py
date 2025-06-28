@@ -10,10 +10,10 @@ from typing import Any
 
 import pytest
 
-from src.asset_core.asset_core.storage.metadata_repo import AbstractMetadataRepository
-from src.asset_core.asset_core.types.common import Symbol
-
-from .base_contract_test import AsyncContractTestMixin, BaseContractTest, MockImplementationBase
+from asset_core.storage.metadata_repo import AbstractMetadataRepository
+from asset_core.types.common import Symbol
+from .base_contract_test import AsyncContractTestMixin, BaseContractTest, \
+    MockImplementationBase
 
 
 class MockMetadataRepository(AbstractMetadataRepository, MockImplementationBase):

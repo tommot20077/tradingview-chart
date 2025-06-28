@@ -6,7 +6,7 @@ from decimal import Decimal
 import pytest
 from pydantic import ValidationError
 
-from src.asset_core.asset_core.models import Kline, KlineInterval
+from asset_core.models import Kline, KlineInterval
 
 
 def aligned_datetime(

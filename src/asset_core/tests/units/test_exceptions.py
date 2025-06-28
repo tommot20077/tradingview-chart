@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from src.asset_core.asset_core.exceptions import (
+from asset_core.exceptions import (
     AuthenticationError,
     CircuitBreakerError,
     ConfigurationError,

@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 
-from src.asset_core.asset_core.models.trade import Trade
+from asset_core.models.trade import Trade
 
 
 @pytest.mark.unit
@@ -304,21 +304,35 @@ class TestTradeValidation:
     def test_volume_validation_minimum(self) -> None:
         """Test trade volume minimum validation.
 
-        Description of what the test covers.
+        Description of what the test covers:
         Verifies that a `ValidationError` is raised when the calculated `volume`
-        (price * quantity) of a `Trade` object falls below the minimum allowed volume.
+        (price * quantity) of a `Trade` object falls below the minimum allowed volume (`MIN_VOLUME`).
 
         Preconditions:
-        - None.
+        - `MIN_VOLUME` is defined in the `Trade` model's validation logic.
 
         Steps:
         - Attempt to create a `Trade` instance with `price` and `quantity` values
-          that result in a `volume` just below the minimum allowed.
+          that result in a `volume` just below `MIN_VOLUME`.
         - Assert that `ValidationError` is raised with a specific error message.
 
         Expected Result:
         - `ValidationError` should be raised, indicating that the volume is below the minimum.
         """
+        from datetime import UTC, datetime
+        from decimal import Decimal
+        from pydantic import ValidationError
+
+        # Assuming MIN_VOLUME is 0.000000000001
+        with pytest.raises(ValidationError, match="Trade volume.*is below minimum"):
+            Trade(
+                symbol="BTCUSDT",
+                trade_id="1",
+                price=Decimal("0.000000000001"),
+                quantity=Decimal("0.0000000000001"),  # Volume = 1e-25, below MIN_VOLUME
+                side="buy",
+                timestamp=datetime.now(UTC),
+            )
 
     def test_volume_validation_maximum(self) -> None:
         """Test trade volume maximum validation.
@@ -390,7 +404,7 @@ class TestTradeTimezoneHandling:
     def test_timezone_conversion_to_utc(self) -> None:
         """Test timestamp from different timezone is converted to UTC.
 
-        Description of what the test covers.
+        Description of what the test covers:
         Verifies that a timestamp from a non-UTC timezone is correctly converted
         to UTC when creating a `Trade` object.
 
@@ -407,6 +421,27 @@ class TestTradeTimezoneHandling:
         Expected Result:
         - The `Trade` object's timestamp should be converted to UTC, preserving the correct point in time.
         """
+        from datetime import datetime
+        from decimal import Decimal
+        from zoneinfo import ZoneInfo
+
+        # Create an EST timezone-aware datetime
+        est = ZoneInfo("America/New_York")
+        est_dt = datetime(2024, 1, 1, 12, 0, 0, tzinfo=est)  # 12:00 PM EST
+
+        trade = Trade(
+            symbol="BTCUSDT",
+            trade_id="1",
+            price=Decimal("100"),
+            quantity=Decimal("1"),
+            side="buy",
+            timestamp=est_dt,
+        )
+
+        assert trade.timestamp.tzinfo == ZoneInfo("UTC")
+        # 12:00 PM EST is 5:00 PM UTC (during standard time, no DST)
+        expected_utc_dt = datetime(2024, 1, 1, 17, 0, 0, tzinfo=ZoneInfo("UTC"))
+        assert trade.timestamp == expected_utc_dt
 
     def test_received_at_timezone_handling(self) -> None:
         """Test received_at timezone handling.

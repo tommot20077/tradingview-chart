@@ -6,7 +6,7 @@ from decimal import Decimal
 import pytest
 from pydantic import ValidationError
 
-from src.asset_core.asset_core.models import (
+from asset_core.models import (
     BaseEvent,
     EventPriority,
     EventType,
@@ -17,16 +17,35 @@ from src.asset_core.asset_core.models import (
     TradeEvent,
     TradeSide,
 )
-from src.asset_core.asset_core.models.events import ConnectionEvent, ConnectionStatus, ErrorEvent
+from asset_core.models.events import ConnectionEvent, ConnectionStatus, ErrorEvent
 
 
 @pytest.mark.unit
 class TestTradeModelComprehensive:
     """Comprehensive tests for Trade model.
 
+    Description of what the class covers:
     This test suite covers various aspects of the `Trade` model,
     including valid creation, data normalization, timezone handling,
     validation for invalid inputs, and serialization to dictionary.
+
+    Preconditions:
+    - The `Trade` model is correctly defined and importable.
+
+    Steps:
+    - Test valid `Trade` object creation with all required fields.
+    - Verify symbol normalization to uppercase.
+    - Confirm correct handling of timezone for timestamps.
+    - Test validation for invalid (non-positive) prices and quantities.
+    - Verify trade volume validation against minimum thresholds.
+    - Test `to_dict()` serialization for correct data representation.
+    - Test creation with all optional fields.
+
+    Expected Result:
+    - `Trade` objects are created successfully with valid data.
+    - Data normalization and timezone handling work as expected.
+    - Invalid inputs are correctly rejected by Pydantic validation.
+    - Serialization to dictionary produces accurate representations.
     """
 
     def test_trade_creation_valid(self) -> None:

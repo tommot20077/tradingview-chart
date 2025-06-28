@@ -6,7 +6,7 @@ from unittest.mock import patch
 import pytest
 from pydantic import ValidationError
 
-from src.asset_core.asset_core.config import BaseObservabilityConfig
+from asset_core.config import BaseObservabilityConfig
 
 
 @pytest.mark.unit

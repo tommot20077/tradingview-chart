@@ -3,7 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
-from src.asset_core.asset_core.config.base import BaseCoreSettings
+from asset_core.config.base import BaseCoreSettings
 
 
 @pytest.mark.unit

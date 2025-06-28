@@ -14,9 +14,9 @@ import pytest
 from pydantic import Field, ValidationError
 from pydantic_settings import SettingsConfigDict
 
-from src.asset_core.asset_core.config.base import BaseCoreSettings
-from src.asset_core.asset_core.config.network import BaseNetworkConfig
-from src.asset_core.asset_core.config.storage import BaseStorageConfig
+from asset_core.config.base import BaseCoreSettings
+from asset_core.config.network import BaseNetworkConfig
+from asset_core.config.storage import BaseStorageConfig
 
 
 class TestConfigurationEdgeCases:

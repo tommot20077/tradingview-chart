@@ -6,8 +6,8 @@ from collections.abc import Callable
 
 import pytest
 
-from src.asset_core.asset_core.events.bus import AbstractEventBus, AsyncEventHandler, EventHandler
-from src.asset_core.asset_core.models.events import BaseEvent, EventType
+from asset_core.events.bus import AbstractEventBus, AsyncEventHandler, EventHandler
+from asset_core.models.events import BaseEvent, EventType
 
 
 class MockEventBus(AbstractEventBus):
@@ -347,7 +347,7 @@ class TestAbstractEventBus:
     async def test_mock_event_bus_symbol_filter(self) -> None:
         """Test event filtering by symbol.
 
-        Description of what the test covers.
+        Description of what the test covers:
         Verifies that event handlers subscribed with a `filter_symbol` only
         receive events that match the specified symbol.
 
@@ -364,6 +364,43 @@ class TestAbstractEventBus:
         - Events should be correctly filtered by symbol.
         - Handlers should only receive events for their specified symbol.
         """
+        bus = MockEventBus()
+        btc_events = []
+        eth_events = []
+
+        def btc_handler(event: BaseEvent) -> None:
+            btc_events.append(event)
+
+        def eth_handler(event: BaseEvent) -> None:
+            eth_events.append(event)
+
+        # Subscribe with symbol filters
+        bus.subscribe(EventType.TRADE, btc_handler, filter_symbol="BTCUSDT")
+        bus.subscribe(EventType.TRADE, eth_handler, filter_symbol="ETHUSDT")
+
+        # Publish BTC event
+        btc_event = BaseEvent(
+            event_type=EventType.TRADE,
+            source="test",
+            symbol="BTCUSDT",
+            data={"symbol": "BTCUSDT"},
+        )
+        await bus.publish(btc_event)
+
+        # Publish ETH event
+        eth_event = BaseEvent(
+            event_type=EventType.TRADE,
+            source="test",
+            symbol="ETHUSDT",
+            data={"symbol": "ETHUSDT"},
+        )
+        await bus.publish(eth_event)
+
+        # Check filtering worked
+        assert len(btc_events) == 1
+        assert len(eth_events) == 1
+        assert btc_events[0].symbol == "BTCUSDT"
+        assert eth_events[0].symbol == "ETHUSDT"
         bus = MockEventBus()
         btc_events = []
         eth_events = []

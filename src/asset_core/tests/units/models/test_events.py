@@ -8,7 +8,7 @@ from uuid import UUID
 import pytest
 from pydantic import ValidationError
 
-from src.asset_core.asset_core.models.events import (
+from asset_core.models.events import (
     BaseEvent,
     ConnectionEvent,
     ConnectionStatus,
@@ -18,8 +18,8 @@ from src.asset_core.asset_core.models.events import (
     KlineEvent,
     TradeEvent,
 )
-from src.asset_core.asset_core.models.kline import Kline
-from src.asset_core.asset_core.models.trade import Trade
+from asset_core.models.kline import Kline
+from asset_core.models.trade import Trade
 
 
 @pytest.mark.unit

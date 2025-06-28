@@ -15,7 +15,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.asset_core.asset_core.observability.logging import (
+from asset_core.observability.logging import (
     LogContext,
     LogFilter,
     LogFormat,
@@ -32,8 +32,9 @@ from src.asset_core.asset_core.observability.logging import (
     setup_logging,
     trace_id_patcher,
 )
-from src.asset_core.asset_core.observability.metrics import PrometheusMetricsRegistry, create_common_metrics
-from src.asset_core.asset_core.observability.trace_id import (
+from asset_core.observability.metrics import PrometheusMetricsRegistry, \
+    create_common_metrics
+from asset_core.observability.trace_id import (
     TraceContext,
     TraceIdMiddleware,
     clear_trace_id,

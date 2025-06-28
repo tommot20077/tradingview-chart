@@ -6,7 +6,7 @@ from unittest.mock import patch
 import pytest
 from pydantic import ValidationError
 
-from src.asset_core.asset_core.config import BaseNetworkConfig
+from asset_core.config import BaseNetworkConfig
 
 
 @pytest.mark.unit
@@ -607,7 +607,28 @@ class TestBaseNetworkConfigIntegration:
     """Integration test cases for BaseNetworkConfig."""
 
     def test_complete_network_configuration(self):
-        """Test complete network configuration with all features."""
+        """Test complete network configuration with all features.
+
+        Description of what the test covers:
+        Verifies that `BaseNetworkConfig` correctly combines configuration values
+        from different sources: default values, environment variables, and constructor
+        arguments, respecting the defined precedence rules.
+
+        Preconditions:
+        - Environment variables are set for some fields.
+        - Constructor arguments are provided for other fields.
+
+        Steps:
+        - Mock environment variables for `WS_RECONNECT_INTERVAL` and `WS_PING_INTERVAL`.
+        - Create a `BaseNetworkConfig` instance, providing `ws_max_reconnect_attempts` and `ws_ping_timeout` via constructor.
+        - Verify that each configuration field gets its value from the correct source (environment variable or constructor).
+        - Test serialization of the combined configuration using `model_dump()`.
+        - Assert that all values in the dumped model are integers.
+
+        Expected Result:
+        - Configuration values are correctly loaded and prioritized from mixed sources.
+        - The resulting configuration is valid and can be serialized.
+        """
         with patch.dict(os.environ, {"WS_RECONNECT_INTERVAL": "15", "WS_PING_INTERVAL": "45"}):
             config = BaseNetworkConfig(ws_max_reconnect_attempts=5, ws_ping_timeout=20)
 

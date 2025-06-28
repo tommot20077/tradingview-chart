@@ -10,11 +10,11 @@ from datetime import UTC, datetime
 
 import pytest
 
-from src.asset_core.asset_core.models.kline import Kline, KlineInterval
-from src.asset_core.asset_core.storage.kline_repo import AbstractKlineRepository, QueryOptions
-from src.asset_core.asset_core.types.common import Symbol
-
-from .base_contract_test import AsyncContractTestMixin, BaseContractTest, MockImplementationBase
+from asset_core.models.kline import Kline, KlineInterval
+from asset_core.storage.kline_repo import AbstractKlineRepository, QueryOptions
+from asset_core.types.common import Symbol
+from .base_contract_test import AsyncContractTestMixin, BaseContractTest, \
+    MockImplementationBase
 
 
 class MockKlineRepository(AbstractKlineRepository, MockImplementationBase):

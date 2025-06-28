@@ -10,10 +10,10 @@ from collections.abc import Callable
 
 import pytest
 
-from src.asset_core.asset_core.events.bus import AbstractEventBus, AsyncEventHandler, EventHandler
-from src.asset_core.asset_core.models.events import BaseEvent, EventType
-
-from .base_contract_test import AsyncContractTestMixin, BaseContractTest, MockImplementationBase
+from asset_core.events.bus import AbstractEventBus, AsyncEventHandler, EventHandler
+from asset_core.models.events import BaseEvent, EventType
+from .base_contract_test import AsyncContractTestMixin, BaseContractTest, \
+    MockImplementationBase
 
 
 class MockEvent(BaseEvent[dict]):

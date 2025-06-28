@@ -13,11 +13,11 @@ from decimal import Decimal
 
 import pytest
 
-from src.asset_core.asset_core.models.kline import Kline, KlineInterval
-from src.asset_core.asset_core.models.trade import Trade
-from src.asset_core.asset_core.providers.base import AbstractDataProvider
-
-from .base_contract_test import AsyncContractTestMixin, BaseContractTest, MockImplementationBase
+from asset_core.models.kline import Kline, KlineInterval
+from asset_core.models.trade import Trade
+from asset_core.providers.base import AbstractDataProvider
+from .base_contract_test import AsyncContractTestMixin, BaseContractTest, \
+    MockImplementationBase
 
 
 class MockDataProvider(AbstractDataProvider, MockImplementationBase):

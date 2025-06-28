@@ -6,7 +6,7 @@ from unittest.mock import patch
 import pytest
 from pydantic import ValidationError
 
-from src.asset_core.asset_core.config.storage import BaseStorageConfig
+from asset_core.config.storage import BaseStorageConfig
 
 
 @pytest.mark.unit

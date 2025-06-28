@@ -9,10 +9,10 @@ from typing import Any
 
 import pytest
 
-from src.asset_core.asset_core.exceptions import StorageError, TimeoutError
-from src.asset_core.asset_core.models.kline import Kline, KlineInterval
-from src.asset_core.asset_core.storage.kline_repo import AbstractKlineRepository, QueryOptions
-from src.asset_core.asset_core.storage.metadata_repo import AbstractMetadataRepository
+from asset_core.exceptions import StorageError, TimeoutError
+from asset_core.models.kline import Kline, KlineInterval
+from asset_core.storage.kline_repo import AbstractKlineRepository, QueryOptions
+from asset_core.storage.metadata_repo import AbstractMetadataRepository
 
 
 class MockTransactionalKlineRepository(AbstractKlineRepository):

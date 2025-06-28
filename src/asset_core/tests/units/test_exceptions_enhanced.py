@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from src.asset_core.asset_core.exceptions import (
+from asset_core.exceptions import (
     CircuitBreakerError,
     CoreError,
     DataValidationError,
@@ -18,7 +18,7 @@ from src.asset_core.asset_core.exceptions import (
     install_global_exception_handler,
     uninstall_global_exception_handler,
 )
-from src.asset_core.asset_core.observability.trace_id import clear_trace_id, set_trace_id
+from asset_core.observability.trace_id import clear_trace_id, set_trace_id
 
 
 @pytest.mark.unit
@@ -453,9 +453,28 @@ class TestTracedExceptionCreation:
 class TestExceptionEnhancement:
     """Test cases for exception enhancement functionality.
 
-    Verifies that the `enhance_exception_with_trace_id` utility function
-    correctly adds trace ID information to exceptions, handling various
-    scenarios including `CoreError` and standard Python exceptions.
+    Description of what the class covers:
+    This test suite verifies that the `enhance_exception_with_trace_id` utility
+    function correctly adds trace ID information to exceptions. It covers various
+    scenarios, including enhancing `CoreError` (which should be a no-op), standard
+    Python exceptions, and handling cases where no trace ID is set or the exception
+    is already enhanced.
+
+    Preconditions:
+    - The `enhance_exception_with_trace_id` function is available.
+    - The trace ID management functions (`set_trace_id`, `clear_trace_id`)
+      are available.
+
+    Steps:
+    - Test enhancing a `CoreError` (should return the original instance).
+    - Test enhancing a standard exception (e.g., `ValueError`) to add trace ID to its string.
+    - Test enhancing an exception when no trace ID is set (should not modify).
+    - Test enhancing an exception that already has a trace ID prefix (should not re-enhance).
+
+    Expected Result:
+    - `CoreError` instances are not modified by the enhancement function.
+    - Standard exceptions are correctly prefixed with the trace ID in their string representation.
+    - Exceptions are not modified if no trace ID is available or if already enhanced.
     """
 
     def test_enhance_core_error(self) -> None:
