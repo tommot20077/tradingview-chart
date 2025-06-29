@@ -187,6 +187,38 @@ run_quality_checks() {
     return 0
 }
 
+# Normalize test paths for the current module
+normalize_test_paths_for_module() {
+    local module_name="$1"
+    local normalized_args=()
+    
+    for arg in "${TEST_ARGS[@]}"; do
+        # Check if argument looks like a path (contains / and doesn't start with -)
+        if [[ "$arg" == *"/"* && ! "$arg" == -* ]]; then
+            # Handle absolute paths: src/module_name/...
+            if [[ "$arg" == "src/$module_name/"* ]]; then
+                local normalized_path="${arg#src/$module_name/}"
+                print_debug "Normalized absolute path: $arg -> $normalized_path"
+                normalized_args+=("$normalized_path")
+            # Handle relative paths: ./module_name/...
+            elif [[ "$arg" == "./$module_name/"* ]]; then
+                local normalized_path="${arg#./$module_name/}"
+                print_debug "Normalized relative path: $arg -> $normalized_path"
+                normalized_args+=("$normalized_path")
+            # Path is for a different module, skip for this module
+            elif [[ "$arg" == "src/"* || "$arg" == "./"* ]]; then
+                continue
+            fi
+        else
+            # Not a path, keep as is
+            normalized_args+=("$arg")
+        fi
+    done
+    
+    # Update TEST_ARGS with normalized paths
+    TEST_ARGS=("${normalized_args[@]}")
+}
+
 # Test a single module
 test_module() {
     local module_name="$1"
@@ -204,6 +236,9 @@ test_module() {
         print_error "Module pyproject.toml not found: $module_path/pyproject.toml"
         return 1
     fi
+    
+    # Normalize test paths for this module before changing directory
+    normalize_test_paths_for_module "$module_name"
     
     # Change to module directory (important for pytest.ini discovery)
     print_debug "Changing to module directory: $module_path"
@@ -265,6 +300,82 @@ test_module() {
     fi
 }
 
+# Validate test paths and determine target modules
+validate_global_test_paths() {
+    local target_modules=""
+    local has_invalid_paths=false
+    
+    # If no TEST_ARGS with paths, return all modules
+    local has_path_args=false
+    for arg in "${TEST_ARGS[@]}"; do
+        if [[ "$arg" == *"/"* && ! "$arg" == -* ]]; then
+            has_path_args=true
+            break
+        fi
+    done
+    
+    if [ "$has_path_args" = false ]; then
+        echo "" # Return empty to use default modules
+        return 0
+    fi
+    
+    # Validate each path argument
+    for arg in "${TEST_ARGS[@]}"; do
+        if [[ "$arg" == *"/"* && ! "$arg" == -* ]]; then
+            if [[ "$arg" == "src/"*"/"* ]]; then
+                # Absolute path from root: src/module_name/...
+                local module_name="${arg#src/}"
+                module_name="${module_name%%/*}"
+                if [[ "$target_modules" != *"$module_name"* ]]; then
+                    target_modules="$target_modules $module_name"
+                fi
+            elif [[ "$arg" == "src/"* ]]; then
+                # Module-level path: src/module_name (auto-expand to tests)
+                local module_name="${arg#src/}"
+                if [[ "$target_modules" != *"$module_name"* ]]; then
+                    target_modules="$target_modules $module_name"
+                fi
+            elif [[ "$arg" == "./"*"/"* ]]; then
+                # Relative path from src: ./module_name/...
+                local module_name="${arg#./}"
+                module_name="${module_name%%/*}"
+                if [[ "$target_modules" != *"$module_name"* ]]; then
+                    target_modules="$target_modules $module_name"
+                fi
+            elif [[ "$arg" == "./"* ]]; then
+                # Module-level relative path: ./module_name (auto-expand to tests)
+                local module_name="${arg#./}"
+                if [[ "$target_modules" != *"$module_name"* ]]; then
+                    target_modules="$target_modules $module_name"
+                fi
+            else
+                print_error "Invalid test path format: '$arg'"
+                print_error "Test paths must use one of these formats:"
+                print_error "  ✓ src/module_name (test entire module)"
+                print_error "  ✓ src/module_name/tests/... (specific path within module)"
+                print_error "  ✓ ./module_name (test entire module, relative)"
+                print_error "  ✓ ./module_name/tests/... (specific path, relative)"
+                print_error "Examples:"
+                print_error "  ✓ src/asset_core (test all asset_core tests)"
+                print_error "  ✓ src/crypto_single (test all crypto_single tests)"
+                print_error "  ✓ src/asset_core/tests/units/observability/test_trace_id.py"
+                print_error "  ✓ src/crypto_single/tests/units/config/test_settings.py"
+                print_error "  ✓ ./asset_core/tests/units/observability/test_trace_id.py"
+                print_error "  ✓ ./crypto_single/tests/units"
+                print_error "  ✗ /tests/units (ambiguous - which module?)"
+                print_error "  ✗ test_trace_id.py (ambiguous - which module?)"
+                has_invalid_paths=true
+            fi
+        fi
+    done
+    
+    if [ "$has_invalid_paths" = true ]; then
+        return 1
+    fi
+    
+    echo "$target_modules" | xargs # Trim spaces
+}
+
 # Test all modules
 test_all_modules() {
     local modules_to_test
@@ -273,10 +384,37 @@ test_all_modules() {
         modules_to_test="$TEST_MODULES"
         print_status "Testing specified modules: $modules_to_test"
     else
-        if ! modules_to_test=$(detect_modules); then
+        # Check if we have specific path arguments that determine modules
+        if ! validate_global_test_paths; then
             return 1
         fi
-        print_status "Testing detected modules: $modules_to_test"
+        # Re-run to get the actual target modules (since function can't both validate and return)
+        local target_modules=""
+        local has_path_args=false
+        for arg in "${TEST_ARGS[@]}"; do
+            if [[ "$arg" == *"/"* && ! "$arg" == -* ]]; then
+                has_path_args=true
+                if [[ "$arg" == "src/"*"/"* ]]; then
+                    local module_name="${arg#src/}"
+                    module_name="${module_name%%/*}"
+                    if [[ "$target_modules" != *"$module_name"* ]]; then
+                        target_modules="$target_modules $module_name"
+                    fi
+                fi
+            fi
+        done
+        target_modules=$(echo "$target_modules" | xargs) # Trim spaces
+        print_debug "Target modules from path validation: '$target_modules'"
+        
+        if [ -n "$target_modules" ]; then
+            modules_to_test="$target_modules"
+            print_status "Testing modules with specified paths: $modules_to_test"
+        else
+            if ! modules_to_test=$(detect_modules); then
+                return 1
+            fi
+            print_status "Testing detected modules: $modules_to_test"
+        fi
     fi
     
     local failed_modules=""

@@ -71,6 +71,8 @@ omit = [
 
 [tool.mypy]
 python_version = "3.12"
+mypy_path = ["../asset_core", "../crypto_cluster"]
+namespace_packages = true
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
@@ -90,8 +92,13 @@ module = [
     "redis.*",
     "sqlalchemy.*",
     "alembic.*",
+    "src.asset_core.*",
 ]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "asset_core.*"
+ignore_errors = false
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -100,3 +107,14 @@ exclude = ["tests*"]
 
 [tool.uv.sources]
 asset-core = { path = "../asset_core", editable = true }
+
+[dependency-groups]
+dev = [
+    "factory-boy>=3.3.0",
+    "faker>=19.0.0",
+    "httpx>=0.25.0",
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.1.0",
+    "pytest-mock>=3.11.1",
+]

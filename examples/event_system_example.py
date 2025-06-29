@@ -15,8 +15,8 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from src.asset_core.asset_core.events.bus import AbstractEventBus, AsyncEventHandler, EventHandler
-from src.asset_core.asset_core.models.events import (
+from asset_core.events.bus import AbstractEventBus, AsyncEventHandler, EventHandler
+from asset_core.models.events import (
     BaseEvent,
     ConnectionEvent,
     ConnectionStatus,
@@ -25,7 +25,7 @@ from src.asset_core.asset_core.models.events import (
     EventType,
     TradeEvent,
 )
-from src.asset_core.asset_core.models.trade import Trade, TradeSide
+from asset_core.models.trade import Trade, TradeSide
 
 
 class InMemoryEventBus(AbstractEventBus):

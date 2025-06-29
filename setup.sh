@@ -52,39 +52,16 @@ setup_venv() {
 install_core() {
     print_status "Installing asset_core library..."
     
-    # Install core library and its dependencies
-    (cd src/asset_core && uv sync --all-groups)
-    
-    print_success "asset_core installed"
+    # With unified pyproject.toml, no need to install separately
+    print_success "asset_core installed via unified project"
 }
 
 # Install applications
 install_apps() {
-    print_status "Installing applications..."
+    print_status "Applications available..."
     
-    # Create crypto_single pyproject.toml if not exists
-    if [ ! -f "./src/crypto_single/pyproject.toml" ]; then
-        print_status "Creating crypto_single configuration..."
-        create_crypto_single_config
-    fi
-    
-    # Install crypto_single if it has proper structure
-    if [ -f "./src/crypto_single/pyproject.toml" ]; then
-        (cd src/crypto_single && uv sync)
-        print_success "crypto_single installed"
-    fi
-    
-    # Create crypto_cluster structure if it doesn't exist
-    if [ ! -d "./src/crypto_cluster" ]; then
-        print_status "Creating crypto_cluster structure..."
-        create_crypto_cluster_structure
-    fi
-    
-    # Install crypto_cluster if it has proper structure
-    if [ -f "./src/crypto_cluster/pyproject.toml" ]; then
-        (cd src/crypto_cluster && uv sync)
-        print_success "crypto_cluster installed"
-    fi
+    # With unified pyproject.toml, applications are already configured
+    print_success "crypto_single and crypto_cluster available via unified project"
 }
 
 # Create crypto_single configuration
@@ -229,10 +206,11 @@ case "${1:-}" in
     --core-only)
         check_uv
         setup_venv
-        install_core
+        sync_root
         ;;
     --apps-only)
-        install_apps
+        print_warning "--apps-only is deprecated with unified project structure"
+        sync_root
         ;;
     *)
         main

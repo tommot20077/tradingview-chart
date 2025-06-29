@@ -1,31 +1,84 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
-name = "tradingchart-monorepo"
-version = "0.1.0"
-description = "asset trading data infrastructure monorepo"
+name = "trading-chart"
+version = "0.1.2"
+description = "Asset trading data infrastructure monorepo"
+readme = "README.md"
 requires-python = ">=3.12"
-dependencies = [
-    "asset-core[dev]",
-    "crypto-single",
+license = {text = "MIT"}
+authors = [
+    {name = "TradingChart Team"},
 ]
 
+# Core dependencies (needed by asset_core)
+dependencies = [
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0", 
+    "loguru>=0.7.0",
+    "prometheus-client>=0.19.0",
+    "websockets>=12.0",
+    "aiohttp>=3.9.0",
+    "python-dateutil>=2.8.2",
+    "pytz>=2023.3",
+]
+
+[project.optional-dependencies]
+# Crypto Single application dependencies
+crypto-single = [
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "sqlalchemy[asyncio]>=2.0.0",
+    "alembic>=1.12.0",
+    "asyncpg>=0.29.0",
+    "aiosqlite>=0.19.0",
+    "redis>=5.0.0",
+    "dependency-injector>=4.41.0",
+    "python-multipart>=0.0.6",
+    "python-jose[cryptography]>=3.3.0",
+    "passlib[bcrypt]>=1.7.4",
+]
+
+# Development dependencies
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.1.0",
+    "pytest-mock>=3.11.1",
+    "mypy>=1.5.0",
+    "ruff>=0.1.0",
+    "httpx>=0.25.0",
+    "faker>=19.0.0",
+    "factory-boy>=3.3.0",
+    "hypothesis>=6.80.0",
+]
+
+[project.scripts]
+crypto-single = "crypto_single.main:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["asset_core*", "crypto_single*"]
+
+[tool.setuptools.package-dir]
+"" = "src"
+
 [tool.pytest.ini_options]
-minversion = "6.0"
-testpaths = [
-    "src/asset_core/tests",
-    "src/crypto_single/tests",
-    "src/crypto_cluster/tests",
-]
-pythonpath = [
-    "src/asset_core",
-    "src/crypto_single",
-    "src/crypto_cluster",
-]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
 addopts = [
     "--strict-markers",
+    "--strict-config",
     "--verbose",
-    "-ra",
 ]
 markers = [
+    "unit: marks tests as unit tests",
+    "integration: marks tests as integration tests", 
+    "slow: marks tests as slow running",
     "config: Configuration related tests",
     "models: Data model tests",
     "network: Network connectivity tests",
@@ -46,18 +99,18 @@ warn_unused_ignores = true
 warn_no_return = true
 warn_unreachable = true
 strict_equality = true
+explicit_package_bases = true
 files = ["src/"]
-exclude = ["examples/", "docs/"]
-plugins = ["pydantic.mypy"]
-
-[tool.pydantic-mypy]
-init_forbid_extra = true
-init_typed = true
-warn_required_dynamic_aliases = true
+exclude = ["examples/"]
 
 [[tool.mypy.overrides]]
-module = "src.*.tests.*"
-ignore_errors = true
+module = [
+    "dependency_injector.*",
+    "redis.*", 
+    "sqlalchemy.*",
+    "alembic.*",
+]
+ignore_missing_imports = true
 
 [tool.ruff]
 target-version = "py312"
@@ -82,25 +135,12 @@ ignore = [
     "B904",  # raise ... from ... in except blocks
 ]
 
-[tool.ruff.lint.per-file-ignores]
-"tests/*" = ["ARG"]
-"*/tests/*" = ["ARG"]
-"src/*/tests/*" = ["ARG"]
-"src/asset_core/tests/*" = ["ARG"]
-
 [tool.ruff.lint.isort]
-known-first-party = ["asset_core", "crypto_single", "crypto_cluster"]
-
-[tool.ruff.format]
-quote-style = "double"
-indent-style = "space"
-skip-magic-trailing-comma = false
-line-ending = "auto"
+known-first-party = ["asset_core", "crypto_single"]
 
 [tool.coverage.run]
-source = ["src/asset_core", "src/crypto_single", "src/crypto_cluster"]
+source = ["src"]
 branch = true
-parallel = true
 omit = [
     "*/tests/*",
     "*/__pycache__/*",
@@ -119,11 +159,7 @@ exclude_lines = [
     "if TYPE_CHECKING:",
 ]
 
-[tool.uv.sources]
-asset-core = { path = "src/asset_core", editable = true }
-crypto-single = { path = "src/crypto_single", editable = true }
-
 [project.urls]
 Homepage = "https://github.com/tommot20077/tradingview-chart"
-Repository = "https://github.com/tommot20077/tradingview-chart"
+Repository = "https://github.com/tommot20077/tradingview-chart" 
 Issues = "https://github.com/tommot20077/tradingview-chart/issues"

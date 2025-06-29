@@ -16,7 +16,7 @@ import tempfile
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from src.asset_core.asset_core.config.base import BaseCoreSettings
+from asset_core.config.base import BaseCoreSettings
 
 
 class DatabaseConfig(BaseSettings):

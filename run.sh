@@ -64,9 +64,8 @@ run_single() {
     print_status "Starting crypto_single..."
     check_deps
     
-    if [ -f "./src/crypto_single/crypto_single/main.py" ]; then
-        cd src/crypto_single
-        $PYTHON_CMD -m crypto_single "$@"
+    if [ -f "./src/crypto_single/main.py" ]; then
+        $PYTHON_CMD -m crypto_single.main "$@"
     else
         print_error "crypto_single not properly configured. Run ./setup.sh first"
         exit 1
@@ -78,13 +77,8 @@ run_cluster() {
     print_status "Starting crypto_cluster..."
     check_deps
     
-    if [ -f "./src/crypto_cluster/crypto_cluster/main.py" ]; then
-        cd src/crypto_cluster
-        $PYTHON_CMD -m crypto_cluster "$@"
-    else
-        print_error "crypto_cluster not properly configured. Run ./setup.sh first"
-        exit 1
-    fi
+    print_warning "crypto_cluster not yet implemented in unified structure"
+    exit 1
 }
 
 # Run tests (using unified test engine)
@@ -325,8 +319,8 @@ Examples:
     $0 test --no-cov                            # Run tests without coverage (but with quality checks)
 
   Test Targeting:
-    $0 test tests/units/config/                   # Run specific test directory
-    $0 test tests/units/models/test_kline.py      # Run specific test file
+    $0 test src/asset_core/tests/units/config/                   # Run specific test directory
+    $0 test src/asset_core/tests/units/models/test_kline.py      # Run specific test file
     $0 test units --timeout=30 --no-cov           # Fast unit test run (with quality checks)
 
   Fast Development Testing:
