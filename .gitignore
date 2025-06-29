@@ -191,3 +191,7 @@ uv.lock
 /fix-format.sh
 /.gemini/settings.json
 /note/influx.md
+/report/
+/.gemini/
+/ai-docs/
+/.mcp.json

@@ -162,7 +162,7 @@ run_quality_checks() {
     # Run linting
     print_status "Running linting (ruff check)"
     if ! uv run ruff check .; then
-        print_error "Linting failed"
+        print_error "Linting failed - check the output above for specific issues"
         return 1
     fi
     print_success "Linting passed"
@@ -170,7 +170,7 @@ run_quality_checks() {
     # Run format checking
     print_status "Running format checking (ruff format)"
     if ! uv run ruff format --check .; then
-        print_error "Format checking failed"
+        print_error "Format checking failed - run 'uv run ruff format .' to fix formatting issues"
         return 1
     fi
     print_success "Format checking passed"
@@ -178,7 +178,7 @@ run_quality_checks() {
     # Run type checking
     print_status "Running type checking (mypy)"
     if ! uv run mypy .; then
-        print_error "Type checking failed"
+        print_error "Type checking failed - check the output above for specific type errors"
         return 1
     fi
     print_success "Type checking passed"
@@ -219,10 +219,11 @@ normalize_test_paths_for_module() {
     TEST_ARGS=("${normalized_args[@]}")
 }
 
-# Test a single module
+# Test a single module (unified structure)
 test_module() {
     local module_name="$1"
     local module_path="$PROJECT_ROOT/src/$module_name"
+    local test_path="$PROJECT_ROOT/tests/$module_name"
     
     print_status "Testing module: $module_name"
     
@@ -232,17 +233,16 @@ test_module() {
         return 1
     fi
     
-    if [ ! -f "$module_path/pyproject.toml" ]; then
-        print_error "Module pyproject.toml not found: $module_path/pyproject.toml"
+    if [ ! -d "$test_path" ]; then
+        print_error "Module test directory not found: $test_path"
         return 1
     fi
     
     # Normalize test paths for this module before changing directory
     normalize_test_paths_for_module "$module_name"
     
-    # Change to module directory (important for pytest.ini discovery)
-    print_debug "Changing to module directory: $module_path"
-    pushd "$module_path" > /dev/null
+    # Stay in project root (unified structure with single pyproject.toml)
+    print_debug "Working in project root for unified structure"
     
     # Build test command
     local test_cmd="$PYTHON_CMD -m pytest"
@@ -277,29 +277,25 @@ test_module() {
         test_cmd="$test_cmd -v"
     fi
     
-    # Add test arguments or default to tests directory
+    # Add test arguments or default to module test directory
     if [ ${#TEST_ARGS[@]} -gt 0 ]; then
         test_cmd="$test_cmd ${TEST_ARGS[*]}"
         print_debug "Using test arguments: ${TEST_ARGS[*]}"
     else
-        test_cmd="$test_cmd tests/"
-        print_debug "Testing all tests in tests/ directory"
+        test_cmd="$test_cmd tests/$module_name/"
+        print_debug "Testing all tests in tests/$module_name/ directory"
     fi
     
     print_debug "Executing: $test_cmd"
     
-    # Set PYTHONPATH to allow direct imports from module names
-    export PYTHONPATH="${PROJECT_ROOT}/src/asset_core:${PROJECT_ROOT}/src/crypto_single:${PROJECT_ROOT}/src/crypto_cluster:${PYTHONPATH:-}"
-    print_debug "PYTHONPATH set to: $PYTHONPATH"
-    
     # Execute tests
     if $test_cmd; then
         print_success "Module $module_name tests passed"
-        popd > /dev/null
         return 0
     else
-        print_error "Module $module_name tests failed"
-        popd > /dev/null
+        local exit_code=$?
+        print_error "Module $module_name tests failed (exit code: $exit_code)"
+        print_error "Check the test output above for specific failure details"
         return 1
     fi
 }
@@ -460,6 +456,7 @@ test_all_modules() {
 main() {
     print_status "Unified Test Engine"
     echo "=================="
+    print_success "Unified Test Engine initialized"
     
     # Change to project root
     cd "$PROJECT_ROOT"
@@ -479,6 +476,7 @@ main() {
             print_error "Quality checks failed"
             return 1
         fi
+        print_success "Quality checks completed successfully"
     fi
     
     # Execute tests

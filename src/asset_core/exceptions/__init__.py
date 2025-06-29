@@ -1,18 +1,11 @@
-"""Asset Core - Core library for asset trading data infrastructure."""
+"""Asset core exceptions package.
 
-# Configuration
-# Models and data structures
-# Network components
-# Storage components
-# Event system
-# Observability
-# Patterns
-# Providers
-# Type definitions
-from . import config, events, models, network, observability, patterns, providers, storage, types
+This package contains all core exception classes for the asset_core library.
+All exceptions inherit from CoreError which provides structured error handling
+with error codes, messages, and additional details.
+"""
 
-# Exceptions
-from .exceptions import (
+from .core import (
     AuthenticationError,
     CircuitBreakerError,
     ConfigurationError,
@@ -29,25 +22,17 @@ from .exceptions import (
     StorageReadError,
     StorageWriteError,
     TimeoutError,
+    TraceIdExceptionHandler,
     ValidationError,
     WebSocketError,
+    create_traced_exception,
+    enhance_exception_with_trace_id,
+    install_global_exception_handler,
+    uninstall_global_exception_handler,
 )
 
-__version__ = "0.1.1"
-
 __all__ = [
-    "__version__",
-    # Modules
-    "config",
-    "models",
-    "network",
-    "storage",
-    "events",
-    "observability",
-    "patterns",
-    "providers",
-    "types",
-    # Exceptions
+    # Core exception classes
     "CoreError",
     "ConfigurationError",
     "DataProviderError",
@@ -66,4 +51,10 @@ __all__ = [
     "DataValidationError",
     "ResourceExhaustedError",
     "CircuitBreakerError",
+    # Trace ID enhanced exception utilities
+    "create_traced_exception",
+    "enhance_exception_with_trace_id",
+    "TraceIdExceptionHandler",
+    "install_global_exception_handler",
+    "uninstall_global_exception_handler",
 ]

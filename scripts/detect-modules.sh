@@ -35,37 +35,45 @@ print_error() {
     echo -e "${RED}❌ $1${NC}" >&2
 }
 
-# Check if a module is ready for testing
+# Check if a module is ready for testing (unified structure)
 is_module_ready() {
     local module_path="$1"
     local module_name=$(basename "$module_path")
+    local project_root="$(cd "$(dirname "$module_path")/.." && pwd)"
     
-    print_debug "Checking module: $module_name at $module_path"
+    print_debug "Checking module: $module_name at $module_path (unified structure)"
     
-    # Check if pyproject.toml exists
-    if [ ! -f "$module_path/pyproject.toml" ]; then
-        print_debug "$module_name: No pyproject.toml found"
+    # Skip non-Python modules
+    if [[ "$module_name" == "trading_chart.egg-info" ]]; then
+        print_debug "$module_name: Skipping egg-info directory"
         return 1
     fi
     
-    # Check if tests directory exists
-    if [ ! -d "$module_path/tests" ]; then
-        print_debug "$module_name: No tests directory found"
+    # Check if module source directory exists and has Python files
+    if [ ! -d "$module_path" ] || [ ! -f "$module_path/__init__.py" ]; then
+        print_debug "$module_name: Not a Python module (no __init__.py)"
         return 1
     fi
     
-    # Check if there are any test files
-    local test_files=$(find "$module_path/tests" -name "test_*.py" 2>/dev/null | wc -l)
+    # Check if unified tests directory exists for this module
+    local unified_tests_dir="$project_root/tests/$module_name"
+    if [ ! -d "$unified_tests_dir" ]; then
+        print_debug "$module_name: No unified tests directory found at $unified_tests_dir"
+        return 1
+    fi
+    
+    # Check if there are any test files in the unified tests structure
+    local test_files=$(find "$unified_tests_dir" -name "test_*.py" 2>/dev/null | wc -l)
     if [ "$test_files" -eq 0 ]; then
-        print_debug "$module_name: No test files found"
+        print_debug "$module_name: No test files found in $unified_tests_dir"
         return 1
     fi
     
-    print_debug "$module_name: Module is ready (has $test_files test files)"
+    print_debug "$module_name: Module is ready (has $test_files test files in unified structure)"
     return 0
 }
 
-# Detect all ready modules
+# Detect all ready modules (unified structure)
 detect_ready_modules() {
     local src_dir="${1:-src}"
     local ready_modules=()
@@ -75,15 +83,15 @@ detect_ready_modules() {
         return 1
     fi
     
-    print_debug "Scanning for modules in $src_dir"
+    print_debug "Scanning for modules in $src_dir (unified structure)"
     
     # Scan each directory in src/
     for module_path in "$src_dir"/*; do
         if [ -d "$module_path" ]; then
             local module_name=$(basename "$module_path")
             
-            # Skip hidden directories and __pycache__
-            if [[ "$module_name" == .* ]] || [[ "$module_name" == "__pycache__" ]]; then
+            # Skip hidden directories, __pycache__, and non-module directories
+            if [[ "$module_name" == .* ]] || [[ "$module_name" == "__pycache__" ]] || [[ "$module_name" == "*.egg-info" ]]; then
                 continue
             fi
             

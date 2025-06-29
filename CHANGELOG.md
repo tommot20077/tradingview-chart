@@ -1,165 +1,165 @@
-# 更新日誌
+# Changelog
 
-本文件記錄了專案的所有重要變更。
+All notable changes to this project will be documented in this file.
 
-格式基於 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.0.0/)，
-且本專案遵循 [語義化版本控制](https://semver.org/lang/zh-TW/)。
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.1] - 2025-06-27
+## [asset-core 0.2.0] - 2025-06-29
 
-### 新增
-- **完整專案文件系統**: 建立 開發指南
-  - 四大核心架構原則（分層架構、單向依賴、關注點分離、配置統一）
-  - 完整的 uv 工具指令速查表
-  - 開發規則和測試要求規範
-  - Git 提交規範和安全指南
-- **進階儲存測試套件**: 新增高級儲存功能測試
-  - 資料間隙檢測和補償機制測試
-  - TTL 支援和過期機制驗證
-  - 批次操作效能測試
-- **crypto_single 應用基礎**: 建立第一個具體應用程式
-  - 加密貨幣交易數據處理模組
-  - 應用層配置和初始化邏輯
+### Changed
+- **Unified Project Structure**: Migrated the entire project to a unified monorepo structure managed by a single root `pyproject.toml` and `setuptools`.
+- **Simplified Module Layout**: Flattened the directory structure for `asset_core` and `crypto_single` from a nested (`module/module`) to a single-level (`module`) layout, resulting in cleaner import paths.
+- **Centralized Dependencies**: Consolidated all project dependencies into the root `pyproject.toml`, using `project.optional-dependencies` to manage dependencies for different applications and development.
+- **Unified Test Directory**: Moved all tests to a root-level `tests/` directory, organized by module, for centralized test management and execution.
 
-### 改進
-- **資料模型精度提升**: Kline 模型全面增強
-  - 擴展時間間隔支援，增加更多標準交易時間框架
-  - 強化資料驗證邏輯，確保價格和成交量的一致性
-  - 改進時間序列處理，提升歷史數據查詢效率
-- **觀測性系統優化**: 日誌和監控功能全面升級
-  - 增強結構化日誌格式，改進調試體驗
-  - 擴展追蹤上下文傳播，支援更複雜的分散式場景
-  - 改進指標收集精度，提供更準確的效能監控
-- **例外處理機制強化**: 錯誤處理和恢復能力提升
-  - 豐富錯誤分類體系，提供更精確的錯誤診斷
-  - 增強錯誤上下文資訊，包含更多調試細節
-  - 改進自動恢復機制，提升系統穩定性
-- **配置系統簡化**: 移除冗餘配置選項
-  - 精簡配置模組註釋，提升可讀性
-  - 統一配置驗證邏輯，減少配置錯誤
-  - 改進配置繼承機制，簡化應用層配置
+### Removed
+- **Module-specific `pyproject.toml`**: Deleted individual `pyproject.toml` files from `asset_core` and `crypto_single`.
+- **Redundant `PYTHONPATH` Configuration**: Removed manual `PYTHONPATH` settings from `test-engine.sh` as it is now handled by the unified build system.
 
-### 修復
-- **程式碼風格統一**: 全面標準化程式碼格式
-  - 統一匯入語句排序和分組規則
-  - 標準化變數命名和函數定義風格
-  - 改進程式碼註釋和文檔字串格式
-- **測試覆蓋增強**: 提升測試品質和覆蓋範圍
-  - 擴展整合測試場景，涵蓋更多實際使用情況
-  - 強化屬性測試策略，確保資料模型一致性
-  - 改進測試斷言邏輯，提供更準確的錯誤定位
-
-### 開發體驗
-- **文檔完整性**: 開發者現在擁有完整的專案開發指南
-- **程式碼一致性**: 統一的程式碼格式提升團隊協作效率
-- **維護便利性**: 簡化的配置系統降低維護複雜度
-- **測試可靠性**: 增強的測試套件確保系統穩定性
+### Developer Experience
+- **Simplified Dependency Management**: Developers now manage all dependencies from a single `pyproject.toml` file.
+- **Improved Project Maintainability**: The unified structure makes it easier to manage configurations, run tests, and build the project.
+- **Cleaner Codebase**: The flattened module structure and centralized testing improve code organization and readability.
 
 ---
 
-### Git 提交參考
-- 主要變更: [eb0ee37](https://github.com/your-repo/commit/eb0ee3756413ad74fdfe8e36ab0de8ad4612d0c4) - docs: 新增完整專案文件並改善程式碼格式
+### Git Commit Reference
+- Main Change: [f7715db](https://github.com/tommot20077/tradingview-chart/commit/f7715db8581bdd8376967b383578d7b85e84e95e) - refactor(build): unify project structure and migrate to setuptools
+
+## [asset-core 0.1.2] - 2025-06-29
+
+### Added
+- **End-to-End (E2E) Test Suite**:
+  - `test_data_flow_integration.py`: Tests the complete data flow from data providers through the event system to the storage repository.
+  - `test_system_resilience.py`: Tests system resilience and recovery under stress conditions like failures, disconnections, and resource exhaustion.
+- **Performance Test Suite**:
+  - `test_model_performance.py`: Benchmarks serialization, validation performance, and memory footprint of `Trade` and `Kline` models with large-scale data.
+  - `test_concurrency_performance.py`: Evaluates the concurrency performance and thread safety of models in multi-threaded and asynchronous environments.
+- **Security Test Suite**:
+  - `test_input_sanitization.py`: Validates the system's defenses against malicious inputs, including SQL injection, XSS, and path traversal.
+  - `test_sensitive_data_handling.py`: Ensures that sensitive data such as API keys and personal information are correctly masked in logs and outputs.
+
+### Changed
+- **Test Engine (`test-engine.sh`)**:
+  - **Enhanced Path Handling**: Automatically normalizes test paths, supporting running tests for specific modules from the project root (e.g., `./run.sh test src/asset_core/tests/units`).
+  - **Path Validation**: Added validation for test path formats with clear error messages to guide users.
+  - **Automatic PYTHONPATH Configuration**: Automatically adds all modules under `src` to `PYTHONPATH` before test execution, simplifying import statements in tests.
+- **Test Code Readability**:
+  - Simplified all test import paths within the `asset_core` module from `from src.asset_core.asset_core...` to `from asset_core...`, improving code clarity.
+- **Test Documentation**:
+  - Added detailed docstrings conforming to project standards for all new E2E, performance, and security test cases, explaining their scope, preconditions, steps, and expected outcomes.
+
+### Fixed
+- **Import Path Issues**: Resolved the issue where `import asset_core` could not be used directly in `asset_core` tests, making the test environment more consistent with the actual runtime environment.
+
+### Developer Experience
+- **Testing Convenience**: Developers can now specify test targets more intuitively and receive clearer guidance.
+- **Code Quality**: The expanded test coverage significantly enhances system stability, performance, and security.
+- **Code Consistency**: Simplified import paths make the test code more standardized and easier to maintain.
+
+---
+
+### Git Commit Reference
+- Main Change: [3c559fd](https://github.com/tommot20077/tradingview-chart/commit/3c559fd1bb30af37659887f999e9769eb9f6cd58) - feat(testing): enhance test engine and expand test coverage
+
+## [asset-core 0.1.1] - 2025-06-27
+
+### Added
+- **Complete Project Documentation**: Established a developer guide.
+  - Four core architectural principles (Layered Architecture, Unidirectional Dependency, Separation of Concerns, Configuration Unity).
+  - Comprehensive `uv` tool command cheatsheet.
+  - Development rules and testing requirements specification.
+  - Git commit conventions and security guidelines.
+- **Advanced Storage Test Suite**: Added tests for advanced storage features.
+  - Data gap detection and compensation mechanism tests.
+  - TTL support and expiration mechanism validation.
+  - Batch operation performance tests.
+- **`crypto_single` Application Foundation**: Created the first concrete application.
+  - Module for cryptocurrency trade data processing.
+  - Application-layer configuration and initialization logic.
+
+### Changed
+- **Improved Data Model Precision**: Enhanced the `Kline` model.
+  - Expanded time interval support to include more standard trading timeframes.
+  - Strengthened data validation logic to ensure price and volume consistency.
+  - Improved time-series handling to increase historical data query efficiency.
+- **Optimized Observability System**: Upgraded logging and monitoring functions.
+  - Enhanced structured logging format to improve debugging experience.
+  - Expanded trace context propagation to support more complex distributed scenarios.
+  - Improved metrics collection precision for more accurate performance monitoring.
+- **Strengthened Exception Handling**: Enhanced error handling and recovery capabilities.
+  - Enriched error classification system for more precise error diagnosis.
+  - Enhanced error context information to include more debugging details.
+  - Improved automatic recovery mechanisms to increase system stability.
+- **Simplified Configuration System**: Removed redundant configuration options.
+  - Streamlined configuration module comments for better readability.
+  - Unified configuration validation logic to reduce configuration errors.
+  - Improved configuration inheritance mechanism to simplify application-layer configuration.
+
+### Fixed
+- **Unified Code Style**: Standardized code format across the project.
+  - Unified import statement sorting and grouping rules.
+  - Standardized variable naming and function definition styles.
+  - Improved code comments and docstring formats.
+- **Enhanced Test Coverage**: Improved test quality and coverage.
+  - Expanded integration test scenarios to cover more real-world use cases.
+  - Strengthened property-based testing strategies to ensure data model consistency.
+  - Improved test assertion logic for more accurate error localization.
+
+### Developer Experience
+- **Documentation Integrity**: Developers now have a complete project development guide.
+- **Code Consistency**: A unified code format improves team collaboration efficiency.
+- **Maintenance Convenience**: A simplified configuration system reduces maintenance complexity.
+- **Test Reliability**: An enhanced test suite ensures system stability.
+
+---
+
+### Git Commit Reference
+- Main Change: [c1ff891](https://github.com/tommot20077/tradingview-chart/commit/c1ff8911ab0adf9cb75874a282d1715da8561a0c) - docs: add complete project documentation and improve code format
 
 ## [0.1.0] - 2025-06-26
 
-### 新增
-- **核心交易資料基礎設施**: 建立完整的金融數據處理平台
-  - 分層架構設計，支援多個獨立應用程式共享核心功能
-  - 採用 Python 3.12+ 現代語法，包含新式泛型和型別標註
-  - 實施非同步優先設計，提升系統並發處理能力
-- **完整的資料模型系統**: 專業級金融資料結構
-  - K線（蠟燭圖）資料模型，支援多種時間間隔
-  - 交易資料模型，包含價格、成交量和時間戳
-  - 事件驅動模型，支援即時資料流處理
-  - 資料驗證器，確保資料完整性和一致性
-- **企業級觀測性平台**: 全方位系統監控和調試
-  - 結構化日誌系統，支援 JSON 和文字格式輸出
-  - Prometheus 指標收集，包含系統和業務指標
-  - 分散式追蹤支援，包含 Trace ID 傳播機制
-  - 多層級日誌處理，支援檔案和控制台輸出
-- **高效能儲存抽象層**: 彈性的資料持久化方案
-  - K線資料儲存庫，支援時間序列資料最佳化
-  - 中繼資料管理，包含系統配置和狀態資訊
-  - 批次操作介面，提升大量資料處理效率
-  - 資料間隙檢測，確保歷史資料完整性
+### Added
+- **Core Trading Data Infrastructure**: Established a complete financial data processing platform.
+- **Complete Data Model System**: Professional-grade financial data structures.
+- **Enterprise-Grade Observability Platform**: Comprehensive system monitoring and debugging.
+- **High-Performance Storage Abstraction Layer**: Flexible data persistence solution.
 
-### 核心功能模組
-- **配置管理系統**: 基於 Pydantic 的統一配置框架
-  - 環境變數整合，支援 .env 檔案載入
-  - 分層配置繼承，應用層可擴展核心配置
-  - 配置驗證機制，防止無效配置導致系統錯誤
-  - 環境區分支援（開發/測試/生產）
-- **事件系統**: 類型安全的事件處理架構
-  - 抽象事件匯流排，支援同步和非同步處理
-  - 基於交易代碼的事件過濾
-  - 事件等待機制，支援逾時和自訂條件
-  - 事件訂閱管理，靈活的處理器註冊
-- **網路通訊層**: 穩定的 WebSocket 連線管理
-  - 自動重連機制，包含指數退避策略
-  - 連線狀態管理（連線/斷線/關閉）
-  - 心跳和健康檢查，確保連線可靠性
-  - 非同步訊息處理，支援高並發場景
-- **例外處理框架**: 層次化的錯誤管理
-  - 基礎例外類別，包含追蹤 ID 和詳細資訊
-  - 業務邏輯例外，涵蓋常見的交易相關錯誤
-  - 系統例外分類，包含網路、儲存和配置錯誤
-  - 錯誤上下文保存，便於問題診斷和修復
+### Core Functional Modules
+- **Configuration Management System**: Unified configuration framework based on Pydantic.
+- **Event System**: Type-safe event handling architecture.
+- **Network Communication Layer**: Stable WebSocket connection management.
+- **Exception Handling Framework**: Hierarchical error management.
 
-### 開發和運維支援
-- **完整的 CI/CD 管道**: 自動化開發流程
-  - GitHub Actions 工作流程，支援多環境測試
-  - 自動化套件發布，包含版本管理和發布註記
-  - 程式碼品質檢查，整合 linting、格式化和型別檢查
-- **開發工具生態**: 提升開發效率的完整工具鏈
-  - 自動化安裝腳本，支援不同安裝模式
-  - 統一執行腳本，簡化日常開發操作
-  - 測試引擎，支援單元、整合和契約測試
-  - 模組偵測工具，自動發現可測試元件
-- **測試框架**: 多層級的品質保證體系
-  - 契約導向測試，確保行為一致性而非僅介面相容
-  - 狀態驅動測試，涵蓋系統各種運行狀態
-  - 屬性測試整合，使用 Hypothesis 進行廣泛測試
-  - 測試工具和夾具，簡化測試程式碼撰寫
+### Development and Operations Support
+- **Complete CI/CD Pipeline**: Automated development workflow.
+- **Developer Tool Ecosystem**: A full toolchain to enhance development efficiency.
+- **Testing Framework**: Multi-level quality assurance system.
 
-### 設計模式和最佳實踐
-- **架構原則**: 確保系統可擴展性和可維護性
-  - 分層架構，清晰的責任分離
-  - 單向依賴，避免循環依賴問題
-  - 關注點分離，每個模組職責明確
-  - 配置統一，集中管理所有設定
-- **程式碼品質**: 採用現代 Python 開發標準
-  - 完整型別標註，提升程式碼可讀性和 IDE 支援
-  - Pydantic 整合，確保資料驗證和序列化一致性
-  - 非同步程式設計模式，充分利用 Python asyncio
-  - 錯誤處理最佳實踐，包含適當的例外傳播
+### Design Patterns and Best Practices
+- **Architectural Principles**: Ensuring system scalability and maintainability.
+- **Code Quality**: Adherence to modern Python development standards.
 
-### 範例和文檔
-- **實用程式碼範例**: 展示最佳使用方式
-  - 配置系統使用範例，展示各種配置場景
-  - 自訂資料提供者實作，示範如何擴展系統
-  - 事件系統整合範例，說明事件驅動架構使用
-  - 追蹤系統範例，展示分散式追蹤最佳實踐
-- **完整安裝指南**: 詳細的環境設定說明
-  - 系統需求和相依性說明
-  - 多種安裝方式支援
-  - 開發環境設定指南
-  - 常見問題和解決方案
+### Examples and Documentation
+- **Practical Code Examples**: Demonstrating best usage practices.
+- **Complete Installation Guide**: Detailed environment setup instructions.
 
-### 技術特點
-- **現代化架構**: 採用最新的 Python 技術棧
-- **企業級穩定性**: 完整的錯誤處理和恢復機制
-- **高效能設計**: 非同步處理和批次操作最佳化
-- **擴展性考量**: 模組化設計支援未來功能擴展
-- **監控友善**: 完整的觀測性支援，便於生產環境運維
+### Technical Features
+- **Modern Architecture**: Utilizes the latest Python technology stack.
+- **Enterprise-Grade Stability**: Complete error handling and recovery mechanisms.
+- **High-Performance Design**: Optimized for asynchronous processing and batch operations.
+- **Scalability Considerations**: Modular design supports future functional extensions.
+- **Monitoring-Friendly**: Comprehensive observability support for production environments.
 
-### 開發者影響
-- **現代化工具鏈**: 提供完整的開發、測試、部署支援
-- **清晰的架構指導**: 分層設計原則確保程式碼組織清晰
-- **豐富的範例**: 實用的程式碼範例加速開發進度
-- **完整的測試覆蓋**: 多層級測試確保程式碼品質
-- **靈活的擴展機制**: 支援各種自訂需求和未來擴展
+### Developer Impact
+- **Modern Toolchain**: Provides full support for development, testing, and deployment.
+- **Clear Architectural Guidance**: Layered design principles ensure clear code organization.
+- **Rich Examples**: Practical code examples accelerate development.
+- **Complete Test Coverage**: Multi-level testing ensures code quality.
+- **Flexible Extension Mechanism**: Supports various custom requirements and future extensions.
 
 ---
 
-### Git 提交參考
-- 主要變更: [cf44928](https://github.com/your-repo/commit/cf4492823362be226c022de17831cfcbad89a44b) - feat: 重新架構測試框架並現代化核心系統
+### Git Commit Reference
+- Main Change: [cf44928](https://github.com/tommot20077/tradingview-chart/commit/cf4492823362be226c022de17831cfcbad89a44b) - feat: re-architect testing framework and modernize core system

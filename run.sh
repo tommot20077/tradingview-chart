@@ -64,9 +64,8 @@ run_single() {
     print_status "Starting crypto_single..."
     check_deps
     
-    if [ -f "./src/crypto_single/crypto_single/main.py" ]; then
-        cd src/crypto_single
-        $PYTHON_CMD -m crypto_single "$@"
+    if [ -f "./src/crypto_single/main.py" ]; then
+        $PYTHON_CMD -m crypto_single.main "$@"
     else
         print_error "crypto_single not properly configured. Run ./setup.sh first"
         exit 1
@@ -78,13 +77,8 @@ run_cluster() {
     print_status "Starting crypto_cluster..."
     check_deps
     
-    if [ -f "./src/crypto_cluster/crypto_cluster/main.py" ]; then
-        cd src/crypto_cluster
-        $PYTHON_CMD -m crypto_cluster "$@"
-    else
-        print_error "crypto_cluster not properly configured. Run ./setup.sh first"
-        exit 1
-    fi
+    print_warning "crypto_cluster not yet implemented in unified structure"
+    exit 1
 }
 
 # Run tests (using unified test engine)
@@ -195,7 +189,7 @@ run_lint() {
     uv run ruff check .
     
     print_status "Running mypy..."
-    uv run mypy .
+    uv run mypy src/
     
     print_success "Code quality checks completed"
 }
