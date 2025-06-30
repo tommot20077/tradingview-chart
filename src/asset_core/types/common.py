@@ -14,9 +14,9 @@ from typing import Annotated, Any, NewType, Protocol, TypeVar
 from pydantic import Field
 
 from asset_core import exceptions
-from asset_core.models import Trade
 from asset_core.models.events import BaseEvent
 from asset_core.models.kline import Kline
+from asset_core.models.trade import Trade
 
 # Generic type variables
 T = TypeVar("T")

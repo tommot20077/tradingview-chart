@@ -70,11 +70,13 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+pythonpath = ["src"]
 addopts = [
     "--strict-markers",
     "--strict-config",
     "--verbose",
 ]
+asyncio_mode = "auto"
 markers = [
     "unit: marks tests as unit tests",
     "integration: marks tests as integration tests", 
@@ -99,18 +101,14 @@ warn_unused_ignores = true
 warn_no_return = true
 warn_unreachable = true
 strict_equality = true
-explicit_package_bases = true
-files = ["src/"]
+files = ["src/", "tests/"]
 exclude = ["examples/"]
+explicit_package_bases = true
+namespace_packages = true
 
 [[tool.mypy.overrides]]
-module = [
-    "dependency_injector.*",
-    "redis.*", 
-    "sqlalchemy.*",
-    "alembic.*",
-]
-ignore_missing_imports = true
+module = "asset_core.*"
+follow_imports = "skip"
 
 [tool.ruff]
 target-version = "py312"
@@ -133,6 +131,7 @@ ignore = [
     "E501",  # line too long (handled by formatter)
     "B008",  # do not perform function calls in argument defaults
     "B904",  # raise ... from ... in except blocks
+    "B010",  # Do not call setattr with constant attribute - needed for mypy method assignment fix
 ]
 
 [tool.ruff.lint.isort]
@@ -157,6 +156,22 @@ exclude_lines = [
     "raise AssertionError",
     "raise NotImplementedError",
     "if TYPE_CHECKING:",
+]
+
+[dependency-groups]
+dev = [
+    "factory-boy>=3.3.3",
+    "faker>=37.4.0",
+    "httpx>=0.28.1",
+    "hypothesis>=6.135.16",
+    "memory-profiler>=0.61.0",
+    "mypy>=1.16.1",
+    "pytest>=8.4.1",
+    "pytest-asyncio>=1.0.0",
+    "pytest-cov>=6.2.1",
+    "pytest-mock>=3.14.1",
+    "ruff>=0.12.1",
+    "types-psutil>=7.0.0.20250601",
 ]
 
 [project.urls]

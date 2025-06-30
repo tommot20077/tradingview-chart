@@ -32,13 +32,47 @@ from asset_core.storage.kline_repo import AbstractKlineRepository
 
 
 class CircuitBreakerError(Exception):
-    """Exception raised when circuit breaker is open."""
+    """Exception raised when circuit breaker is open.
+
+    Description of what the class covers:
+    This custom exception is raised to indicate that a circuit breaker is in an
+    "open" state, preventing further execution of the protected operation.
+
+    Preconditions:
+    - Inherits from `Exception`.
+
+    Expected Result:
+    - Serves as a specific error type for circuit breaker related failures.
+    """
 
     pass
 
 
 class CircuitBreaker:
-    """Simple circuit breaker implementation for testing."""
+    """Simple circuit breaker implementation for testing.
+
+    Description of what the class covers:
+    This class provides a basic implementation of the Circuit Breaker pattern,
+    designed for testing resilience and fault tolerance. It monitors failures
+    of a protected operation and can transition between "closed", "open", and
+    "half_open" states to prevent cascading failures and allow for recovery.
+
+    Preconditions:
+    - None specific, designed as a standalone utility.
+
+    Steps:
+    - Initializes with a `failure_threshold` and `recovery_timeout`.
+    - Maintains `failure_count`, `last_failure_time`, and `state`.
+    - The `call` method executes a given function with circuit breaker protection.
+    - Transitions to "open" state if `failure_count` exceeds `failure_threshold`.
+    - Transitions to "half_open" after `recovery_timeout` in "open" state.
+    - Resets to "closed" state upon successful execution in "half_open" state.
+
+    Expected Result:
+    - Correctly implements the circuit breaker logic, preventing calls to failing services.
+    - Allows for a recovery period before attempting calls again.
+    - Provides a clear state management for testing resilience scenarios.
+    """
 
     def __init__(self, failure_threshold: int = 5, recovery_timeout: float = 60.0) -> None:
         self.failure_threshold = failure_threshold
@@ -48,7 +82,46 @@ class CircuitBreaker:
         self.state = "closed"  # closed, open, half_open
 
     async def call(self, func: Any, *args: Any, **kwargs: Any) -> Any:
-        """Execute function with circuit breaker protection."""
+        """Execute function with circuit breaker protection.
+
+        Description of what the method covers:
+        This asynchronous method executes a given function (`func`) with circuit breaker
+        protection. It manages the circuit breaker's state transitions based on the
+        success or failure of the `func` execution.
+
+        Preconditions:
+        - The `CircuitBreaker` instance is initialized.
+        - `func` is a callable (function or coroutine function).
+
+        Args:
+            func: The function or coroutine function to execute.
+            *args: Positional arguments to pass to `func`.
+            **kwargs: Keyword arguments to pass to `func`.
+
+        Returns:
+            The result of the executed `func`.
+
+        Raises:
+            CircuitBreakerError: If the circuit breaker is in the "open" state and the recovery timeout has not passed.
+            Exception: Any exception raised by the executed `func`.
+
+        Steps:
+        - If the state is "open", check if `recovery_timeout` has passed; if so, transition to "half_open", otherwise raise `CircuitBreakerError`.
+        - Attempt to execute `func` (handling both synchronous and asynchronous functions).
+        - If `func` succeeds:
+            - If the state was "half_open", reset `failure_count` and transition to "closed".
+            - Return the result of `func`.
+        - If `func` fails:
+            - Increment `failure_count` and update `last_failure_time`.
+            - If `failure_count` meets or exceeds `failure_threshold`, transition to "open".
+            - Re-raise the exception.
+
+        Expected Result:
+        - The `func` is executed if the circuit is "closed" or "half_open" (and timeout passed).
+        - The circuit breaker state transitions correctly based on success or failure.
+        - `CircuitBreakerError` is raised when the circuit is "open" and not ready for recovery.
+        - Failures are tracked, and the circuit opens as expected.
+        """
         if self.state == "open":
             if self.last_failure_time and time.time() - self.last_failure_time >= self.recovery_timeout:
                 self.state = "half_open"
@@ -58,7 +131,6 @@ class CircuitBreaker:
         try:
             result = await func(*args, **kwargs) if asyncio.iscoroutinefunction(func) else func(*args, **kwargs)
 
-            # Success - reset failure count and close circuit
             if self.state == "half_open":
                 self.failure_count = 0
                 self.state = "closed"
@@ -77,7 +149,39 @@ class CircuitBreaker:
 
 
 class ResilientDataProvider(AbstractDataProvider):
-    """Data provider with resilience features for testing."""
+    """Data provider with resilience features for testing.
+
+    Description of what the class covers:
+    This mock data provider extends `AbstractDataProvider` with simulated resilience
+    features for testing fault tolerance. It can simulate connection failures,
+    trade creation failures, and integrate with a `CircuitBreaker` to demonstrate
+    graceful degradation and recovery.
+
+    Preconditions:
+    - Inherits from `AbstractDataProvider`.
+    - `CircuitBreaker` class is available.
+
+    Steps:
+    - Initializes with a name, connection status, failure counters, and a `CircuitBreaker` instance.
+    - Provides properties for `name` and `is_connected`.
+    - Implements `connect` to simulate connection failures up to a `_max_failures` threshold.
+    - Implements `disconnect` to set connection status to `False`.
+    - Implements `stream_trades` to yield trades with `CircuitBreaker` protection and potential failures.
+    - Includes a private `_create_trade` method to simulate individual trade creation failures.
+    - Implements `stream_klines` and `_create_kline` for basic kline streaming.
+    - Simplifies `fetch_historical_trades` and `fetch_historical_klines` to return empty lists.
+    - Implements `get_exchange_info` to reflect a "degraded" status if the circuit breaker is open.
+    - Implements `get_symbol_info` for basic symbol information.
+    - Implements `ping` to simulate ping failures and increased latency in degraded mode.
+    - Implements `close` to set connection status to `False`.
+    - Provides `set_failure_mode` to enable/disable failure simulation.
+    - Provides `is_degraded` to check if the provider is in a degraded state.
+
+    Expected Result:
+    - Simulates a data provider that can experience and recover from failures.
+    - Demonstrates the integration of a circuit breaker pattern.
+    - Allows testing of graceful degradation scenarios.
+    """
 
     def __init__(self, name: str = "resilient_provider") -> None:
         self._name = name
@@ -90,14 +194,68 @@ class ResilientDataProvider(AbstractDataProvider):
 
     @property
     def name(self) -> str:
+        """Get the name of the resilient data provider.
+
+        Description of what the property covers:
+        This property returns the name assigned to the resilient data provider instance.
+
+        Preconditions:
+        - The `ResilientDataProvider` instance has been initialized.
+
+        Steps:
+        - Access the `name` property of the `ResilientDataProvider` instance.
+
+        Expected Result:
+        - The string representing the provider's name is returned.
+        """
         return self._name
 
     @property
     def is_connected(self) -> bool:
+        """Get the connection status of the resilient data provider.
+
+        Description of what the property covers:
+        This property indicates whether the resilient data provider is currently connected.
+
+        Preconditions:
+        - The `ResilientDataProvider` instance has been initialized.
+
+        Steps:
+        - Access the `is_connected` property of the `ResilientDataProvider` instance.
+
+        Expected Result:
+        - A boolean value indicating the connection status (`True` if connected, `False` otherwise) is returned.
+        """
         return self._connected
 
     async def connect(self) -> None:
-        """Connect with failure simulation."""
+        """Simulate connecting the resilient data provider with potential failures.
+
+        Description of what the method covers:
+        This asynchronous method simulates the connection process of the data provider.
+        It can be configured to simulate connection failures up to a maximum threshold,
+        allowing tests to verify retry and recovery mechanisms.
+
+        Preconditions:
+        - The `ResilientDataProvider` instance is initialized.
+        - `_should_fail` and `_max_failures` attributes control failure simulation.
+
+        Steps:
+        - If `_should_fail` is `True` and `_connection_failures` is less than `_max_failures`:
+            - Increment `_connection_failures`.
+            - Raise a `ConnectionError`.
+        - Otherwise (connection succeeds or max failures reached):
+            - Set `_connected` to `True`.
+            - Reset `_connection_failures` to 0.
+
+        Raises:
+            ConnectionError: If connection failure is simulated and threshold not reached.
+
+        Expected Result:
+        - The provider successfully connects if no failures are simulated or max failures are reached.
+        - `ConnectionError` is raised when failures are simulated within the threshold.
+        - `_connection_failures` is tracked and reset upon successful connection.
+        """
         if self._should_fail and self._connection_failures < self._max_failures:
             self._connection_failures += 1
             raise ConnectionError(f"Connection failed (attempt {self._connection_failures})")
@@ -106,27 +264,92 @@ class ResilientDataProvider(AbstractDataProvider):
         self._connection_failures = 0
 
     async def disconnect(self) -> None:
+        """Simulate disconnecting the resilient data provider.
+
+        Description of what the method covers:
+        This asynchronous method simulates the disconnection process of the data provider.
+        It sets the internal `_connected` flag to `False`.
+
+        Preconditions:
+        - The `ResilientDataProvider` instance is initialized.
+
+        Steps:
+        - Call the `disconnect` method.
+        - Set the internal `_connected` flag to `False`.
+
+        Expected Result:
+        - The provider's `is_connected` status becomes `False`.
+        """
         self._connected = False
 
-    async def stream_trades(self, symbol: str, *, start_from: datetime | None = None) -> AsyncIterator[Trade]:
-        """Stream trades with circuit breaker protection."""
+    async def stream_trades(self, symbol: str, *, _start_from: datetime | None = None) -> AsyncIterator[Trade]:
+        """Stream trades with circuit breaker protection.
+
+        Description of what the method covers:
+        This asynchronous generator method simulates streaming `Trade` objects.
+        It integrates with a `CircuitBreaker` to protect the underlying trade creation
+        logic. If the circuit breaker opens, it stops streaming and sets the provider
+        to a degraded mode.
+
+        Preconditions:
+        - The `ResilientDataProvider` instance is connected.
+        - The internal `_circuit_breaker` is initialized.
+        - The `_create_trade` method is available for generating mock trades.
+
+        Args:
+            symbol: The trading symbol for which to stream trades.
+            start_from: Optional. A `datetime` object to start streaming trades from.
+
+        Yields:
+            An `AsyncIterator` of `Trade` objects.
+
+        Raises:
+            ConnectionError: If the provider is not connected.
+
+        Expected Result:
+        - Yields `Trade` objects as long as the circuit breaker is closed or half-open.
+        - Stops yielding and sets `_degraded_mode` to `True` if `CircuitBreakerError` occurs.
+        - Raises `ConnectionError` if the provider is not connected.
+        """
         if not self._connected:
             raise ConnectionError("Provider not connected")
 
-        # Simulate streaming with potential failures
         for i in range(10):
             try:
                 trade = await self._circuit_breaker.call(self._create_trade, symbol, i)
                 yield trade
-                await asyncio.sleep(0.01)  # Simulate realistic delay
+                await asyncio.sleep(0.01)
             except CircuitBreakerError:
-                # Enter degraded mode when circuit breaker opens
                 self._degraded_mode = True
                 break
 
     async def _create_trade(self, symbol: str, index: int) -> Trade:
-        """Create trade with potential failure."""
-        if self._should_fail and index == 5:  # Fail on 5th trade
+        """Create trade with potential failure.
+
+        Description of what the method covers:
+        This private asynchronous method simulates the creation of a `Trade` object.
+        It can be configured to simulate a failure at a specific index, allowing
+        tests to trigger and observe error handling and circuit breaker behavior.
+
+        Preconditions:
+        - The `Trade` model is correctly defined.
+        - `_should_fail` attribute controls failure simulation.
+
+        Args:
+            symbol: The trading symbol for the trade.
+            index: An integer index used to generate unique trade IDs and potentially trigger failure.
+
+        Returns:
+            A `Trade` object.
+
+        Raises:
+            RuntimeError: If `_should_fail` is `True` and the `index` matches the failure point.
+
+        Expected Result:
+        - Returns a valid `Trade` object with generated data.
+        - Raises `RuntimeError` at the simulated failure point if `_should_fail` is active.
+        """
+        if self._should_fail and index == 5:
             raise RuntimeError("Simulated trade creation failure")
 
         return Trade(
@@ -140,18 +363,62 @@ class ResilientDataProvider(AbstractDataProvider):
         )
 
     async def stream_klines(
-        self, symbol: str, interval: KlineInterval, *, start_from: datetime | None = None
+        self, symbol: str, interval: KlineInterval, *, _start_from: datetime | None = None
     ) -> AsyncIterator[Kline]:
+        """Simulate streaming klines for a given symbol and interval.
+
+        Description of what the method covers:
+        This asynchronous generator method simulates a real-time kline stream.
+        It yields a fixed number of mock `Kline` objects for the specified symbol and interval.
+
+        Preconditions:
+        - The `ResilientDataProvider` instance is connected.
+        - The internal `_create_kline` method is available for generating mock klines.
+
+        Args:
+            symbol: The trading symbol (e.g., "BTCUSDT") for which to stream klines.
+            interval: The `KlineInterval` (e.g., `MINUTE_1`) for the klines.
+            start_from: Optional. A `datetime` object to start streaming klines from.
+
+        Yields:
+            An `AsyncIterator` of `Kline` objects.
+
+        Raises:
+            ConnectionError: If the provider is not connected.
+
+        Expected Result:
+        - Yields a predefined number of `Kline` objects matching the symbol and interval.
+        - Introduces a small delay to simulate real-time streaming.
+        - Raises `ConnectionError` if not connected.
+        """
         if not self._connected:
             raise ConnectionError("Provider not connected")
 
-        # Simplified implementation for testing
         for i in range(5):
             yield self._create_kline(symbol, interval, i)
             await asyncio.sleep(0.01)
 
     def _create_kline(self, symbol: str, interval: KlineInterval, index: int) -> Kline:
-        """Create test kline."""
+        """Create test kline.
+
+        Description of what the method covers:
+        This private method creates a mock `Kline` object with generated data.
+        It is used internally by `stream_klines` to provide test data.
+
+        Preconditions:
+        - The `Kline` model is correctly defined.
+
+        Args:
+            symbol: The trading symbol for the kline.
+            interval: The `KlineInterval` for the kline.
+            index: An integer index used to vary kline data.
+
+        Returns:
+            A `Kline` object.
+
+        Expected Result:
+        - Returns a valid `Kline` object with generated data.
+        """
         base_time = datetime.now(UTC).replace(second=0, microsecond=0)
         open_time = base_time + timedelta(minutes=index)
         close_time = open_time + timedelta(seconds=59)
@@ -173,33 +440,150 @@ class ResilientDataProvider(AbstractDataProvider):
         )
 
     async def fetch_historical_trades(
-        self, symbol: str, start_time: datetime, end_time: datetime, *, limit: int | None = None
+        self, _symbol: str, _start_time: datetime, _end_time: datetime, *, _limit: int | None = None
     ) -> list[Trade]:
-        return []  # Simplified for testing
+        """Simulate fetching historical trades (simplified to return empty list).
+
+        Description of what the method covers:
+        This asynchronous method is a simplified mock implementation that always returns
+        an empty list, simulating no historical trade data available for fetching.
+
+        Preconditions:
+        - The `ResilientDataProvider` instance is initialized.
+
+        Args:
+            symbol: The trading symbol for which to fetch historical trades.
+            start_time: The start `datetime` for the historical period.
+            end_time: The end `datetime` for the historical period.
+            limit: Optional. The maximum number of trades to return.
+
+        Returns:
+            An empty list of `Trade` objects.
+
+        Expected Result:
+        - Always returns an empty list, indicating no historical trades are provided by this mock.
+        """
+        return []
 
     async def fetch_historical_klines(
         self,
-        symbol: str,
-        interval: KlineInterval,
-        start_time: datetime,
-        end_time: datetime,
+        _symbol: str,
+        _interval: KlineInterval,
+        _start_time: datetime,
+        _end_time: datetime,
         *,
-        limit: int | None = None,
+        _limit: int | None = None,
     ) -> list[Kline]:
-        return []  # Simplified for testing
+        """Simulate fetching historical klines (simplified to return empty list).
+
+        Description of what the method covers:
+        This asynchronous method is a simplified mock implementation that always returns
+        an empty list, simulating no historical kline data available for fetching.
+
+        Preconditions:
+        - The `ResilientDataProvider` instance is initialized.
+
+        Args:
+            symbol: The trading symbol for which to fetch historical klines.
+            interval: The `KlineInterval` for the klines.
+            start_time: The start `datetime` for the historical period.
+            end_time: The end `datetime` for the historical period.
+            limit: Optional. The maximum number of klines to return.
+
+        Returns:
+            An empty list of `Kline` objects.
+
+        Expected Result:
+        - Always returns an empty list, indicating no historical klines are provided by this mock.
+        """
+        return []
 
     async def get_exchange_info(self) -> dict[str, Any]:
+        """Simulate fetching exchange information, reflecting degraded status.
+
+        Description of what the method covers:
+        This asynchronous method simulates retrieving general information about the exchange.
+        It returns a dictionary that includes a 'status' field, which reflects whether
+        the provider is currently in a degraded mode (due to circuit breaker being open).
+
+        Preconditions:
+        - The `ResilientDataProvider` instance is initialized.
+        - The `_degraded_mode` attribute is updated by the circuit breaker.
+
+        Returns:
+            A dictionary containing mock exchange information with a dynamic 'status'.
+
+        Expected Result:
+        - Returns a dictionary with the exchange's name and a 'status' that is "degraded"
+          if `_degraded_mode` is `True`, otherwise "normal".
+        """
         return {"name": self._name, "status": "degraded" if self._degraded_mode else "normal"}
 
     async def get_symbol_info(self, symbol: str) -> dict[str, Any]:
+        """Simulate fetching information for a specific trading symbol.
+
+        Description of what the method covers:
+        This asynchronous method simulates retrieving detailed information about a given trading symbol.
+
+        Preconditions:
+        - The `ResilientDataProvider` instance is initialized.
+
+        Args:
+            symbol: The trading symbol (e.g., "BTCUSDT") for which to fetch information.
+
+        Returns:
+            A dictionary containing mock symbol information.
+
+        Expected Result:
+        - Returns a dictionary with the symbol's name and its trading status.
+        """
         return {"symbol": symbol, "status": "TRADING"}
 
     async def ping(self) -> float:
+        """Simulate a ping operation with potential failures and degraded latency.
+
+        Description of what the method covers:
+        This asynchronous method simulates sending a ping request to the data provider.
+        It can be configured to raise a `ConnectionError` to simulate ping failures.
+        Additionally, it returns a higher latency value if the provider is in degraded mode.
+
+        Preconditions:
+        - The `ResilientDataProvider` instance is initialized.
+        - `_should_fail` attribute controls ping failure simulation.
+        - `_degraded_mode` attribute influences simulated latency.
+
+        Returns:
+            A float representing the simulated latency in milliseconds.
+
+        Raises:
+            ConnectionError: If ping failure is simulated.
+
+        Expected Result:
+        - Raises `ConnectionError` if `_should_fail` is `True`.
+        - Returns a higher latency (e.g., 100.0) if `_degraded_mode` is `True`.
+        - Returns normal latency (e.g., 10.0) otherwise.
+        """
         if self._should_fail:
             raise ConnectionError("Ping failed")
-        return 10.0 if not self._degraded_mode else 100.0  # Higher latency in degraded mode
+        return 10.0 if not self._degraded_mode else 100.0
 
     async def close(self) -> None:
+        """Simulate closing the resilient data provider connection.
+
+        Description of what the method covers:
+        This asynchronous method simulates closing the connection to the data provider.
+        It sets the internal `_connected` flag to `False`.
+
+        Preconditions:
+        - The `ResilientDataProvider` instance is initialized.
+
+        Steps:
+        - Call the `close` method.
+        - Set the internal `_connected` flag to `False`.
+
+        Expected Result:
+        - The provider's `is_connected` status becomes `False`.
+        """
         self._connected = False
 
     def set_failure_mode(self, should_fail: bool) -> None:
@@ -256,7 +640,7 @@ class ResilientRepository(AbstractKlineRepository):
             return False  # Skip memory check if psutil not available
 
         process = psutil.Process()
-        memory_mb = process.memory_info().rss / 1024 / 1024
+        memory_mb: float = process.memory_info().rss / 1024 / 1024
         return memory_mb > self._max_memory_mb * 10  # High threshold for test environment
 
     async def query(
@@ -266,7 +650,7 @@ class ResilientRepository(AbstractKlineRepository):
         start_time: datetime,
         end_time: datetime,
         *,
-        options: Any = None,
+        _options: Any = None,
     ) -> list[Kline]:
         if self._closed:
             raise RuntimeError("Repository is closed")
@@ -280,7 +664,7 @@ class ResilientRepository(AbstractKlineRepository):
 
     # Simplified implementations for other methods
     async def stream(
-        self, symbol: str, interval: KlineInterval, start_time: datetime, end_time: datetime, *, batch_size: int = 1000
+        self, symbol: str, interval: KlineInterval, start_time: datetime, end_time: datetime, *, _batch_size: int = 1000
     ) -> AsyncIterator[Kline]:
         results = await self.query(symbol, interval, start_time, end_time)
         for kline in results:
@@ -323,7 +707,7 @@ class ResilientRepository(AbstractKlineRepository):
         return len(to_delete)
 
     async def get_gaps(
-        self, symbol: str, interval: KlineInterval, start_time: datetime, end_time: datetime
+        self, _symbol: str, _interval: KlineInterval, _start_time: datetime, _end_time: datetime
     ) -> list[tuple[datetime, datetime]]:
         return []
 
@@ -384,7 +768,29 @@ class TestSystemResilience:
 
     @pytest.fixture
     def mock_event_bus(self) -> MagicMock:
-        """Provide a mock event bus for testing."""
+        """Provide a mock event bus for testing.
+
+        Description of what the fixture covers:
+        This fixture provides a `MagicMock` instance configured to simulate
+        an event bus. It allows tests to verify interactions with the event
+        bus, such as `publish`, `subscribe`, and `unsubscribe` calls, without
+        relying on a real event bus implementation.
+
+        Preconditions:
+        - `MagicMock` and `AsyncMock` from `unittest.mock` are available.
+
+        Steps:
+        - The fixture is invoked by pytest.
+        - A `MagicMock` instance is created.
+        - `publish` is set as an `AsyncMock`.
+        - `subscribe` and `unsubscribe` are set as `MagicMock` with predefined return values.
+        - `close` is set as an `AsyncMock`.
+        - `is_closed` is set to `False`.
+
+        Expected Result:
+        - Returns a `MagicMock` instance that behaves like an event bus for testing purposes.
+        - `publish` can be asserted for calls.
+        """
         event_bus = MagicMock()
         event_bus.publish = AsyncMock()
         event_bus.subscribe = MagicMock(return_value="sub_123")

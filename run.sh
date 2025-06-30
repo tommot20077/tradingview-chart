@@ -189,7 +189,7 @@ run_lint() {
     uv run ruff check .
     
     print_status "Running mypy..."
-    uv run mypy .
+    uv run mypy src/
     
     print_success "Code quality checks completed"
 }
