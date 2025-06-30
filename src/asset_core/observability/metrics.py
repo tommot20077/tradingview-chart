@@ -10,7 +10,6 @@ from typing import Any
 
 from aiohttp import web
 from prometheus_client import (
-    CONTENT_TYPE_LATEST,
     CollectorRegistry,
     Counter,
     Gauge,
@@ -271,7 +270,8 @@ class PrometheusMetricsRegistry:
         metrics_data = self.generate_metrics()
         return web.Response(
             body=metrics_data,
-            content_type=CONTENT_TYPE_LATEST,
+            content_type="text/plain; version=0.0.4",
+            charset="utf-8",
         )
 
 

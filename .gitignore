@@ -195,3 +195,15 @@ uv.lock
 /.gemini/
 /ai-docs/
 /.mcp.json
+/missing_tests.md
+/docker-compose.yml
+/.gemini/settings.json
+/note/influx.md
+/report/
+/.gemini/
+/ai-docs/
+/.mcp.json
+/missing_tests.md
+/docker-compose.yml
+/fix-format-hook.sh
+/missing_tests_crypto.md

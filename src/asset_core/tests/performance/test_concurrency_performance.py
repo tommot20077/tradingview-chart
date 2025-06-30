@@ -8,7 +8,7 @@ and concurrent model creation performance.
 import asyncio
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
@@ -136,7 +136,7 @@ class TestConcurrencyPerformance:
         batch_size = num_models // num_threads
 
         with ThreadPoolExecutor(max_workers=num_threads) as executor:
-            futures = []
+            futures: list[Future[list[Trade]]] = []
             for thread_id in range(num_threads):
                 start_idx = thread_id * batch_size
                 future = executor.submit(create_trade_batch, start_idx, batch_size)
@@ -181,14 +181,14 @@ class TestConcurrencyPerformance:
         concurrent_klines = []
 
         with ThreadPoolExecutor(max_workers=num_threads) as executor:
-            futures = []
+            futures_klines: list[Future[list[Kline]]] = []
             for thread_id in range(num_threads):
                 start_idx = thread_id * batch_size
-                future = executor.submit(create_kline_batch, start_idx, batch_size)
-                futures.append(future)
+                kline_future: Future[list[Kline]] = executor.submit(create_kline_batch, start_idx, batch_size)
+                futures_klines.append(kline_future)
 
-            for future in as_completed(futures):
-                concurrent_klines.extend(future.result())
+            for kline_future in as_completed(futures_klines):
+                concurrent_klines.extend(kline_future.result())
 
         concurrent_kline_time = time.perf_counter() - start_time
 
@@ -297,8 +297,10 @@ class TestConcurrencyPerformance:
         for result in results:
             assert result["volume"] == expected_volume, f"Volume mismatch in result: {result}"
             assert result["symbol"] == expected_symbol, f"Symbol mismatch in result: {result}"
-            assert result["str_len"] > 0, f"String representation should not be empty: {result}"
-            assert result["dict_keys"] > 0, f"Dictionary should have keys: {result}"
+            str_len: int = result["str_len"]  # type: ignore[assignment]
+            dict_keys: int = result["dict_keys"]  # type: ignore[assignment]
+            assert str_len > 0, f"String representation should not be empty: {result}"
+            assert dict_keys > 0, f"Dictionary should have keys: {result}"
 
         # Test concurrent model creation with shared resources
         creation_results = []
@@ -342,7 +344,7 @@ class TestConcurrencyPerformance:
 
     @pytest.mark.asyncio
     async def test_async_operation_overhead(
-        self, base_trade_data: dict[str, Any], base_kline_data: dict[str, Any]
+        self, base_trade_data: dict[str, Any], _base_kline_data: dict[str, Any]
     ) -> None:
         """Test overhead introduced by asynchronous operations compared to synchronous ones.
 

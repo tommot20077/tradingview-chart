@@ -11,6 +11,7 @@ from loguru import logger
 
 from asset_core.exceptions import CoreError
 from asset_core.observability.logging import (
+    Record,
     TraceableLogger,
     create_traced_logger,
     log_exception_with_context,
@@ -51,8 +52,10 @@ class TestTraceIdPatcher:
         """
         set_trace_id("patcher_test")
 
+        from typing import cast
+
         record: dict[str, dict[str, str]] = {"extra": {}}
-        trace_id_patcher(record)
+        trace_id_patcher(cast(Record, record))
 
         assert record["extra"]["trace_id"] == "patcher_test"
 
@@ -77,8 +80,10 @@ class TestTraceIdPatcher:
         """
         clear_trace_id()
 
+        from typing import cast
+
         record: dict[str, dict[str, str]] = {"extra": {}}
-        trace_id_patcher(record)
+        trace_id_patcher(cast(Record, record))
 
         assert record["extra"]["trace_id"] == "no-trace"
 
@@ -114,7 +119,9 @@ class TestTraceIdPatcher:
 
         record: dict[str, Any] = {"extra": {}, "exception": MockException(error)}
 
-        trace_id_patcher(record)
+        from typing import cast
+
+        trace_id_patcher(cast(Record, record))
 
         assert isinstance(record["extra"], dict)
         assert record["extra"]["trace_id"] == "current_trace"
@@ -152,7 +159,9 @@ class TestTraceIdPatcher:
 
         record: dict[str, Any] = {"extra": {}, "exception": MockException(error)}
 
-        trace_id_patcher(record)
+        from typing import cast
+
+        trace_id_patcher(cast(Record, record))
 
         assert isinstance(record["extra"], dict)
         assert record["extra"]["trace_id"] == "current_trace"

@@ -3,6 +3,7 @@
 import asyncio
 from abc import ABC
 from collections.abc import Callable
+from typing import Any
 
 import pytest
 
@@ -20,20 +21,20 @@ class MockEventBus(AbstractEventBus):
         _subscribers (dict[EventType, list[tuple]]): Stores registered event handlers.
         _subscription_counter (int): Counter for generating unique subscription IDs.
         _closed (bool): Flag indicating if the event bus is closed.
-        _events (list[BaseEvent]): A list to store published events for inspection.
+        _events (list[BaseEvent[Any]]): A list to store published events for inspection.
     """
 
     def __init__(self) -> None:
-        self._subscribers: dict[EventType, list[tuple]] = {}
+        self._subscribers: dict[EventType, list[tuple[Any, ...]]] = {}
         self._subscription_counter = 0
         self._closed = False
-        self._events: list[BaseEvent] = []
+        self._events: list[BaseEvent[Any]] = []
 
-    async def publish(self, event: BaseEvent) -> None:
+    async def publish(self, event: BaseEvent[Any]) -> None:
         """Publishes an event to the bus, notifying all relevant subscribers.
 
         Args:
-            event (BaseEvent): The event to publish.
+            event (BaseEvent[Any]): The event to publish.
 
         Raises:
             RuntimeError: If the event bus is closed.
@@ -155,22 +156,22 @@ class MockEventBus(AbstractEventBus):
         event_type: EventType,
         *,
         timeout: float | None = None,
-        filter_func: Callable[[BaseEvent], bool] | None = None,
-    ) -> BaseEvent | None:
+        filter_func: Callable[[BaseEvent[Any]], bool] | None = None,
+    ) -> BaseEvent[Any] | None:
         """Waits for a specific event to be published, with optional timeout and filtering.
 
         Args:
             event_type (EventType): The type of event to wait for.
             timeout (float | None): The maximum time in seconds to wait for the event.
                                     If None, waits indefinitely.
-            filter_func (Callable[[BaseEvent], bool] | None): An optional callable
+            filter_func (Callable[[BaseEvent[Any]], bool] | None): An optional callable
                                                                 to filter events. Only
                                                                 events for which this
                                                                 function returns True
                                                                 will be considered.
 
         Returns:
-            BaseEvent | None: The first matching event, or None if the timeout is reached.
+            BaseEvent[Any] | None: The first matching event, or None if the timeout is reached.
         """
         # Simple implementation for testing
         start_time = asyncio.get_event_loop().time()
@@ -221,8 +222,8 @@ class TestAbstractEventBus:
         assert issubclass(AbstractEventBus, ABC)
 
         # Should not be able to instantiate directly
-        with pytest.raises(TypeError):
-            AbstractEventBus()
+        with pytest.raises(TypeError, match="Can't instantiate abstract class"):
+            AbstractEventBus()  # type: ignore[abstract]
 
     @pytest.mark.asyncio
     async def test_mock_event_bus_basic_operations(self) -> None:
@@ -280,7 +281,7 @@ class TestAbstractEventBus:
         bus = MockEventBus()
         received_events = []
 
-        def handler(event: BaseEvent) -> None:
+        def handler(event: BaseEvent[Any]) -> None:
             received_events.append(event)
 
         # Subscribe to trade events
@@ -289,7 +290,7 @@ class TestAbstractEventBus:
         assert bus.get_subscription_count(EventType.TRADE) == 1
 
         # Publish a trade event
-        event = BaseEvent(
+        event: BaseEvent[dict[str, Any]] = BaseEvent(
             event_type=EventType.TRADE,
             source="test",
             data={"test": "data"},
@@ -325,14 +326,14 @@ class TestAbstractEventBus:
         bus = MockEventBus()
         received_events = []
 
-        async def async_handler(event: BaseEvent) -> None:
+        async def async_handler(event: BaseEvent[Any]) -> None:
             received_events.append(event)
 
         # Subscribe with async handler
         _sub_id = bus.subscribe(EventType.TRADE, async_handler)
 
         # Publish event
-        event = BaseEvent(
+        event: BaseEvent[dict[str, Any]] = BaseEvent(
             event_type=EventType.TRADE,
             source="test",
             data={"test": "data"},
@@ -368,10 +369,10 @@ class TestAbstractEventBus:
         btc_events = []
         eth_events = []
 
-        def btc_handler(event: BaseEvent) -> None:
+        def btc_handler(event: BaseEvent[Any]) -> None:
             btc_events.append(event)
 
-        def eth_handler(event: BaseEvent) -> None:
+        def eth_handler(event: BaseEvent[Any]) -> None:
             eth_events.append(event)
 
         # Subscribe with symbol filters
@@ -379,7 +380,7 @@ class TestAbstractEventBus:
         bus.subscribe(EventType.TRADE, eth_handler, filter_symbol="ETHUSDT")
 
         # Publish BTC event
-        btc_event = BaseEvent(
+        btc_event: BaseEvent[dict[str, Any]] = BaseEvent(
             event_type=EventType.TRADE,
             source="test",
             symbol="BTCUSDT",
@@ -388,7 +389,7 @@ class TestAbstractEventBus:
         await bus.publish(btc_event)
 
         # Publish ETH event
-        eth_event = BaseEvent(
+        eth_event: BaseEvent[dict[str, Any]] = BaseEvent(
             event_type=EventType.TRADE,
             source="test",
             symbol="ETHUSDT",
@@ -431,7 +432,7 @@ class TestAbstractEventBus:
         bus = MockEventBus()
         received_events = []
 
-        def handler(event: BaseEvent) -> None:
+        def handler(event: BaseEvent[Any]) -> None:
             received_events.append(event)
 
         # Subscribe and then unsubscribe
@@ -443,7 +444,7 @@ class TestAbstractEventBus:
         assert bus.get_subscription_count(EventType.TRADE) == 0
 
         # Publish event - should not be received
-        event = BaseEvent(
+        event: BaseEvent[dict[str, Any]] = BaseEvent(
             event_type=EventType.TRADE,
             source="test",
             data={"test": "data"},
@@ -478,10 +479,10 @@ class TestAbstractEventBus:
         """
         bus = MockEventBus()
 
-        def handler1(event: BaseEvent) -> None:
+        def handler1(event: BaseEvent[Any]) -> None:
             pass
 
-        def handler2(event: BaseEvent) -> None:
+        def handler2(event: BaseEvent[Any]) -> None:
             pass
 
         # Subscribe multiple handlers
@@ -528,7 +529,7 @@ class TestAbstractEventBus:
         # Start waiting for event in background
         async def wait_and_publish() -> None:
             await asyncio.sleep(0.05)  # Small delay
-            event = BaseEvent(
+            event: BaseEvent[dict[str, Any]] = BaseEvent(
                 event_type=EventType.TRADE,
                 source="test",
                 data={"test": "data"},

@@ -11,7 +11,6 @@ from typing import Any
 import pytest
 
 from asset_core.storage.metadata_repo import AbstractMetadataRepository
-from asset_core.types.common import Symbol
 from .base_contract_test import AsyncContractTestMixin, BaseContractTest, \
     MockImplementationBase
 
@@ -197,11 +196,12 @@ class MockMetadataRepository(AbstractMetadataRepository, MockImplementationBase)
         expiry_time = datetime.now(UTC) + timedelta(seconds=ttl_seconds)
         self._ttl_data[key] = expiry_time
 
-    async def get_last_sync_time(self, symbol: Symbol) -> datetime | None:
+    async def get_last_sync_time(self, symbol: str, data_type: str) -> datetime | None:
         """Retrieves the last synchronization timestamp for a given symbol.
 
         Args:
-            symbol (Symbol): The trading symbol.
+            symbol (str): The trading symbol.
+            data_type (str): The type of data that was synced.
 
         Returns:
             datetime | None: The last synchronization time as a datetime object,
@@ -212,7 +212,7 @@ class MockMetadataRepository(AbstractMetadataRepository, MockImplementationBase)
         """
         self._check_not_closed()
 
-        sync_data = await self.get(f"sync_time:{symbol}")
+        sync_data = await self.get(f"sync_time:{symbol}:{data_type}")
 
         if sync_data and "timestamp" in sync_data:
             # Convert ISO string back to datetime
@@ -221,11 +221,12 @@ class MockMetadataRepository(AbstractMetadataRepository, MockImplementationBase)
 
         return None
 
-    async def set_last_sync_time(self, symbol: Symbol, timestamp: datetime) -> None:
+    async def set_last_sync_time(self, symbol: str, data_type: str, timestamp: datetime) -> None:
         """Updates the last synchronization timestamp for a given symbol.
 
         Args:
-            symbol (Symbol): The trading symbol.
+            symbol (str): The trading symbol.
+            data_type (str): The type of data being synced.
             timestamp (datetime): The datetime object representing the last sync time.
 
         Raises:
@@ -234,15 +235,16 @@ class MockMetadataRepository(AbstractMetadataRepository, MockImplementationBase)
         """
         self._check_not_closed()
 
-        sync_data = {"timestamp": timestamp.isoformat(), "symbol": symbol}
+        sync_data = {"timestamp": timestamp.isoformat(), "symbol": symbol, "data_type": data_type}
 
-        await self.set(f"sync_time:{symbol}", sync_data)
+        await self.set(f"sync_time:{symbol}:{data_type}", sync_data)
 
-    async def get_backfill_status(self, symbol: Symbol) -> dict[str, Any] | None:
+    async def get_backfill_status(self, symbol: str, data_type: str) -> dict[str, Any] | None:
         """Retrieves backfill progress information for a given symbol.
 
         Args:
-            symbol (Symbol): The trading symbol.
+            symbol (str): The trading symbol.
+            data_type (str): The type of data being backfilled.
 
         Returns:
             dict[str, Any] | None: A dictionary containing backfill status details,
@@ -253,13 +255,14 @@ class MockMetadataRepository(AbstractMetadataRepository, MockImplementationBase)
         """
         self._check_not_closed()
 
-        return await self.get(f"backfill:{symbol}")
+        return await self.get(f"backfill:{symbol}:{data_type}")
 
-    async def set_backfill_status(self, symbol: Symbol, status: dict[str, Any]) -> None:
+    async def set_backfill_status(self, symbol: str, data_type: str, status: dict[str, Any]) -> None:
         """Updates backfill progress information for a given symbol.
 
         Args:
-            symbol (Symbol): The trading symbol.
+            symbol (str): The trading symbol.
+            data_type (str): The type of data being backfilled.
             status (dict[str, Any]): A dictionary containing the backfill status.
                                     Must include "status", "progress", and "last_updated" fields.
 
@@ -277,7 +280,7 @@ class MockMetadataRepository(AbstractMetadataRepository, MockImplementationBase)
         if not all(field in status for field in required_fields):
             raise ValueError(f"Status must contain fields: {required_fields}")
 
-        await self.set(f"backfill:{symbol}", status)
+        await self.set(f"backfill:{symbol}:{data_type}", status)
 
     async def close(self) -> None:
         """Closes the repository and cleans up resources.
@@ -297,7 +300,7 @@ class MockMetadataRepository(AbstractMetadataRepository, MockImplementationBase)
         """
         return self
 
-    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> bool:
+    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         """Asynchronous context manager exit point.
 
         Ensures that the repository is closed when exiting the `async with` block.
@@ -308,10 +311,9 @@ class MockMetadataRepository(AbstractMetadataRepository, MockImplementationBase)
             exc_tb (Any): The traceback object, if an exception was raised.
 
         Returns:
-            bool: False to propagate any exceptions that occurred within the block.
+            None: This method does not suppress exceptions.
         """
         await self.close()
-        return False
 
 
 @pytest.fixture(scope="function")
@@ -437,7 +439,7 @@ class TestAbstractMetadataRepositoryContract(BaseContractTest, AsyncContractTest
 
         # Test that the class itself is abstract (cannot be instantiated)
         with pytest.raises(TypeError):
-            AbstractMetadataRepository()  # Should raise TypeError due to abstract methods
+            AbstractMetadataRepository()  # type: ignore[abstract]
 
     @pytest.mark.asyncio
     async def test_mock_implementation_completeness(self, repo: MockMetadataRepository) -> None:
@@ -661,23 +663,24 @@ class TestAbstractMetadataRepositoryContract(BaseContractTest, AsyncContractTest
         """
         symbol1 = "BTCUSDT"
         symbol2 = "ETHUSDT"
+        data_type = "klines_1m"
 
         sync_time1 = datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC)
         sync_time2 = datetime(2024, 1, 1, 13, 0, 0, tzinfo=UTC)
 
         # Test setting sync times
-        await repo.set_last_sync_time(symbol1, sync_time1)
-        await repo.set_last_sync_time(symbol2, sync_time2)
+        await repo.set_last_sync_time(symbol1, data_type, sync_time1)
+        await repo.set_last_sync_time(symbol2, data_type, sync_time2)
 
         # Test retrieving sync times
-        retrieved1 = await repo.get_last_sync_time(symbol1)
-        retrieved2 = await repo.get_last_sync_time(symbol2)
+        retrieved1 = await repo.get_last_sync_time(symbol1, data_type)
+        retrieved2 = await repo.get_last_sync_time(symbol2, data_type)
 
         assert retrieved1 == sync_time1
         assert retrieved2 == sync_time2
 
         # Test non-existent sync time
-        non_existent = await repo.get_last_sync_time("NONEXISTENT")
+        non_existent = await repo.get_last_sync_time("NONEXISTENT", data_type)
         assert non_existent is None
 
     @pytest.mark.asyncio
@@ -694,6 +697,7 @@ class TestAbstractMetadataRepositoryContract(BaseContractTest, AsyncContractTest
         - Different symbols have independent status.
         """
         symbol = "ADAUSDT"
+        data_type = "klines_1m"
 
         backfill_status = {
             "status": "in_progress",
@@ -705,25 +709,25 @@ class TestAbstractMetadataRepositoryContract(BaseContractTest, AsyncContractTest
         }
 
         # Test setting backfill status
-        await repo.set_backfill_status(symbol, backfill_status)
+        await repo.set_backfill_status(symbol, data_type, backfill_status)
 
         # Test retrieving backfill status
-        retrieved = await repo.get_backfill_status(symbol)
+        retrieved = await repo.get_backfill_status(symbol, data_type)
         assert retrieved == backfill_status
 
         # Test non-existent backfill status
-        non_existent = await repo.get_backfill_status("NONEXISTENT")
+        non_existent = await repo.get_backfill_status("NONEXISTENT", data_type)
         assert non_existent is None
 
         # Test status validation
         invalid_status = {"incomplete": "status"}  # Missing required fields
 
         with pytest.raises(ValueError, match="Status must contain fields"):
-            await repo.set_backfill_status(symbol, invalid_status)
+            await repo.set_backfill_status(symbol, data_type, invalid_status)
 
         # Test non-dict status
         with pytest.raises(ValueError, match="Status must be a dictionary"):
-            await repo.set_backfill_status(symbol, "not a dict")  # type: ignore[arg-type]
+            await repo.set_backfill_status(symbol, data_type, "not a dict")  # type: ignore[arg-type]
 
     @pytest.mark.asyncio
     async def test_async_context_manager_behavior(self, repo: MockMetadataRepository) -> None:

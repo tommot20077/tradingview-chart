@@ -57,9 +57,9 @@ OrderId = NewType("OrderId", str)
 """NewType for a unique order identifier."""
 
 # Event handling types
-EventHandler = Callable[[BaseEvent], None]
+EventHandler = Callable[[BaseEvent[Any]], None]
 """Type alias for a synchronous callable that handles a `BaseEvent`."""
-AsyncEventHandler = Callable[[BaseEvent], Any]  # Returns awaitable
+AsyncEventHandler = Callable[[BaseEvent[Any]], Any]  # Returns awaitable
 """Type alias for an asynchronous callable that handles a `BaseEvent`."""
 
 # Data streaming types
@@ -152,7 +152,7 @@ AggregationFunction = Callable[[list[T]], T]
 # Filter and selector types
 SymbolFilter = Callable[[Symbol], bool]
 """Type alias for a callable that filters `Symbol` objects."""
-EventFilter = Callable[[BaseEvent], bool]
+EventFilter = Callable[[BaseEvent[Any]], bool]
 """Type alias for a callable that filters `BaseEvent` objects."""
 DataFilter = Callable[[T], bool]
 """Type alias for a generic callable that filters objects of type `T`."""
@@ -407,7 +407,7 @@ class Validatable(Protocol):
 
 
 # Type aliases for protocols
-IdentifiableT = TypeVar("IdentifiableT", bound=Identifiable)
+IdentifiableT = TypeVar("IdentifiableT", bound=Identifiable[Any])
 TimestampedT = TypeVar("TimestampedT", bound=Timestamped)
 SymbolizedT = TypeVar("SymbolizedT", bound=Symbolized)
 SerializableT = TypeVar("SerializableT", bound=Serializable)

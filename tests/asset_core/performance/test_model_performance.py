@@ -19,7 +19,7 @@ from asset_core.models.trade import Trade, TradeSide
 
 # Optional memory profiler import
 try:
-    from memory_profiler import profile  # type: ignore[import-untyped]
+    from memory_profiler import profile
 except ImportError:
     # Create a no-op decorator if memory_profiler is not available
     def profile(func: Any) -> Any:

@@ -246,8 +246,8 @@ def get_formatter(format_type: LogFormat) -> str | Callable[[Record], str]:
     elif format_type == LogFormat.COMPACT:
         return (
             "<green>{time:HH:mm:ss}</green> | "
-            "<level>{level[0]}</level> | "
-            "<cyan>{name.split('.')[-1]}</cyan> | "
+            "<level>{level.name[0]}</level> | "
+            "<cyan>{name}</cyan> | "
             "<level>{message}</level>"
         )
 

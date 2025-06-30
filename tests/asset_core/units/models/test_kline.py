@@ -57,12 +57,12 @@ class TestKlineInterval:
             - `WEEK_1` should be "1w".
             - `MONTH_1` should be "1M".
         """
-        assert KlineInterval.MINUTE_1 == "1m"
-        assert KlineInterval.MINUTE_5 == "5m"
-        assert KlineInterval.HOUR_1 == "1h"
-        assert KlineInterval.DAY_1 == "1d"
-        assert KlineInterval.WEEK_1 == "1w"
-        assert KlineInterval.MONTH_1 == "1M"
+        assert KlineInterval.MINUTE_1.value == "1m"
+        assert KlineInterval.MINUTE_5.value == "5m"
+        assert KlineInterval.HOUR_1.value == "1h"
+        assert KlineInterval.DAY_1.value == "1d"
+        assert KlineInterval.WEEK_1.value == "1w"
+        assert KlineInterval.MONTH_1.value == "1M"
 
     def test_to_seconds_conversion(self) -> None:
         """Test KlineInterval conversion to seconds.
@@ -115,6 +115,70 @@ class TestKlineInterval:
         assert KlineInterval.to_timedelta(KlineInterval.MINUTE_1) == timedelta(minutes=1)
         assert KlineInterval.to_timedelta(KlineInterval.HOUR_1) == timedelta(hours=1)
         assert KlineInterval.to_timedelta(KlineInterval.DAY_1) == timedelta(days=1)
+
+    def test_to_seconds_invalid_input(self) -> None:
+        """Test to_seconds method with invalid input.
+
+        Description of what the test covers:
+        Verifies that `to_seconds()` method raises appropriate errors when
+        called with invalid input (non-enum objects, strings, None).
+
+        Preconditions:
+            - None.
+
+        Steps:
+            - Call `to_seconds()` with invalid string input.
+            - Call `to_seconds()` with None input.
+            - Call `to_seconds()` with non-enum object.
+            - Verify appropriate errors are raised.
+
+        Expected Result:
+            - `KeyError` should be raised for invalid string.
+            - `KeyError` or `TypeError` should be raised for invalid inputs.
+        """
+        # Test with invalid string that's not a valid enum member
+        with pytest.raises(KeyError):
+            KlineInterval.to_seconds("invalid_interval")  # type: ignore
+
+        # Test with None
+        with pytest.raises((KeyError, TypeError)):
+            KlineInterval.to_seconds(None)  # type: ignore
+
+        # Test with non-enum object
+        with pytest.raises((KeyError, TypeError)):
+            KlineInterval.to_seconds(123)  # type: ignore
+
+    def test_to_timedelta_invalid_input(self) -> None:
+        """Test to_timedelta method with invalid input.
+
+        Description of what the test covers:
+        Verifies that `to_timedelta()` method raises appropriate errors when
+        called with invalid input (non-enum objects, strings, None).
+
+        Preconditions:
+            - None.
+
+        Steps:
+            - Call `to_timedelta()` with invalid string input.
+            - Call `to_timedelta()` with None input.
+            - Call `to_timedelta()` with non-enum object.
+            - Verify appropriate errors are raised.
+
+        Expected Result:
+            - `KeyError` should be raised for invalid string.
+            - `KeyError` or `TypeError` should be raised for invalid inputs.
+        """
+        # Test with invalid string that's not a valid enum member
+        with pytest.raises(KeyError):
+            KlineInterval.to_timedelta("invalid_interval")  # type: ignore
+
+        # Test with None
+        with pytest.raises((KeyError, TypeError)):
+            KlineInterval.to_timedelta(None)  # type: ignore
+
+        # Test with non-enum object
+        with pytest.raises((KeyError, TypeError)):
+            KlineInterval.to_timedelta(123)  # type: ignore
 
 
 @pytest.mark.unit
@@ -251,6 +315,76 @@ class TestKlineConstruction:
         assert kline.taker_buy_quote_volume is None
         assert kline.received_at is None
         assert kline.metadata == {}
+
+    def test_kline_metadata_default_factory(self) -> None:
+        """Test metadata default factory isolation.
+
+        Description of what the test covers:
+        Verifies that each `Kline` instance gets its own independent `metadata`
+        dictionary using `default_factory=dict`, preventing shared state between instances.
+
+        Preconditions:
+            - None.
+
+        Steps:
+            - Create two `Kline` instances without explicit metadata.
+            - Modify the metadata of the first instance.
+            - Verify that the metadata of the second instance remains unchanged.
+
+        Expected Result:
+            - Each `Kline` instance should have its own independent metadata dictionary.
+            - Modifying one instance's metadata should not affect another instance.
+        """
+        base_time = aligned_datetime()
+        close_time = base_time + timedelta(minutes=1)
+
+        # Create two Kline instances without explicit metadata
+        kline1 = Kline(
+            symbol="BTCUSDT",
+            interval=KlineInterval.MINUTE_1,
+            open_time=base_time,
+            close_time=close_time,
+            open_price=Decimal("50000"),
+            high_price=Decimal("50100"),
+            low_price=Decimal("49900"),
+            close_price=Decimal("50050"),
+            volume=Decimal("1.0"),
+            quote_volume=Decimal("50000"),
+            trades_count=10,
+        )
+
+        kline2 = Kline(
+            symbol="ETHUSDT",
+            interval=KlineInterval.MINUTE_1,
+            open_time=base_time,
+            close_time=close_time,
+            open_price=Decimal("3000"),
+            high_price=Decimal("3010"),
+            low_price=Decimal("2990"),
+            close_price=Decimal("3005"),
+            volume=Decimal("1.0"),
+            quote_volume=Decimal("3000"),
+            trades_count=10,
+        )
+
+        # Both should start with empty metadata dictionaries
+        assert kline1.metadata == {}
+        assert kline2.metadata == {}
+
+        # Modify metadata of the first instance
+        kline1.metadata["test_key"] = "test_value"
+        kline1.metadata["source"] = "websocket"
+
+        # Verify that kline2's metadata remains unchanged (independent dictionaries)
+        assert kline1.metadata == {"test_key": "test_value", "source": "websocket"}
+        assert kline2.metadata == {}
+
+        # Modify second instance metadata to further verify independence
+        kline2.metadata["different_key"] = "different_value"
+
+        # Both should still have their own independent metadata
+        assert kline1.metadata == {"test_key": "test_value", "source": "websocket"}
+        assert kline2.metadata == {"different_key": "different_value"}
 
 
 @pytest.mark.unit
@@ -664,6 +798,76 @@ class TestKlineTimezoneHandling:
 
         assert kline.open_time.tzinfo == UTC
         assert kline.close_time.tzinfo == UTC
+
+    def test_received_at_timezone_handling(self) -> None:
+        """Test received_at timezone handling.
+
+        Description of what the test covers:
+        Verifies that `received_at` field correctly handles both naive and
+        timezone-aware datetime values, converting them to UTC as needed.
+
+        Preconditions:
+            - None.
+
+        Steps:
+            - Create Kline with naive `received_at` datetime.
+            - Verify it's converted to UTC timezone-aware.
+            - Create Kline with timezone-aware `received_at` datetime.
+            - Verify it's correctly handled and converted to UTC.
+
+        Expected Result:
+            - Naive `received_at` should be converted to UTC.
+            - Timezone-aware `received_at` should be converted to UTC.
+        """
+        base_time = datetime(2023, 1, 1, 12, 0, 0, tzinfo=UTC)
+        close_time = base_time + timedelta(minutes=1)
+
+        # Test with naive received_at
+        naive_received_time = datetime(2023, 1, 1, 12, 1, 30)  # No timezone
+        kline_naive = Kline(
+            symbol="BTCUSDT",
+            interval=KlineInterval.MINUTE_1,
+            open_time=base_time,
+            close_time=close_time,
+            open_price=Decimal("50000"),
+            high_price=Decimal("50100"),
+            low_price=Decimal("49900"),
+            close_price=Decimal("50050"),
+            volume=Decimal("1.0"),
+            quote_volume=Decimal("50000"),
+            trades_count=10,
+            received_at=naive_received_time,
+        )
+
+        assert kline_naive.received_at is not None
+        assert kline_naive.received_at.tzinfo == UTC
+
+        # Test with timezone-aware received_at (different timezone)
+        from datetime import timezone
+
+        est_tz = timezone(timedelta(hours=-5))  # EST timezone
+        aware_received_time = datetime(2023, 1, 1, 7, 1, 30, tzinfo=est_tz)  # 7 AM EST = 12:01:30 UTC
+
+        kline_aware = Kline(
+            symbol="BTCUSDT",
+            interval=KlineInterval.MINUTE_1,
+            open_time=base_time,
+            close_time=close_time,
+            open_price=Decimal("50000"),
+            high_price=Decimal("50100"),
+            low_price=Decimal("49900"),
+            close_price=Decimal("50050"),
+            volume=Decimal("1.0"),
+            quote_volume=Decimal("50000"),
+            trades_count=10,
+            received_at=aware_received_time,
+        )
+
+        assert kline_aware.received_at is not None
+        assert kline_aware.received_at.tzinfo == UTC
+        # Verify the time was correctly converted to UTC
+        expected_utc_time = datetime(2023, 1, 1, 12, 1, 30, tzinfo=UTC)
+        assert kline_aware.received_at == expected_utc_time
 
 
 @pytest.mark.unit
@@ -1240,6 +1444,45 @@ class TestKlineSequenceValidation:
         Expected Result:
         - A `ValueError` should be raised, indicating that a gap was detected.
         """
+        base_time = datetime(2023, 1, 1, 12, 0, 0, tzinfo=UTC)
+
+        # First kline: 12:00 - 12:01
+        kline1 = Kline(
+            symbol="BTCUSDT",
+            interval=KlineInterval.MINUTE_1,
+            open_time=base_time,
+            close_time=base_time + timedelta(minutes=1),
+            open_price=Decimal("50000"),
+            high_price=Decimal("50100"),
+            low_price=Decimal("49900"),
+            close_price=Decimal("50050"),
+            volume=Decimal("1.0"),
+            quote_volume=Decimal("50000"),
+            trades_count=10,
+        )
+
+        # Second kline with gap: 12:03 - 12:04 (missing 12:01-12:02 and 12:02-12:03)
+        gap_time = base_time + timedelta(minutes=3)
+        kline2 = Kline(
+            symbol="BTCUSDT",
+            interval=KlineInterval.MINUTE_1,
+            open_time=gap_time,
+            close_time=gap_time + timedelta(minutes=1),
+            open_price=Decimal("50100"),
+            high_price=Decimal("50200"),
+            low_price=Decimal("50000"),
+            close_price=Decimal("50150"),
+            volume=Decimal("1.0"),
+            quote_volume=Decimal("50000"),
+            trades_count=10,
+        )
+
+        klines_with_gap = [kline1, kline2]
+
+        with pytest.raises(ValueError) as exc_info:
+            Kline.validate_sequence_continuity(klines_with_gap)
+
+        assert "Gap detected between klines" in str(exc_info.value)
 
     def test_validate_sequence_different_symbols(self) -> None:
         """Test validation fails with different symbols.
@@ -1259,6 +1502,46 @@ class TestKlineSequenceValidation:
         Expected Result:
         - A `ValueError` should be raised, indicating that klines must have the same symbol.
         """
+        base_time = datetime(2023, 1, 1, 12, 0, 0, tzinfo=UTC)
+
+        # First kline with BTCUSDT symbol
+        kline1 = Kline(
+            symbol="BTCUSDT",
+            interval=KlineInterval.MINUTE_1,
+            open_time=base_time,
+            close_time=base_time + timedelta(minutes=1),
+            open_price=Decimal("50000"),
+            high_price=Decimal("50100"),
+            low_price=Decimal("49900"),
+            close_price=Decimal("50050"),
+            volume=Decimal("1.0"),
+            quote_volume=Decimal("50000"),
+            trades_count=10,
+        )
+
+        # Second kline with different symbol (ETHUSDT) but continuous time
+        kline2 = Kline(
+            symbol="ETHUSDT",  # Different symbol
+            interval=KlineInterval.MINUTE_1,
+            open_time=base_time + timedelta(minutes=1),  # Continuous time
+            close_time=base_time + timedelta(minutes=2),
+            open_price=Decimal("3000"),
+            high_price=Decimal("3010"),
+            low_price=Decimal("2990"),
+            close_price=Decimal("3005"),
+            volume=Decimal("1.0"),
+            quote_volume=Decimal("3000"),
+            trades_count=10,
+        )
+
+        klines_different_symbols = [kline1, kline2]
+
+        with pytest.raises(ValueError) as exc_info:
+            Kline.validate_sequence_continuity(klines_different_symbols)
+
+        assert "Klines must have the same symbol" in str(exc_info.value)
+        assert "BTCUSDT" in str(exc_info.value)
+        assert "ETHUSDT" in str(exc_info.value)
 
     def test_validate_sequence_single_kline(self) -> None:
         """Test validation with single kline.

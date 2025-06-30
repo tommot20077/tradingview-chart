@@ -17,8 +17,8 @@ import pytest
 from asset_core.models.kline import Kline, KlineInterval
 from asset_core.models.trade import Trade
 from asset_core.providers.base import AbstractDataProvider
-from .base_contract_test import AsyncContractTestMixin, BaseContractTest, \
-    MockImplementationBase
+
+from .base_contract_test import AsyncContractTestMixin, BaseContractTest, MockImplementationBase
 
 
 class MockDataProvider(AbstractDataProvider, MockImplementationBase):
@@ -65,7 +65,7 @@ class MockDataProvider(AbstractDataProvider, MockImplementationBase):
         if self._is_connected:
             self._is_connected = False
 
-    async def stream_trades(self, symbol: str, *, _start_from: datetime | None = None) -> AsyncIterator[Trade]:
+    async def stream_trades(self, symbol: str, *, start_from: datetime | None = None) -> AsyncIterator[Trade]:  # noqa: ARG002
         """Streams mock real-time trades for a given symbol.
 
         Args:
@@ -98,7 +98,11 @@ class MockDataProvider(AbstractDataProvider, MockImplementationBase):
             await asyncio.sleep(0.001)  # Small delay between trades
 
     async def stream_klines(
-        self, symbol: str, interval: KlineInterval, *, _start_from: datetime | None = None
+        self,
+        symbol: str,
+        interval: KlineInterval,
+        *,
+        start_from: datetime | None = None,  # noqa: ARG002
     ) -> AsyncIterator[Kline]:
         """Streams mock real-time klines for a given symbol and interval.
 
@@ -325,7 +329,7 @@ class MockDataProvider(AbstractDataProvider, MockImplementationBase):
         await self.connect()
         return self
 
-    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> bool:
+    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         """Asynchronous context manager exit point.
 
         Automatically closes the provider upon exiting the `async with` block.
@@ -335,11 +339,8 @@ class MockDataProvider(AbstractDataProvider, MockImplementationBase):
             exc_val (Any): The exception instance raised, if any.
             exc_tb (Any): The traceback object, if an exception was raised.
 
-        Returns:
-            bool: False to propagate any exceptions that occurred within the block.
         """
         await self.close()
-        return False
 
 
 class TestAbstractDataProviderContract(BaseContractTest, AsyncContractTestMixin):
@@ -472,7 +473,7 @@ class TestAbstractDataProviderContract(BaseContractTest, AsyncContractTestMixin)
 
         # Test that the class itself is abstract (cannot be instantiated)
         with pytest.raises(TypeError):
-            AbstractDataProvider()  # Should raise TypeError due to abstract methods
+            AbstractDataProvider()  # type: ignore[abstract]
 
     @pytest.mark.asyncio
     async def test_mock_implementation_completeness(self, provider: MockDataProvider) -> None:

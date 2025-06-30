@@ -7,13 +7,13 @@ follows the expected behavioral contracts and interface specifications.
 
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Any
 
 import pytest
 
 from asset_core.models.kline import Kline, KlineInterval
 from asset_core.storage.kline_repo import AbstractKlineRepository, QueryOptions
-from asset_core.types.common import Symbol
 from .base_contract_test import AsyncContractTestMixin, BaseContractTest, \
     MockImplementationBase
 
@@ -84,19 +84,20 @@ class MockKlineRepository(AbstractKlineRepository, MockImplementationBase):
 
     async def query(
         self,
-        symbol: Symbol,
+        symbol: str,
         interval: KlineInterval,
-        start_time: datetime | None = None,
-        end_time: datetime | None = None,
+        start_time: datetime,
+        end_time: datetime,
+        *,
         options: QueryOptions | None = None,
     ) -> list[Kline]:
         """Queries klines from the mock storage based on specified criteria.
 
         Args:
-            symbol (Symbol): The trading symbol.
+            symbol (str): The trading symbol.
             interval (KlineInterval): The Kline interval.
-            start_time (datetime | None): Optional start time for filtering (inclusive).
-            end_time (datetime | None): Optional end time for filtering (exclusive).
+            start_time (datetime): Start time for filtering (inclusive).
+            end_time (datetime): End time for filtering (exclusive).
             options (QueryOptions | None): Optional query parameters for ordering and pagination.
 
         Returns:
@@ -109,10 +110,8 @@ class MockKlineRepository(AbstractKlineRepository, MockImplementationBase):
 
         results = [k for k in self._klines if k.symbol == symbol and k.interval == interval]
 
-        if start_time:
-            results = [k for k in results if k.open_time >= start_time]
-        if end_time:
-            results = [k for k in results if k.open_time < end_time]
+        results = [k for k in results if k.open_time >= start_time]
+        results = [k for k in results if k.open_time < end_time]
 
         # Apply ordering
         if options and options.order_by == "open_time":
@@ -128,41 +127,44 @@ class MockKlineRepository(AbstractKlineRepository, MockImplementationBase):
 
         return results
 
-    async def stream(
+    def stream(
         self,
-        symbol: Symbol,
+        symbol: str,
         interval: KlineInterval,
-        start_time: datetime | None = None,
-        end_time: datetime | None = None,
-        _batch_size: int = 1000,
+        start_time: datetime,
+        end_time: datetime,
+        *,
+        batch_size: int = 1000,  # noqa: ARG002
     ) -> AsyncIterator[Kline]:
         """Streams klines individually from the mock storage.
 
         Args:
-            symbol (Symbol): The trading symbol.
+            symbol (str): The trading symbol.
             interval (KlineInterval): The Kline interval.
-            start_time (datetime | None): Optional start time for filtering (inclusive).
-            end_time (datetime | None): Optional end time for filtering (exclusive).
+            start_time (datetime): Start time for filtering (inclusive).
+            end_time (datetime): End time for filtering (exclusive).
             batch_size (int): The number of klines to fetch in each batch (ignored in this mock).
 
-        Yields:
-            Kline: A Kline object.
+        Returns:
+            AsyncIterator[Kline]: An async iterator of Kline objects.
 
         Raises:
             RuntimeError: If the repository is closed.
         """
         self._check_not_closed()
 
-        all_klines = await self.query(symbol, interval, start_time, end_time)
+        async def generator() -> AsyncIterator[Kline]:
+            all_klines = await self.query(symbol, interval, start_time, end_time)
+            for kline in all_klines:
+                yield kline
 
-        for kline in all_klines:
-            yield kline
+        return generator()
 
-    async def get_latest(self, symbol: Symbol, interval: KlineInterval) -> Kline | None:
+    async def get_latest(self, symbol: str, interval: KlineInterval) -> Kline | None:
         """Retrieves the most recent kline for a given symbol and interval.
 
         Args:
-            symbol (Symbol): The trading symbol.
+            symbol (str): The trading symbol.
             interval (KlineInterval): The Kline interval.
 
         Returns:
@@ -180,11 +182,11 @@ class MockKlineRepository(AbstractKlineRepository, MockImplementationBase):
 
         return max(matching, key=lambda k: k.open_time)
 
-    async def get_oldest(self, symbol: Symbol, interval: KlineInterval) -> Kline | None:
+    async def get_oldest(self, symbol: str, interval: KlineInterval) -> Kline | None:
         """Retrieves the oldest kline for a given symbol and interval.
 
         Args:
-            symbol (Symbol): The trading symbol.
+            symbol (str): The trading symbol.
             interval (KlineInterval): The Kline interval.
 
         Returns:
@@ -204,7 +206,7 @@ class MockKlineRepository(AbstractKlineRepository, MockImplementationBase):
 
     async def count(
         self,
-        symbol: Symbol,
+        symbol: str,
         interval: KlineInterval,
         start_time: datetime | None = None,
         end_time: datetime | None = None,
@@ -212,7 +214,7 @@ class MockKlineRepository(AbstractKlineRepository, MockImplementationBase):
         """Counts klines matching criteria in the mock storage.
 
         Args:
-            symbol (Symbol): The trading symbol.
+            symbol (str): The trading symbol.
             interval (KlineInterval): The Kline interval.
             start_time (datetime | None): Optional start time for filtering (inclusive).
             end_time (datetime | None): Optional end time for filtering (exclusive).
@@ -225,14 +227,27 @@ class MockKlineRepository(AbstractKlineRepository, MockImplementationBase):
         """
         self._check_not_closed()
 
-        results = await self.query(symbol, interval, start_time, end_time)
+        # Handle None parameters for AbstractKlineRepository interface compatibility
+        if start_time is None and end_time is None:
+            results = [k for k in self._klines if k.symbol == symbol and k.interval == interval]
+        elif start_time is None:
+            assert end_time is not None  # For mypy
+            results = [
+                k for k in self._klines if k.symbol == symbol and k.interval == interval and k.open_time < end_time
+            ]
+        elif end_time is None:
+            results = [
+                k for k in self._klines if k.symbol == symbol and k.interval == interval and k.open_time >= start_time
+            ]
+        else:
+            results = await self.query(symbol, interval, start_time, end_time)
         return len(results)
 
-    async def delete(self, symbol: Symbol, interval: KlineInterval, start_time: datetime, end_time: datetime) -> int:
+    async def delete(self, symbol: str, interval: KlineInterval, start_time: datetime, end_time: datetime) -> int:
         """Deletes klines in a specified time range from the mock storage.
 
         Args:
-            symbol (Symbol): The trading symbol.
+            symbol (str): The trading symbol.
             interval (KlineInterval): The Kline interval.
             start_time (datetime): The start time for deletion (inclusive).
             end_time (datetime): The end time for deletion (exclusive).
@@ -257,14 +272,14 @@ class MockKlineRepository(AbstractKlineRepository, MockImplementationBase):
         return len(to_delete)
 
     async def get_gaps(
-        self, symbol: Symbol, interval: KlineInterval, start_time: datetime, end_time: datetime
+        self, symbol: str, interval: KlineInterval, start_time: datetime, end_time: datetime
     ) -> list[tuple[datetime, datetime]]:
         """Finds missing data gaps in the mock storage.
 
         Note: This is a simplified gap detection for testing purposes.
 
         Args:
-            symbol (Symbol): The trading symbol.
+            symbol (str): The trading symbol.
             interval (KlineInterval): The Kline interval.
             start_time (datetime): The start time for gap detection (inclusive).
             end_time (datetime): The end time for gap detection (exclusive).
@@ -296,15 +311,23 @@ class MockKlineRepository(AbstractKlineRepository, MockImplementationBase):
 
         return gaps
 
-    async def get_statistics(self, symbol: Symbol, interval: KlineInterval) -> dict:
+    async def get_statistics(
+        self,
+        symbol: str,
+        interval: KlineInterval,
+        start_time: datetime | None = None,
+        end_time: datetime | None = None,
+    ) -> dict[str, Any]:
         """Retrieves storage statistics for a given symbol and interval.
 
         Args:
-            symbol (Symbol): The trading symbol.
+            symbol (str): The trading symbol.
             interval (KlineInterval): The Kline interval.
+            start_time (datetime | None): Optional inclusive start of the time range.
+            end_time (datetime | None): Optional exclusive end of the time range.
 
         Returns:
-            dict: A dictionary containing statistics such as count, earliest,
+            dict[str, Any]: A dictionary containing statistics such as count, earliest,
                   latest, and estimated size in bytes.
 
         Raises:
@@ -313,6 +336,12 @@ class MockKlineRepository(AbstractKlineRepository, MockImplementationBase):
         self._check_not_closed()
 
         matching = [k for k in self._klines if k.symbol == symbol and k.interval == interval]
+
+        # Apply time filtering if specified
+        if start_time is not None:
+            matching = [k for k in matching if k.open_time >= start_time]
+        if end_time is not None:
+            matching = [k for k in matching if k.open_time < end_time]
 
         if not matching:
             return {"count": 0, "earliest": None, "latest": None, "size_bytes": 0}
@@ -339,7 +368,7 @@ class MockKlineRepository(AbstractKlineRepository, MockImplementationBase):
         """
         return self
 
-    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> bool:
+    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         """Asynchronous context manager exit point.
 
         Ensures that the repository is closed when exiting the `async with` block.
@@ -348,12 +377,8 @@ class MockKlineRepository(AbstractKlineRepository, MockImplementationBase):
             exc_type (Any): The type of the exception raised, if any.
             exc_val (Any): The exception instance raised, if any.
             exc_tb (Any): The traceback object, if an exception was raised.
-
-        Returns:
-            bool: False to propagate any exceptions that occurred within the block.
         """
         await self.close()
-        return False
 
 
 class TestAbstractKlineRepositoryContract(BaseContractTest, AsyncContractTestMixin):
@@ -384,13 +409,18 @@ class TestAbstractKlineRepositoryContract(BaseContractTest, AsyncContractTestMix
             interval=KlineInterval.HOUR_1,
             open_time=datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
             close_time=datetime(2024, 1, 1, 12, 59, 59, tzinfo=UTC),
-            open_price=50000.0,
-            high_price=51000.0,
-            low_price=49500.0,
-            close_price=50500.0,
-            volume=100.0,
-            quote_volume=5025000.0,
+            open_price=Decimal("50000.0"),
+            high_price=Decimal("51000.0"),
+            low_price=Decimal("49500.0"),
+            close_price=Decimal("50500.0"),
+            volume=Decimal("100.0"),
+            quote_volume=Decimal("5025000.0"),
             trades_count=1000,
+            exchange="binance",
+            taker_buy_volume=Decimal("50.0"),
+            taker_buy_quote_volume=Decimal("2500000.0"),
+            is_closed=True,
+            received_at=datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
         )
 
     def test_required_methods_defined(self) -> None:
@@ -512,7 +542,10 @@ class TestAbstractKlineRepositoryContract(BaseContractTest, AsyncContractTestMix
 
         # Test query operation
         results = await repo.query(
-            sample_kline.symbol, sample_kline.interval, sample_kline.open_time, sample_kline.open_time.replace(hour=13)
+            sample_kline.symbol,
+            sample_kline.interval,
+            sample_kline.open_time,
+            sample_kline.open_time.replace(hour=13),
         )
         assert len(results) == 1
         assert results[0].symbol == sample_kline.symbol
@@ -528,7 +561,10 @@ class TestAbstractKlineRepositoryContract(BaseContractTest, AsyncContractTestMix
 
         # Test delete operation
         deleted_count = await repo.delete(
-            sample_kline.symbol, sample_kline.interval, sample_kline.open_time, sample_kline.open_time.replace(hour=13)
+            sample_kline.symbol,
+            sample_kline.interval,
+            sample_kline.open_time,
+            sample_kline.open_time.replace(hour=13),
         )
         assert deleted_count == 1
 
@@ -562,13 +598,18 @@ class TestAbstractKlineRepositoryContract(BaseContractTest, AsyncContractTestMix
                 interval=KlineInterval.MINUTE_1,
                 open_time=datetime(2024, 1, 1, 12, i, 0, tzinfo=UTC),
                 close_time=datetime(2024, 1, 1, 12, i, 59, tzinfo=UTC),
-                open_price=3000.0 + i,
-                high_price=3100.0 + i,
-                low_price=2900.0 + i,
-                close_price=3050.0 + i,
-                volume=50.0,
-                quote_volume=152500.0,
+                open_price=Decimal(str(3000.0 + i)),
+                high_price=Decimal(str(3100.0 + i)),
+                low_price=Decimal(str(2900.0 + i)),
+                close_price=Decimal(str(3050.0 + i)),
+                volume=Decimal("50.0"),
+                quote_volume=Decimal("152500.0"),
                 trades_count=500,
+                exchange="binance",
+                taker_buy_volume=Decimal("25.0"),
+                taker_buy_quote_volume=Decimal("76250.0"),
+                is_closed=True,
+                received_at=datetime(2024, 1, 1, 12, i, 0, tzinfo=UTC),
             )
             klines.append(kline)
 
@@ -586,13 +627,18 @@ class TestAbstractKlineRepositoryContract(BaseContractTest, AsyncContractTestMix
             interval=KlineInterval.MINUTE_1,
             open_time=datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),  # Same as first kline
             close_time=datetime(2024, 1, 1, 12, 0, 59, tzinfo=UTC),
-            open_price=4000.0,  # Different price
-            high_price=4100.0,
-            low_price=3900.0,
-            close_price=4050.0,
-            volume=100.0,  # Different volume
-            quote_volume=405000.0,
+            open_price=Decimal("4000.0"),  # Different price
+            high_price=Decimal("4100.0"),
+            low_price=Decimal("3900.0"),
+            close_price=Decimal("4050.0"),
+            volume=Decimal("100.0"),  # Different volume
+            quote_volume=Decimal("405000.0"),
             trades_count=1000,
+            exchange="binance",
+            taker_buy_volume=Decimal("50.0"),
+            taker_buy_quote_volume=Decimal("202500.0"),
+            is_closed=True,
+            received_at=datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
         )
 
         duplicate_saved = await repo.save_batch([duplicate_kline])
@@ -610,7 +656,7 @@ class TestAbstractKlineRepositoryContract(BaseContractTest, AsyncContractTestMix
             datetime(2024, 1, 1, 12, 1, 0, tzinfo=UTC),
         )
         assert len(updated_klines) == 1
-        assert updated_klines[0].open_price == 4000.0  # Should have new price
+        assert updated_klines[0].open_price == Decimal("4000.0")  # Should have new price
 
     @pytest.mark.asyncio
     async def test_streaming_interface(self, repo: MockKlineRepository) -> None:
@@ -633,13 +679,18 @@ class TestAbstractKlineRepositoryContract(BaseContractTest, AsyncContractTestMix
                 interval=KlineInterval.MINUTE_5,
                 open_time=datetime(2024, 1, 1, 12, i * 5, 0, tzinfo=UTC),
                 close_time=datetime(2024, 1, 1, 12, i * 5 + 4, 59, tzinfo=UTC),
-                open_price=1.0,
-                high_price=1.1,
-                low_price=0.9,
-                close_price=1.05,
-                volume=1000.0,
-                quote_volume=1050.0,
+                open_price=Decimal("1.0"),
+                high_price=Decimal("1.1"),
+                low_price=Decimal("0.9"),
+                close_price=Decimal("1.05"),
+                volume=Decimal("1000.0"),
+                quote_volume=Decimal("1050.0"),
                 trades_count=100,
+                exchange="binance",
+                taker_buy_volume=Decimal("500.0"),
+                taker_buy_quote_volume=Decimal("525.0"),
+                is_closed=True,
+                received_at=datetime(2024, 1, 1, 12, i * 5, 0, tzinfo=UTC),
             )
             klines.append(kline)
 
@@ -647,7 +698,12 @@ class TestAbstractKlineRepositoryContract(BaseContractTest, AsyncContractTestMix
 
         # Test streaming
         streamed_klines = []
-        async for kline in repo.stream("ADAUSDT", KlineInterval.MINUTE_5):
+        async for kline in repo.stream(
+            "ADAUSDT",
+            KlineInterval.MINUTE_5,
+            datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
+            datetime(2024, 1, 1, 12, 50, 0, tzinfo=UTC),
+        ):
             streamed_klines.append(kline)
             assert isinstance(kline, Kline)
 
@@ -676,20 +732,30 @@ class TestAbstractKlineRepositoryContract(BaseContractTest, AsyncContractTestMix
                 interval=KlineInterval.MINUTE_1,
                 open_time=datetime(2024, 1, 1, 12, i, 0, tzinfo=UTC),
                 close_time=datetime(2024, 1, 1, 12, i, 59, tzinfo=UTC),
-                open_price=1000.0,
-                high_price=1100.0,
-                low_price=900.0,
-                close_price=1050.0,
-                volume=10.0,
-                quote_volume=10500.0,
+                open_price=Decimal("1000.0"),
+                high_price=Decimal("1100.0"),
+                low_price=Decimal("900.0"),
+                close_price=Decimal("1050.0"),
+                volume=Decimal("10.0"),
+                quote_volume=Decimal("10500.0"),
                 trades_count=10,
+                exchange="binance",
+                taker_buy_volume=Decimal("5.0"),
+                taker_buy_quote_volume=Decimal("5250.0"),
+                is_closed=True,
+                received_at=datetime(2024, 1, 1, 12, i, 0, tzinfo=UTC),
             )
             klines.append(kline)
 
         await repo.save_batch(klines)
 
         # Test async iterator protocol directly
-        stream = repo.stream("ITERUSDT", KlineInterval.MINUTE_1)
+        stream = repo.stream(
+            "ITERUSDT",
+            KlineInterval.MINUTE_1,
+            datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
+            datetime(2024, 1, 1, 12, 3, 0, tzinfo=UTC),
+        )
 
         # Test __aiter__ method
         iterator = stream.__aiter__()
@@ -731,13 +797,18 @@ class TestAbstractKlineRepositoryContract(BaseContractTest, AsyncContractTestMix
                 interval=KlineInterval.HOUR_1,
                 open_time=datetime(2024, 1, 1, 10 + i, 0, 0, tzinfo=UTC),
                 close_time=datetime(2024, 1, 1, 10 + i, 59, 59, tzinfo=UTC),
-                open_price=20.0,
-                high_price=21.0,
-                low_price=19.0,
-                close_price=20.5,
-                volume=200.0,
-                quote_volume=4100.0,
+                open_price=Decimal("20.0"),
+                high_price=Decimal("21.0"),
+                low_price=Decimal("19.0"),
+                close_price=Decimal("20.5"),
+                volume=Decimal("200.0"),
+                quote_volume=Decimal("4100.0"),
                 trades_count=200,
+                exchange="binance",
+                taker_buy_volume=Decimal("100.0"),
+                taker_buy_quote_volume=Decimal("2050.0"),
+                is_closed=True,
+                received_at=datetime(2024, 1, 1, 10 + i, 0, 0, tzinfo=UTC),
             )
             klines.append(kline)
 
@@ -753,7 +824,13 @@ class TestAbstractKlineRepositoryContract(BaseContractTest, AsyncContractTestMix
 
         # Test ordering ascending
         options_asc = QueryOptions(order_by="open_time", order_desc=False)
-        results_asc = await repo.query("DOTUSDT", KlineInterval.HOUR_1, options=options_asc)
+        results_asc = await repo.query(
+            "DOTUSDT",
+            KlineInterval.HOUR_1,
+            datetime(2024, 1, 1, 10, 0, 0, tzinfo=UTC),
+            datetime(2024, 1, 1, 15, 0, 0, tzinfo=UTC),
+            options=options_asc,
+        )
         assert len(results_asc) == 5
 
         # Should be ordered by open_time ascending
@@ -762,7 +839,13 @@ class TestAbstractKlineRepositoryContract(BaseContractTest, AsyncContractTestMix
 
         # Test ordering descending
         options_desc = QueryOptions(order_by="open_time", order_desc=True)
-        results_desc = await repo.query("DOTUSDT", KlineInterval.HOUR_1, options=options_desc)
+        results_desc = await repo.query(
+            "DOTUSDT",
+            KlineInterval.HOUR_1,
+            datetime(2024, 1, 1, 10, 0, 0, tzinfo=UTC),
+            datetime(2024, 1, 1, 15, 0, 0, tzinfo=UTC),
+            options=options_desc,
+        )
         assert len(results_desc) == 5
 
         # Should be ordered by open_time descending
@@ -771,12 +854,24 @@ class TestAbstractKlineRepositoryContract(BaseContractTest, AsyncContractTestMix
 
         # Test pagination
         options_paginated = QueryOptions(limit=2, offset=1)
-        results_paginated = await repo.query("DOTUSDT", KlineInterval.HOUR_1, options=options_paginated)
+        results_paginated = await repo.query(
+            "DOTUSDT",
+            KlineInterval.HOUR_1,
+            datetime(2024, 1, 1, 10, 0, 0, tzinfo=UTC),
+            datetime(2024, 1, 1, 15, 0, 0, tzinfo=UTC),
+            options=options_paginated,
+        )
         assert len(results_paginated) == 2
 
         # Test combined ordering and pagination
         options_combined = QueryOptions(limit=3, offset=1, order_by="open_time", order_desc=True)
-        results_combined = await repo.query("DOTUSDT", KlineInterval.HOUR_1, options=options_combined)
+        results_combined = await repo.query(
+            "DOTUSDT",
+            KlineInterval.HOUR_1,
+            datetime(2024, 1, 1, 10, 0, 0, tzinfo=UTC),
+            datetime(2024, 1, 1, 15, 0, 0, tzinfo=UTC),
+            options=options_combined,
+        )
         assert len(results_combined) == 3
         # Should still be ordered
         for i in range(len(results_combined) - 1):
@@ -802,13 +897,18 @@ class TestAbstractKlineRepositoryContract(BaseContractTest, AsyncContractTestMix
                 interval=KlineInterval.HOUR_1,
                 open_time=datetime(2024, 1, 1, 10, 0, 0, tzinfo=UTC),
                 close_time=datetime(2024, 1, 1, 10, 59, 59, tzinfo=UTC),
-                open_price=100.0,
-                high_price=105.0,
-                low_price=95.0,
-                close_price=102.0,
-                volume=1000.0,
-                quote_volume=102000.0,
+                open_price=Decimal("100.0"),
+                high_price=Decimal("105.0"),
+                low_price=Decimal("95.0"),
+                close_price=Decimal("102.0"),
+                volume=Decimal("1000.0"),
+                quote_volume=Decimal("102000.0"),
                 trades_count=500,
+                exchange="binance",
+                taker_buy_volume=Decimal("500.0"),
+                taker_buy_quote_volume=Decimal("51000.0"),
+                is_closed=True,
+                received_at=datetime(2024, 1, 1, 10, 0, 0, tzinfo=UTC),
             ),
             # Gap here - missing 11:00 and 12:00
             Kline(
@@ -816,13 +916,18 @@ class TestAbstractKlineRepositoryContract(BaseContractTest, AsyncContractTestMix
                 interval=KlineInterval.HOUR_1,
                 open_time=datetime(2024, 1, 1, 13, 0, 0, tzinfo=UTC),
                 close_time=datetime(2024, 1, 1, 13, 59, 59, tzinfo=UTC),
-                open_price=102.0,
-                high_price=107.0,
-                low_price=98.0,
-                close_price=105.0,
-                volume=1000.0,
-                quote_volume=105000.0,
+                open_price=Decimal("102.0"),
+                high_price=Decimal("107.0"),
+                low_price=Decimal("98.0"),
+                close_price=Decimal("105.0"),
+                volume=Decimal("1000.0"),
+                quote_volume=Decimal("105000.0"),
                 trades_count=500,
+                exchange="binance",
+                taker_buy_volume=Decimal("500.0"),
+                taker_buy_quote_volume=Decimal("52500.0"),
+                is_closed=True,
+                received_at=datetime(2024, 1, 1, 13, 0, 0, tzinfo=UTC),
             ),
         ]
 
@@ -864,13 +969,18 @@ class TestAbstractKlineRepositoryContract(BaseContractTest, AsyncContractTestMix
             interval=KlineInterval.MINUTE_15,
             open_time=datetime(2024, 1, 1, 15, 0, 0, tzinfo=UTC),
             close_time=datetime(2024, 1, 1, 15, 14, 59, tzinfo=UTC),
-            open_price=15.0,
-            high_price=15.5,
-            low_price=14.8,
-            close_price=15.2,
-            volume=5000.0,
-            quote_volume=76000.0,
+            open_price=Decimal("15.0"),
+            high_price=Decimal("15.5"),
+            low_price=Decimal("14.8"),
+            close_price=Decimal("15.2"),
+            volume=Decimal("5000.0"),
+            quote_volume=Decimal("76000.0"),
             trades_count=250,
+            exchange="binance",
+            taker_buy_volume=Decimal("2500.0"),
+            taker_buy_quote_volume=Decimal("38000.0"),
+            is_closed=True,
+            received_at=datetime(2024, 1, 1, 15, 0, 0, tzinfo=UTC),
         )
 
         await repo.save(kline)
@@ -919,15 +1029,28 @@ class TestAbstractKlineRepositoryContract(BaseContractTest, AsyncContractTestMix
             interval=KlineInterval.MINUTE_1,
             open_time=datetime(2024, 1, 1, tzinfo=UTC),
             close_time=datetime(2024, 1, 1, 0, 0, 59, tzinfo=UTC),
-            open_price=1.0,
-            high_price=1.0,
-            low_price=1.0,
-            close_price=1.0,
-            volume=1.0,
-            quote_volume=1.0,
+            open_price=Decimal("1.0"),
+            high_price=Decimal("1.0"),
+            low_price=Decimal("1.0"),
+            close_price=Decimal("1.0"),
+            volume=Decimal("1.0"),
+            quote_volume=Decimal("1.0"),
             trades_count=1,
+            exchange="binance",
+            taker_buy_volume=Decimal("0.5"),
+            taker_buy_quote_volume=Decimal("0.5"),
+            is_closed=True,
+            received_at=datetime(2024, 1, 1, tzinfo=UTC),
         )
 
         await self.assert_method_raises_when_not_ready(repo, "save", RuntimeError, sample_kline)
 
-        await self.assert_method_raises_when_not_ready(repo, "query", RuntimeError, "TESTUSDT", KlineInterval.MINUTE_1)
+        await self.assert_method_raises_when_not_ready(
+            repo,
+            "query",
+            RuntimeError,
+            "TESTUSDT",
+            KlineInterval.MINUTE_1,
+            datetime(2024, 1, 1, tzinfo=UTC),
+            datetime(2024, 1, 1, 1, tzinfo=UTC),
+        )

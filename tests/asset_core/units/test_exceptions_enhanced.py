@@ -502,6 +502,7 @@ class TestExceptionEnhancement:
         enhanced_error = enhance_exception_with_trace_id(original_error)
 
         assert enhanced_error is original_error
+        assert isinstance(enhanced_error, CoreError)
         assert enhanced_error.trace_id == "enhance_test"
 
     def test_enhance_standard_exception(self) -> None:

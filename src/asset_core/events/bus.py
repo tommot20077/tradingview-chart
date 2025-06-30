@@ -6,9 +6,8 @@ events within the `asset_core` library. Implementations of this interface
 facilitate decoupled communication between different components of the system.
 """
 
-import asyncio
 from abc import ABC, abstractmethod
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import TypeVar
 
 from asset_core.models import BaseEvent
@@ -16,7 +15,7 @@ from asset_core.models.events import EventType
 
 T = TypeVar("T", bound=BaseEvent)
 EventHandler = Callable[[BaseEvent], None]
-AsyncEventHandler = Callable[[BaseEvent], asyncio.Future[None]]
+AsyncEventHandler = Callable[[BaseEvent], Awaitable[None]]
 
 
 class AbstractEventBus(ABC):

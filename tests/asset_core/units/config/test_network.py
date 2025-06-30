@@ -88,14 +88,12 @@ class TestBaseNetworkConfigConstruction:
         Expected Result:
             - All dictionary values should be correctly assigned to config fields
         """
-        config_dict = {
-            "ws_reconnect_interval": 7,
-            "ws_max_reconnect_attempts": 15,
-            "ws_ping_interval": 45,
-            "ws_ping_timeout": 12,
-        }
-
-        config = BaseNetworkConfig(**config_dict)
+        config = BaseNetworkConfig(
+            ws_reconnect_interval=7,
+            ws_max_reconnect_attempts=15,
+            ws_ping_interval=45,
+            ws_ping_timeout=12,
+        )
 
         assert config.ws_reconnect_interval == 7
         assert config.ws_max_reconnect_attempts == 15
