@@ -86,9 +86,12 @@ class TestBaseObservabilityConfigConstruction:
         Expected Result:
             - All dictionary values should be correctly assigned to config fields
         """
-        config_dict = {"log_level": "WARNING", "log_format": "text", "metrics_enabled": True, "metrics_port": 9091}
-
-        config = BaseObservabilityConfig(**config_dict)
+        config = BaseObservabilityConfig(
+            log_level="WARNING",
+            log_format="text",
+            metrics_enabled=True,
+            metrics_port=9091,
+        )
 
         assert config.log_level == "WARNING"
         assert config.log_format == "text"

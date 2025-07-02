@@ -195,3 +195,5 @@ uv.lock
 /.gemini/
 /ai-docs/
 /.mcp.json
+/missing_tests.md
+/docker-compose.yml

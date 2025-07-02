@@ -7,6 +7,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from pydantic_settings import SettingsConfigDict
 
 from asset_core.config import BaseCoreSettings
 from asset_core.models import BaseEvent, EventPriority, EventType, Kline, KlineInterval, \
@@ -87,8 +88,9 @@ def mock_settings() -> BaseCoreSettings:
         environment: str = "test"
         log_level: str = "DEBUG"
 
-        class Config:
-            env_prefix = "TEST_"
+        model_config = SettingsConfigDict(
+            env_prefix="TEST_",
+        )
 
     return TestConfig()
 

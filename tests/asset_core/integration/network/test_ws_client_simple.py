@@ -264,7 +264,7 @@ class TestWebSocketDisconnection:
         await client._disconnect()
 
         assert client._ws is None
-        assert not client._connect_event.is_set()
+        assert not client._connect_event.is_set()  # type: ignore[unreachable]
         mock_ws.close.assert_called_once()
         on_disconnect.assert_called_once()
 
@@ -282,7 +282,7 @@ class TestWebSocketDisconnection:
         await client._disconnect()
 
         assert client._ws is None
-        on_disconnect.assert_called_once()
+        on_disconnect.assert_called_once()  # type: ignore[unreachable]
 
     @pytest.mark.asyncio
     async def test_disconnect_without_websocket(self) -> None:

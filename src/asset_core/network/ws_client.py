@@ -138,23 +138,29 @@ class RobustWebSocketClient:
             finally:
                 await self._disconnect()
 
-            if self._running and self._reconnect_count < self.max_reconnect_attempts:
-                wait_time = self.reconnect_interval * (2 ** min(self._reconnect_count, 5))
-                logger.info(
-                    "Scheduling reconnection",
-                    wait_time=wait_time,
-                    attempt=self._reconnect_count + 1,
-                    max_attempts=self.max_reconnect_attempts,
-                )
-                self._reconnect_count += 1
-                await asyncio.sleep(wait_time)
-            elif self._running:
-                logger.error(
-                    "Max reconnection attempts reached, stopping connection",
-                    attempts=self._reconnect_count,
-                    max_attempts=self.max_reconnect_attempts,
-                )
-                self._running = False
+            # Check reconnection conditions and continue if still running
+            if self._running:
+                # Check if max reconnect attempts reached and stop if so
+                if self.max_reconnect_attempts != -1 and self._reconnect_count >= self.max_reconnect_attempts:
+                    logger.error(
+                        "Max reconnection attempts reached, stopping connection",
+                        attempts=self._reconnect_count,
+                        max_attempts=self.max_reconnect_attempts,
+                    )
+                    self._running = False
+                else:
+                    # Increment reconnect count for this attempt
+                    self._reconnect_count += 1
+
+                    # Schedule reconnection with exponential backoff
+                    wait_time = self.reconnect_interval * (2 ** min(self._reconnect_count - 1, 5))
+                    logger.info(
+                        "Scheduling reconnection",
+                        wait_time=wait_time,
+                        attempt=self._reconnect_count,
+                        max_attempts=self.max_reconnect_attempts,
+                    )
+                    await asyncio.sleep(wait_time)
 
     async def _connect(self) -> None:
         """Performs a single attempt to establish a WebSocket connection.
@@ -253,8 +259,8 @@ class RobustWebSocketClient:
                 except ConnectionClosed as e:
                     logger.info(
                         "WebSocket connection closed",
-                        close_code=getattr(e, "code", None),
-                        close_reason=getattr(e, "reason", None),
+                        close_code=getattr(e.rcvd, "code", None) if hasattr(e, "rcvd") and e.rcvd else None,
+                        close_reason=getattr(e.rcvd, "reason", None) if hasattr(e, "rcvd") and e.rcvd else None,
                     )
                     break
         except WebSocketException as e:

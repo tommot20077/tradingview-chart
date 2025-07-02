@@ -90,6 +90,7 @@ run_tests() {
     local ENGINE_ARGS=()
     local TEST_SCOPE=""
     local SKIP_QUALITY_CHECKS=false
+    local PYTEST_ARGS=()
     
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -136,30 +137,40 @@ run_tests() {
                 ENGINE_ARGS+=("--debug")
                 shift
                 ;;
+            tests/*)
+                # Direct test path - pass through as pytest argument
+                PYTEST_ARGS+=("$1")
+                shift
+                ;;
             *)
                 # Pass through other arguments to pytest
-                ENGINE_ARGS+=("$1")
+                PYTEST_ARGS+=("$1")
                 shift
                 ;;
         esac
     done
     
-    # Handle test scope by converting to specific module paths
-    if [ -n "$TEST_SCOPE" ]; then
+    # Handle test scope by converting to specific paths, only if no direct paths provided
+    if [ -n "$TEST_SCOPE" ] && [ ${#PYTEST_ARGS[@]} -eq 0 ]; then
         case "$TEST_SCOPE" in
             units)
-                ENGINE_ARGS+=("tests/units")
+                PYTEST_ARGS+=("tests/asset_core/units" "tests/crypto_single/units")
                 print_status "Running $TEST_SCOPE tests"
                 ;;
             integration)
-                ENGINE_ARGS+=("tests/integration")
+                PYTEST_ARGS+=("tests/asset_core/integration" "tests/crypto_single/integration")
                 print_status "Running $TEST_SCOPE tests"
                 ;;
             e2e)
-                ENGINE_ARGS+=("tests/e2e")
+                PYTEST_ARGS+=("tests/asset_core/e2e" "tests/crypto_single/e2e")
                 print_status "Running $TEST_SCOPE tests"
                 ;;
         esac
+    fi
+    
+    # Add pytest arguments to engine args
+    if [ ${#PYTEST_ARGS[@]} -gt 0 ]; then
+        ENGINE_ARGS+=("${PYTEST_ARGS[@]}")
     fi
     
     # Add quality checks by default unless skipped
@@ -283,7 +294,12 @@ Test Command Options:
     test units                    # Run only unit tests
     test integration              # Run only integration tests
     test e2e                      # Run only end-to-end tests
-    test [path]                   # Run specific test file/directory
+    test [path]                   # Run specific test file/directory/method
+    
+  Specific Path Examples:
+    test tests/asset_core/units/                        # Run directory tests
+    test tests/asset_core/units/test_config.py          # Run file tests
+    test tests/asset_core/units/test_config.py::TestClass::test_method  # Run method tests
 
   Quality & Performance Options:
     --skip-quality-checks         # Skip linting, format checking, and type checking
@@ -319,9 +335,11 @@ Examples:
     $0 test --no-cov                            # Run tests without coverage (but with quality checks)
 
   Test Targeting:
-    $0 test src/asset_core/tests/units/config/                   # Run specific test directory
-    $0 test src/asset_core/tests/units/models/test_kline.py      # Run specific test file
-    $0 test units --timeout=30 --no-cov           # Fast unit test run (with quality checks)
+    $0 test tests/asset_core/units/                              # Run specific test directory
+    $0 test tests/asset_core/units/config/                       # Run specific test subdirectory  
+    $0 test tests/asset_core/units/test_config.py                # Run specific test file
+    $0 test tests/asset_core/units/test_config.py::TestBaseCoreSettings::test_default_settings  # Run specific test method
+    $0 test units --timeout=30 --no-cov                          # Fast unit test run (with quality checks)
 
   Fast Development Testing:
     $0 test units --skip-quality-checks --parallel-units=4 --timeout=60 --no-cov

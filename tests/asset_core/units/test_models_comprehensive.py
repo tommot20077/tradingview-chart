@@ -673,7 +673,7 @@ class TestEventModelsComprehensive:
         - `timestamp` should be a timezone-aware datetime in UTC.
         """
         data = {"test": "data"}
-        event = BaseEvent(
+        event: BaseEvent = BaseEvent(
             event_type=EventType.SYSTEM,
             source="test",
             data=data,
@@ -859,7 +859,7 @@ class TestEventModelsComprehensive:
         - Events should correctly reflect their assigned or default priority levels.
         """
         # Normal priority by default
-        event1 = BaseEvent(
+        event1: BaseEvent = BaseEvent(
             event_type=EventType.SYSTEM,
             source="test",
             data={},
@@ -867,7 +867,7 @@ class TestEventModelsComprehensive:
         assert event1.priority == EventPriority.NORMAL
 
         # High priority
-        event2 = BaseEvent(
+        event2: BaseEvent = BaseEvent(
             event_type=EventType.ERROR,
             source="test",
             data={},
@@ -896,7 +896,7 @@ class TestEventModelsComprehensive:
         - `ValidationError` should be raised for an empty `symbol`.
         """
         # Symbol should be normalized to uppercase
-        event = BaseEvent(
+        event: BaseEvent = BaseEvent(
             event_type=EventType.TRADE,
             source="test",
             symbol="btcusdt",  # lowercase
@@ -935,14 +935,14 @@ class TestEventModelsComprehensive:
         """
         correlation_id = "test-correlation-123"
 
-        event1 = BaseEvent(
+        event1: BaseEvent = BaseEvent(
             event_type=EventType.SYSTEM,
             source="test",
             data={},
             correlation_id=correlation_id,
         )
 
-        event2 = BaseEvent(
+        event2: BaseEvent = BaseEvent(
             event_type=EventType.TRADE,
             source="test",
             data={},
@@ -974,7 +974,7 @@ class TestEventModelsComprehensive:
         - The `to_dict()` method should return a dictionary with all event details.
         - `timestamp` and `event_id` should be present in the dictionary.
         """
-        event = BaseEvent(
+        event: BaseEvent = BaseEvent(
             event_type=EventType.SYSTEM,
             source="test",
             data={"key": "value"},

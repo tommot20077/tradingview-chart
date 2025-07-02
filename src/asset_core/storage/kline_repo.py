@@ -51,6 +51,14 @@ class QueryOptions:
             include_metadata (bool): Optional. If `True`, additional metadata associated with each
                                      Kline will be included in the results. Defaults to `False`.
         """
+        # Validate limit
+        if limit is not None and limit < 0:
+            raise ValueError("limit must be non-negative")
+
+        # Validate offset
+        if offset is not None and offset < 0:
+            raise ValueError("offset must be non-negative")
+
         self.limit = limit
         self.offset = offset
         self.order_by = order_by
@@ -129,7 +137,7 @@ class AbstractKlineRepository(ABC):
         pass
 
     @abstractmethod
-    async def stream(
+    def stream(
         self,
         symbol: str,
         interval: KlineInterval,

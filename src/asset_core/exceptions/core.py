@@ -273,6 +273,16 @@ class TimeoutError(NetworkError):
     pass
 
 
+class NotSupportedError(CoreError):
+    """Raised when a requested operation is not supported by the current backend.
+
+    This exception indicates that the requested functionality is not available
+    or implemented in the current storage backend or configuration.
+    """
+
+    pass
+
+
 class DataValidationError(ValidationError):
     """Raised when specific data fields fail validation.
 

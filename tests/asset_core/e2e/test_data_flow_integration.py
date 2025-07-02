@@ -7,7 +7,7 @@ ensuring all components work together correctly.
 
 import asyncio
 import contextlib
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
@@ -19,7 +19,7 @@ from asset_core.models.events import BaseEvent, EventType, KlineEvent, TradeEven
 from asset_core.models.kline import Kline, KlineInterval
 from asset_core.models.trade import Trade, TradeSide
 from asset_core.providers.base import AbstractDataProvider
-from asset_core.storage.kline_repo import AbstractKlineRepository
+from asset_core.storage.kline_repo import AbstractKlineRepository, QueryOptions
 
 
 class MockDataProvider(AbstractDataProvider):
@@ -127,7 +127,7 @@ class MockDataProvider(AbstractDataProvider):
         """
         self._connected = False
 
-    async def stream_trades(self, symbol: str, *, _start_from: datetime | None = None) -> AsyncIterator[Trade]:
+    async def stream_trades(self, symbol: str, *, start_from: datetime | None = None) -> AsyncIterator[Trade]:  # noqa: ARG002
         """Simulate streaming trades for a given symbol.
 
         Description of what the method covers:
@@ -163,7 +163,11 @@ class MockDataProvider(AbstractDataProvider):
                 await asyncio.sleep(0.001)
 
     async def stream_klines(
-        self, symbol: str, interval: KlineInterval, *, _start_from: datetime | None = None
+        self,
+        symbol: str,
+        interval: KlineInterval,
+        *,
+        start_from: datetime | None = None,  # noqa: ARG002
     ) -> AsyncIterator[Kline]:
         """Simulate streaming klines for a given symbol and interval.
 
@@ -192,16 +196,26 @@ class MockDataProvider(AbstractDataProvider):
         - Introduces a small delay to simulate real-time streaming.
         - Raises `ConnectionError` if not connected.
         """
-        if not self._connected:
-            raise ConnectionError("Provider not connected")
 
-        for kline in self._klines:
-            if kline.symbol == symbol and kline.interval == interval:
-                yield kline
-                await asyncio.sleep(0.001)
+        async def generator() -> AsyncIterator[Kline]:
+            if not self._connected:
+                raise ConnectionError("Provider not connected")
+
+            for kline in self._klines:
+                if kline.symbol == symbol and kline.interval == interval:
+                    yield kline
+                    await asyncio.sleep(0.001)
+
+        async for kline in generator():
+            yield kline
 
     async def fetch_historical_trades(
-        self, symbol: str, start_time: datetime, end_time: datetime, *, _limit: int | None = None
+        self,
+        symbol: str,
+        start_time: datetime,
+        end_time: datetime,
+        *,
+        limit: int | None = None,  # noqa: ARG002
     ) -> list[Trade]:
         """Simulate fetching historical trades for a given symbol within a time range.
 
@@ -235,7 +249,7 @@ class MockDataProvider(AbstractDataProvider):
         start_time: datetime,
         end_time: datetime,
         *,
-        _limit: int | None = None,
+        limit: int | None = None,  # noqa: ARG002
     ) -> list[Kline]:
         """Simulate fetching historical klines for a given symbol and interval within a time range.
 
@@ -478,7 +492,7 @@ class MockKlineRepository(AbstractKlineRepository):
         start_time: datetime,
         end_time: datetime,
         *,
-        _options: Any = None,
+        options: QueryOptions | None = None,  # noqa: ARG002
     ) -> list[Kline]:
         """Query kline objects from the repository within a specified time range.
 
@@ -518,14 +532,14 @@ class MockKlineRepository(AbstractKlineRepository):
 
         return sorted(results, key=lambda k: k.open_time)
 
-    async def stream(
+    def stream(
         self,
         symbol: str,
         interval: KlineInterval,
         start_time: datetime,
         end_time: datetime,
         *,
-        _batch_size: int = 1000,
+        batch_size: int = 1000,  # noqa: ARG002
     ) -> AsyncIterator[Kline]:
         """Stream kline objects from the repository within a specified time range.
 
@@ -551,9 +565,13 @@ class MockKlineRepository(AbstractKlineRepository):
         - Yields `Kline` objects that fall within the specified symbol, interval, and time range.
         - Klines are yielded in chronological order.
         """
-        results = await self.query(symbol, interval, start_time, end_time)
-        for kline in results:
-            yield kline
+
+        async def _stream() -> AsyncIterator[Kline]:
+            results = await self.query(symbol, interval, start_time, end_time)
+            for kline in results:
+                yield kline
+
+        return _stream()
 
     async def get_latest(self, symbol: str, interval: KlineInterval) -> Kline | None:
         """Retrieve the latest Kline object for a given symbol and interval.
@@ -982,8 +1000,8 @@ class MockEventBus(AbstractEventBus):
         self,
         event_type: EventType,
         *,
-        _timeout: float | None = None,
-        filter_func: Any = None,
+        timeout: float | None = None,  # noqa: ARG002
+        filter_func: Callable[[BaseEvent], bool] | None = None,
     ) -> BaseEvent | None:
         """Simulate waiting for a specific event to be published.
 
@@ -1419,10 +1437,9 @@ class TestDataFlowIntegration:
                 assert event.data.trades_count > 0
                 assert event.data.volume > 0
 
-                kline_data = event.data
-                assert isinstance(kline_data, Kline)
-                assert kline_data.low_price <= kline_data.open_price <= kline_data.high_price
-                assert kline_data.low_price <= kline_data.close_price <= kline_data.high_price
+                assert isinstance(event.data, Kline)
+                assert event.data.low_price <= event.data.open_price <= event.data.high_price
+                assert event.data.low_price <= event.data.close_price <= event.data.high_price
 
             start_time = min(k.open_time for k in created_klines)
             end_time = max(k.close_time for k in created_klines) + timedelta(seconds=1)
@@ -1657,7 +1674,8 @@ class TestDataFlowIntegration:
                 mock_provider.add_mock_kline(realtime_kline)
 
             realtime_count = 0
-            async for kline in mock_provider.stream_klines("BTCUSDT", KlineInterval.MINUTE_1):
+            kline_stream = mock_provider.stream_klines("BTCUSDT", KlineInterval.MINUTE_1)
+            async for kline in kline_stream:
                 if kline.open_time > latest_historical.close_time:
                     await mock_repository.save(kline)
                     realtime_count += 1

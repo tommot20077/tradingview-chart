@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [asset-core 0.2.1] - 2025-07-02
+
+### Added
+- **Missing Unit Tests**: Added comprehensive unit tests for previously untested components:
+  - `tests/asset_core/units/network/test_ws_client.py`: WebSocket client unit tests
+  - `tests/asset_core/units/observability/test_logging.py`: Logging system unit tests 
+  - `tests/asset_core/units/observability/test_metrics.py`: Metrics system unit tests
+- **Test Coverage Analysis**: Added detailed analysis documentation (`missing_tests.md`, `missing_tests_analysis.md`) identifying missing test cases and test categorization suggestions
+
+### Enhanced
+- **Core Architecture**: Comprehensive improvements across all asset_core modules (31 files modified)
+- **Code Documentation**: Enhanced ABOUTME comments and inline documentation throughout the codebase
+- **Test Framework**: Significant updates to existing test suites with improved coverage and reliability
+- **Build Configuration**: Updated project dependencies and development tooling configuration
+
+### Improved
+- **Code Quality**: Extensive refactoring and code formatting improvements across 91 files
+- **Test Organization**: Better categorization of unit vs integration tests
+- **Error Handling**: Enhanced exception handling and validation throughout the system
+- **Performance**: Optimized data models and observability components
+
+### Infrastructure
+- **Project Structure**: Continued refinement of the unified monorepo structure
+- **Testing Tools**: Enhanced test engine with improved path handling and validation
+- **Development Workflow**: Improved build scripts and dependency management
+
+---
+
 ## [asset-core 0.2.0] - 2025-06-29
 
 ### Changed

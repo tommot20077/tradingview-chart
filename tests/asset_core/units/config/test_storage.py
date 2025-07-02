@@ -93,15 +93,13 @@ class TestBaseStorageConfigConstruction:
         Expected Result:
             - All dictionary values should be correctly assigned to config fields
         """
-        config_dict = {
-            "database_url": "mysql://user:pass@localhost/db",
-            "database_pool_size": 20,
-            "database_timeout": 45,
-            "data_directory": "./custom_data",
-            "max_file_size": 200 * 1024 * 1024,
-        }
-
-        config = BaseStorageConfig(**config_dict)
+        config = BaseStorageConfig(
+            database_url="mysql://user:pass@localhost/db",
+            database_pool_size=20,
+            database_timeout=45,
+            data_directory="./custom_data",
+            max_file_size=200 * 1024 * 1024,
+        )
 
         assert config.database_url == "mysql://user:pass@localhost/db"
         assert config.database_pool_size == 20

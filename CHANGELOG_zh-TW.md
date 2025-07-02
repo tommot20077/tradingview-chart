@@ -5,6 +5,34 @@
 格式基於 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.0.0/)，
 且本專案遵循 [語義化版本控制](https://semver.org/lang/zh-TW/)。
 
+## [asset-core 0.2.1] - 2025-07-02
+
+### 新增
+- **缺失的單元測試**: 為先前未測試的組件新增完整的單元測試：
+  - `tests/asset_core/units/network/test_ws_client.py`: WebSocket 客戶端單元測試
+  - `tests/asset_core/units/observability/test_logging.py`: 日誌系統單元測試
+  - `tests/asset_core/units/observability/test_metrics.py`: 指標系統單元測試
+- **測試覆蓋率分析**: 新增詳細的分析文件（`missing_tests.md`、`missing_tests_analysis.md`），識別缺失的測試案例和測試分類建議
+
+### 增強
+- **核心架構**: 對所有 asset_core 模組進行全面改善（31 個檔案修改）
+- **程式碼文件**: 在整個程式碼庫中增強 ABOUTME 註解和內聯文件
+- **測試框架**: 大幅更新現有測試套件，提升覆蓋率和可靠性
+- **建置配置**: 更新專案依賴和開發工具配置
+
+### 改善
+- **程式碼品質**: 對 91 個檔案進行廣泛的重構和程式碼格式改善
+- **測試組織**: 更好地分類單元測試與整合測試
+- **錯誤處理**: 增強整個系統的異常處理和驗證
+- **效能**: 優化資料模型和觀測性組件
+
+### 基礎設施
+- **專案結構**: 持續完善統一 monorepo 結構
+- **測試工具**: 增強測試引擎，改善路徑處理和驗證
+- **開發流程**: 改善建置腳本和依賴管理
+
+---
+
 ## [asset-core 0.2.0] - 2025-06-29
 
 ### 重構

@@ -94,7 +94,25 @@ class BaseContractTest:
             True if method is async, False otherwise
         """
         method = getattr(cls, method_name)
-        return asyncio.iscoroutinefunction(method)
+
+        # Check if it's actually an async function or async generator function
+        if asyncio.iscoroutinefunction(method) or inspect.isasyncgenfunction(method):
+            return True
+
+        # Check if it returns an AsyncIterator or AsyncGenerator (for abstract methods)
+        try:
+            from collections.abc import AsyncGenerator, AsyncIterator
+
+            type_hints = get_type_hints(method)
+            return_type = type_hints.get("return")
+            if return_type:
+                # Handle parameterized generics like AsyncIterator[Trade]
+                origin = getattr(return_type, "__origin__", return_type)
+                return origin in (AsyncIterator, AsyncGenerator)
+        except (NameError, AttributeError, TypeError):
+            pass
+
+        return False
 
     @staticmethod
     def has_async_context_manager(cls: type) -> bool:
