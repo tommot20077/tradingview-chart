@@ -360,9 +360,9 @@ DEBUG=true
                     env_file_encoding="utf-8-sig",  # Use utf-8-sig to handle BOM
                 )
 
-            config = UTF8Config()
-            assert config.app_name == "utf8_bom_app"
-            assert config.environment == "production"
+            utf8_config = UTF8Config()
+            assert utf8_config.app_name == "utf8_bom_app"
+            assert utf8_config.environment == "production"
 
         finally:
             os.unlink(env_file_path)
@@ -379,8 +379,8 @@ DEBUG=true
             class Latin1Config(BaseCoreSettings):
                 model_config = SettingsConfigDict(env_file=env_file_path, env_file_encoding="latin-1")
 
-            config = Latin1Config()
-            assert "ñ" in config.app_name
+            latin1_config = Latin1Config()
+            assert "ñ" in latin1_config.app_name
 
         finally:
             os.unlink(env_file_path)

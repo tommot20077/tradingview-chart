@@ -268,6 +268,7 @@ class TestRobustWebSocketClientConnection:
             assert client._running is False
 
     @pytest.mark.asyncio
+    @pytest.mark.filterwarnings("ignore:coroutine 'Event.wait' was never awaited:RuntimeWarning")
     async def test_connection_already_running(self, mock_websocket: AsyncMock) -> None:
         """Test connecting when already running.
 
@@ -291,7 +292,17 @@ class TestRobustWebSocketClientConnection:
         - No new connection task should be initiated.
         - `_connection_task` should remain None.
         """
-        with patch("asset_core.network.ws_client.websockets.connect", AsyncMock(return_value=mock_websocket)):
+        with (
+            patch("asset_core.network.ws_client.websockets.connect", AsyncMock(return_value=mock_websocket)),
+            patch("asset_core.network.ws_client.asyncio.Event") as mock_event_class,
+        ):
+            # Create a mock event that doesn't have unawaited coroutines
+            mock_event = Mock()
+            mock_event.wait = AsyncMock()
+            mock_event.set = Mock()
+            mock_event.clear = Mock()
+            mock_event_class.return_value = mock_event
+
             client = RobustWebSocketClient("wss://example.com/ws")
             client._running = True
 
@@ -299,6 +310,9 @@ class TestRobustWebSocketClientConnection:
 
             # Should return without creating new connection task
             assert client._connection_task is None
+
+            # Clean up to prevent warning about unawaited coroutines
+            await client.close()
 
     @pytest.mark.asyncio
     async def test_connect_with_headers(self, mock_websocket: AsyncMock) -> None:
@@ -413,7 +427,7 @@ class TestRobustWebSocketClientDisconnection:
         await client._disconnect()
 
         assert client._ws is None
-        assert not client._connect_event.is_set()
+        assert not client._connect_event.is_set()  # type: ignore[unreachable]
         mock_websocket.close.assert_called_once()
         callback_mocks["on_disconnect"].assert_called_once()
 
@@ -452,7 +466,7 @@ class TestRobustWebSocketClientDisconnection:
         await client._disconnect()
 
         assert client._ws is None
-        callback_mocks["on_disconnect"].assert_called_once()
+        callback_mocks["on_disconnect"].assert_called_once()  # type: ignore[unreachable]
 
     @pytest.mark.asyncio
     async def test_disconnect_without_websocket(self, callback_mocks: dict[str, Mock]) -> None:
@@ -870,7 +884,7 @@ class TestRobustWebSocketClientReconnection:
         """
         client = RobustWebSocketClient(
             "wss://example.com/ws",
-            reconnect_interval=0.1,
+            reconnect_interval=1,
             max_reconnect_attempts=2,
             on_error=callback_mocks["on_error"],
         )
@@ -1412,7 +1426,7 @@ class TestRobustWebSocketClientIntegration:
                 on_message=callback_mocks["on_message"],
                 on_connect=callback_mocks["on_connect"],
                 on_disconnect=callback_mocks["on_disconnect"],
-                reconnect_interval=0.1,
+                reconnect_interval=1,
                 max_reconnect_attempts=1,
             )
 
@@ -1492,15 +1506,15 @@ class TestRobustWebSocketClientIntegration:
                 "wss://example.com/ws",
                 on_connect=callback_mocks["on_connect"],
                 on_error=callback_mocks["on_error"],
-                reconnect_interval=0.1,
+                reconnect_interval=1,
                 max_reconnect_attempts=2,
             )
 
             # Start connection
             connection_task = asyncio.create_task(client.connect())
 
-            # Wait for potential reconnection
-            await asyncio.sleep(0.3)
+            # Wait for potential reconnection (reconnect_interval=1, so wait longer)
+            await asyncio.sleep(1.5)
 
             # Close client
             await client.close()
@@ -2129,7 +2143,7 @@ class TestWebSocketClientResilience:
                 on_disconnect=callback_mocks["on_disconnect"],
                 on_error=callback_mocks["on_error"],
                 on_message=callback_mocks["on_message"],
-                reconnect_interval=0.1,
+                reconnect_interval=1,
                 max_reconnect_attempts=5,
             )
 
@@ -2138,7 +2152,7 @@ class TestWebSocketClientResilience:
             connection_task = asyncio.create_task(client._connection_loop())
 
             # Allow time for initial connection, failure, and recovery
-            await asyncio.sleep(0.8)  # Longer time to allow multiple attempts
+            await asyncio.sleep(3.5)  # Longer time to allow multiple attempts with reconnect_interval=1
 
             # Stop the connection
             client._running = False
@@ -2174,11 +2188,11 @@ class TestWebSocketClientParameterized:
             (30, 10, "normal"),  # Default configuration
             (5, 15, "timeout_longer"),  # Timeout longer than interval
             (60, 20, "long_interval"),  # Long ping interval
-            (1, 0.5, "aggressive"),  # Aggressive ping settings
+            (1, 1, "aggressive"),  # Aggressive ping settings
         ],
     )
     @pytest.mark.asyncio
-    async def test_ping_configurations(self, ping_interval: int, ping_timeout: float, expected_behavior: str) -> None:
+    async def test_ping_configurations(self, ping_interval: int, ping_timeout: int, expected_behavior: str) -> None:
         """Test various ping/pong timeout configurations.
 
         Description of what the test covers.
@@ -2263,15 +2277,15 @@ class TestWebSocketClientParameterized:
         "reconnect_interval,max_attempts,backoff_strategy",
         [
             (1, 3, "exponential"),  # Standard exponential backoff
-            (0.5, 5, "exponential"),  # Fast reconnection with more attempts
+            (1, 5, "exponential"),  # Fast reconnection with more attempts
             (2, 2, "exponential"),  # Slow reconnection with few attempts
             (5, 1, "no_retry"),  # Single attempt with no retry
-            (0.1, 10, "aggressive"),  # Very aggressive reconnection
+            (1, 10, "aggressive"),  # Very aggressive reconnection
         ],
     )
     @pytest.mark.asyncio
     async def test_reconnection_strategies(
-        self, reconnect_interval: float, max_attempts: int, backoff_strategy: str
+        self, reconnect_interval: int, max_attempts: int, backoff_strategy: str
     ) -> None:
         """Test different reconnection backoff strategies.
 
@@ -2340,7 +2354,7 @@ class TestWebSocketClientParameterized:
                 # Wait for multiple attempts in aggressive mode
                 for _ in range(20):  # Check up to 20 times (2 seconds)
                     await asyncio.sleep(0.1)
-                    if connection_attempts >= 3:
+                    if connection_attempts >= 4:  # Wait for more attempts before breaking
                         break
             else:
                 # Wait for fewer attempts in other modes

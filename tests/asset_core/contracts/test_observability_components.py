@@ -361,9 +361,9 @@ class TestPrometheusMetricsRegistry:
             assert metric_name in registry._metrics
 
         # Test metric functionality
-        common_metrics["ws_connections_total"].labels(exchange="binance", status="connected").inc()
-        common_metrics["storage_operation_duration_seconds"].labels(operation="write").observe(0.05)
-        common_metrics["active_connections"].labels(type="websocket").set(42)
+        common_metrics["ws_connections_total"].labels(exchange="binance", status="connected").inc()  # type: ignore[union-attr]
+        common_metrics["storage_operation_duration_seconds"].labels(operation="write").observe(0.05)  # type: ignore[union-attr]
+        common_metrics["active_connections"].labels(type="websocket").set(42)  # type: ignore[union-attr]
 
         # Generate metrics to verify they work
         metrics_data = registry.generate_metrics()
@@ -971,10 +971,10 @@ class TestStructuredLogging:
         - Formats can be used in configuration.
         """
         # Test all format types exist
-        assert LogFormat.JSON == "json"
-        assert LogFormat.PRETTY == "pretty"
-        assert LogFormat.COMPACT == "compact"
-        assert LogFormat.DETAILED == "detailed"
+        assert LogFormat.JSON.value == "json"
+        assert LogFormat.PRETTY.value == "pretty"
+        assert LogFormat.COMPACT.value == "compact"
+        assert LogFormat.DETAILED.value == "detailed"
 
         # Test format can be used in string context
         formats = [LogFormat.JSON, LogFormat.PRETTY, LogFormat.COMPACT, LogFormat.DETAILED]
@@ -1087,13 +1087,13 @@ class TestStructuredLogging:
 
         # Test with no trace ID
         with patch("asset_core.observability.logging.get_trace_id", return_value=None):
-            trace_id_patcher(record)
+            trace_id_patcher(record)  # type: ignore[arg-type]
             assert record["extra"]["trace_id"] == "no-trace"
 
         # Test with trace ID
         with patch("asset_core.observability.logging.get_trace_id", return_value="test-trace-123"):
             record["extra"] = {}  # Reset
-            trace_id_patcher(record)
+            trace_id_patcher(record)  # type: ignore[arg-type]
             assert record["extra"]["trace_id"] == "test-trace-123"
 
         # Test with exception that has trace ID
@@ -1103,7 +1103,7 @@ class TestStructuredLogging:
         record["extra"] = {}
 
         with patch("asset_core.observability.logging.get_trace_id", return_value="current-trace"):
-            trace_id_patcher(record)
+            trace_id_patcher(record)  # type: ignore[arg-type]
             assert record["extra"]["trace_id"] == "current-trace"
             assert record["extra"]["exception_trace_id"] == "exception-trace-456"
 
@@ -1202,7 +1202,7 @@ class TestStructuredLogging:
         """
 
         # Test sync function
-        @log_performance("test_sync_function")  # type: ignore[misc]
+        @log_performance("test_sync_function")
         def sync_function(duration: float = 0.01) -> str:
             time.sleep(duration)
             return "sync_result"
@@ -1211,7 +1211,7 @@ class TestStructuredLogging:
         assert result == "sync_result"
 
         # Test async function
-        @log_performance("test_async_function", "DEBUG")  # type: ignore[misc]
+        @log_performance("test_async_function", "DEBUG")
         async def async_function(duration: float = 0.01) -> str:
             await asyncio.sleep(duration)
             return "async_result"
@@ -1223,7 +1223,7 @@ class TestStructuredLogging:
         asyncio.run(run_async_test())
 
         # Test exception handling
-        @log_performance()  # type: ignore[misc]
+        @log_performance()
         def failing_function() -> None:
             raise ValueError("Test error")
 
@@ -1244,7 +1244,7 @@ class TestStructuredLogging:
         """
 
         # Test without args/result logging
-        @log_function_calls()  # type: ignore[misc]
+        @log_function_calls()
         def simple_function(x: int, y: int) -> int:
             return x + y
 
@@ -1252,7 +1252,7 @@ class TestStructuredLogging:
         assert result == 5
 
         # Test with args and result logging
-        @log_function_calls(include_args=True, include_result=True)  # type: ignore[misc]
+        @log_function_calls(include_args=True, include_result=True)
         def detailed_function(name: str) -> str:
             return f"Hello, {name}!"
 
@@ -1260,7 +1260,7 @@ class TestStructuredLogging:
         assert result == "Hello, Alice!"
 
         # Test exception handling
-        @log_function_calls(include_args=True)  # type: ignore[misc]
+        @log_function_calls(include_args=True)
         def error_function() -> None:
             raise RuntimeError("Test exception")
 
@@ -1516,7 +1516,7 @@ class TestTraceIdPropagation:
         """
 
         # Test sync function without specific trace ID
-        @with_trace_id()  # type: ignore[misc]
+        @with_trace_id()
         def sync_function() -> str | None:
             result: str | None = get_trace_id()
             return result
@@ -1526,7 +1526,7 @@ class TestTraceIdPropagation:
         assert len(result) == 32
 
         # Test sync function with specific trace ID
-        @with_trace_id("custom-sync-trace")  # type: ignore[misc]
+        @with_trace_id("custom-sync-trace")
         def sync_function_custom() -> str | None:
             result: str | None = get_trace_id()
             return result
@@ -1535,7 +1535,7 @@ class TestTraceIdPropagation:
         assert result == "custom-sync-trace"
 
         # Test async function
-        @with_trace_id()  # type: ignore[misc]
+        @with_trace_id()
         async def async_function() -> str | None:
             result: str | None = get_trace_id()
             return result
@@ -1548,7 +1548,7 @@ class TestTraceIdPropagation:
         asyncio.run(run_async_test())
 
         # Test async function with custom trace ID
-        @with_trace_id("custom-async-trace")  # type: ignore[misc]
+        @with_trace_id("custom-async-trace")
         async def async_function_custom() -> str | None:
             result: str | None = get_trace_id()
             return result
@@ -1572,7 +1572,7 @@ class TestTraceIdPropagation:
         - Context variables take precedence when available.
         """
 
-        def thread_test_function(results: dict[str, str], thread_id: str) -> None:
+        def thread_test_function(results: dict[str, str | None], thread_id: str) -> None:
             """Function to run in separate thread."""
             clear_trace_id()
 

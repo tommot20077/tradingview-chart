@@ -34,7 +34,7 @@ class MockDataProvider(AbstractDataProvider):
         self,
         symbol: str,
         *,
-        _start_from: datetime | None = None,
+        start_from: datetime | None = None,  # noqa: ARG002
     ) -> AsyncIterator[Trade]:
         """Mock trade streaming."""
 
@@ -59,7 +59,7 @@ class MockDataProvider(AbstractDataProvider):
         symbol: str,
         interval: KlineInterval,
         *,
-        _start_from: datetime | None = None,
+        start_from: datetime | None = None,  # noqa: ARG002
     ) -> AsyncIterator[Kline]:
         """Mock kline streaming."""
 
@@ -89,9 +89,9 @@ class MockDataProvider(AbstractDataProvider):
         self,
         symbol: str,
         start_time: datetime,
-        _end_time: datetime,
+        end_time: datetime,  # noqa: ARG002
         *,
-        _limit: int | None = None,
+        limit: int | None = None,  # noqa: ARG002
     ) -> list[Trade]:
         """Mock historical trades fetch."""
         if not self._connected:
@@ -113,9 +113,9 @@ class MockDataProvider(AbstractDataProvider):
         symbol: str,
         interval: KlineInterval,
         start_time: datetime,
-        _end_time: datetime,
+        end_time: datetime,  # noqa: ARG002
         *,
-        _limit: int | None = None,
+        limit: int | None = None,  # noqa: ARG002
     ) -> list[Kline]:
         """Mock historical klines fetch."""
         if not self._connected:
@@ -176,7 +176,7 @@ class TestAbstractDataProvider:
         assert issubclass(AbstractDataProvider, ABC)
 
         with pytest.raises(TypeError):
-            AbstractDataProvider()
+            AbstractDataProvider()  # type: ignore[abstract]
 
     @pytest.mark.asyncio
     async def test_mock_provider_basic_operations(self) -> None:

@@ -282,7 +282,7 @@ class ResilientDataProvider(AbstractDataProvider):
         """
         self._connected = False
 
-    async def stream_trades(self, symbol: str, *, _start_from: datetime | None = None) -> AsyncIterator[Trade]:
+    async def stream_trades(self, symbol: str, *, start_from: datetime | None = None) -> AsyncIterator[Trade]:  # noqa: ARG002
         """Stream trades with circuit breaker protection.
 
         Description of what the method covers:
@@ -363,7 +363,11 @@ class ResilientDataProvider(AbstractDataProvider):
         )
 
     async def stream_klines(
-        self, symbol: str, interval: KlineInterval, *, _start_from: datetime | None = None
+        self,
+        symbol: str,
+        interval: KlineInterval,
+        *,
+        start_from: datetime | None = None,  # noqa: ARG002
     ) -> AsyncIterator[Kline]:
         """Simulate streaming klines for a given symbol and interval.
 
@@ -440,7 +444,12 @@ class ResilientDataProvider(AbstractDataProvider):
         )
 
     async def fetch_historical_trades(
-        self, _symbol: str, _start_time: datetime, _end_time: datetime, *, _limit: int | None = None
+        self,
+        symbol: str,  # noqa: ARG002
+        start_time: datetime,  # noqa: ARG002
+        end_time: datetime,  # noqa: ARG002
+        *,
+        limit: int | None = None,  # noqa: ARG002
     ) -> list[Trade]:
         """Simulate fetching historical trades (simplified to return empty list).
 
@@ -467,12 +476,12 @@ class ResilientDataProvider(AbstractDataProvider):
 
     async def fetch_historical_klines(
         self,
-        _symbol: str,
-        _interval: KlineInterval,
-        _start_time: datetime,
-        _end_time: datetime,
+        symbol: str,  # noqa: ARG002
+        interval: KlineInterval,  # noqa: ARG002
+        start_time: datetime,  # noqa: ARG002
+        end_time: datetime,  # noqa: ARG002
         *,
-        _limit: int | None = None,
+        limit: int | None = None,  # noqa: ARG002
     ) -> list[Kline]:
         """Simulate fetching historical klines (simplified to return empty list).
 
@@ -650,7 +659,7 @@ class ResilientRepository(AbstractKlineRepository):
         start_time: datetime,
         end_time: datetime,
         *,
-        _options: Any = None,
+        options: Any = None,  # noqa: ARG002
     ) -> list[Kline]:
         if self._closed:
             raise RuntimeError("Repository is closed")
@@ -664,7 +673,13 @@ class ResilientRepository(AbstractKlineRepository):
 
     # Simplified implementations for other methods
     async def stream(
-        self, symbol: str, interval: KlineInterval, start_time: datetime, end_time: datetime, *, _batch_size: int = 1000
+        self,
+        symbol: str,
+        interval: KlineInterval,
+        start_time: datetime,
+        end_time: datetime,
+        *,
+        batch_size: int = 1000,  # noqa: ARG002
     ) -> AsyncIterator[Kline]:
         results = await self.query(symbol, interval, start_time, end_time)
         for kline in results:
@@ -707,7 +722,11 @@ class ResilientRepository(AbstractKlineRepository):
         return len(to_delete)
 
     async def get_gaps(
-        self, _symbol: str, _interval: KlineInterval, _start_time: datetime, _end_time: datetime
+        self,
+        symbol: str,  # noqa: ARG002
+        interval: KlineInterval,  # noqa: ARG002
+        start_time: datetime,  # noqa: ARG002
+        end_time: datetime,  # noqa: ARG002
     ) -> list[tuple[datetime, datetime]]:
         return []
 

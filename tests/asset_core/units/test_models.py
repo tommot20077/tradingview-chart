@@ -273,7 +273,7 @@ class TestEventModels:
     def test_base_event_creation(self) -> None:
         """Test creating a base event."""
         data = {"test": "data"}
-        event = BaseEvent(
+        event: BaseEvent = BaseEvent(
             event_type=EventType.SYSTEM,
             source="test",
             data=data,
@@ -338,7 +338,7 @@ class TestEventModels:
     def test_event_priority(self) -> None:
         """Test event priority levels."""
         # Normal priority by default
-        event1 = BaseEvent(
+        event1: BaseEvent = BaseEvent(
             event_type=EventType.SYSTEM,
             source="test",
             data={},
@@ -346,7 +346,7 @@ class TestEventModels:
         assert event1.priority == EventPriority.NORMAL
 
         # High priority
-        event2 = BaseEvent(
+        event2: BaseEvent = BaseEvent(
             event_type=EventType.ERROR,
             source="test",
             data={},

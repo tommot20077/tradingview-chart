@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "trading-chart"
-version = "0.1.2"
+version = "0.2.0"
 description = "Asset trading data infrastructure monorepo"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -16,7 +16,7 @@ authors = [
 # Core dependencies (needed by asset_core)
 dependencies = [
     "pydantic>=2.0",
-    "pydantic-settings>=2.0", 
+    "pydantic-settings>=2.0",
     "loguru>=0.7.0",
     "prometheus-client>=0.19.0",
     "websockets>=12.0",
@@ -79,7 +79,7 @@ addopts = [
 asyncio_mode = "auto"
 markers = [
     "unit: marks tests as unit tests",
-    "integration: marks tests as integration tests", 
+    "integration: marks tests as integration tests",
     "slow: marks tests as slow running",
     "config: Configuration related tests",
     "models: Data model tests",
@@ -101,14 +101,21 @@ warn_unused_ignores = true
 warn_no_return = true
 warn_unreachable = true
 strict_equality = true
-files = ["src/", "tests/"]
-exclude = ["examples/"]
+mypy_path = ["src"]
+packages = ["asset_core", "crypto_single"]
+files = ["tests/"]
+exclude = ["examples/", "data/"]
 explicit_package_bases = true
 namespace_packages = true
+plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
 module = "asset_core.*"
-follow_imports = "skip"
+follow_imports = "normal"
+
+[[tool.mypy.overrides]]
+module = "memory_profiler"
+ignore_missing_imports = true
 
 [tool.ruff]
 target-version = "py312"
@@ -132,6 +139,8 @@ ignore = [
     "B008",  # do not perform function calls in argument defaults
     "B904",  # raise ... from ... in except blocks
     "B010",  # Do not call setattr with constant attribute - needed for mypy method assignment fix
+    "W293",  # blank line contains whitespace
+    "W291",  # trailing whitespace
 ]
 
 [tool.ruff.lint.isort]
@@ -176,5 +185,5 @@ dev = [
 
 [project.urls]
 Homepage = "https://github.com/tommot20077/tradingview-chart"
-Repository = "https://github.com/tommot20077/tradingview-chart" 
+Repository = "https://github.com/tommot20077/tradingview-chart"
 Issues = "https://github.com/tommot20077/tradingview-chart/issues"

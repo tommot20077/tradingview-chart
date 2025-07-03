@@ -4,14 +4,41 @@ on:
   push:
     branches: [ master, develop ]
   pull_request:
-    branches: [ master ]
+    branches: [ master, develop ]
+  workflow_dispatch:
+    inputs:
+      python-version:
+        description: 'Python version to test (leave empty for all versions)'
+        required: false
+        default: ''
+        type: choice
+        options:
+          - ''
+          - '3.8'
+          - '3.9'
+          - '3.10'
+          - '3.11'
+          - '3.12'
+      test-type:
+        description: 'Type of tests to run'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - 'all'
+          - 'unit'
+          - 'integration'
+          - 'e2e'
+          - 'quality-only'
 
 jobs:
   test:
+    name: Test (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        python-version: ["3.12"]
+        python-version: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.python-version != '' && fromJSON(format('["{0}"]', github.event.inputs.python-version)) || fromJSON('["3.8", "3.9", "3.10", "3.11", "3.12"]') }}
     
     steps:
     - uses: actions/checkout@v4
@@ -28,6 +55,14 @@ jobs:
     
     - name: Create virtual environment
       run: uv venv
+    
+    - name: Display build configuration
+      run: |
+        echo "🔧 Build Configuration:"
+        echo "  Python version: ${{ matrix.python-version }}"
+        echo "  Test type: ${{ github.event.inputs.test-type || 'all' }}"
+        echo "  Trigger: ${{ github.event_name }}"
+        echo "  Runner OS: ${{ runner.os }}"
     
     - name: Install dependencies
       run: |
@@ -47,15 +82,30 @@ jobs:
         mypy .
     
     - name: Run tests
+      if: github.event.inputs.test-type != 'quality-only'
       run: |
         source .venv/bin/activate
-        # Use unified test engine for consistent testing
-        bash scripts/test-engine.sh --ci-mode
+        # Determine test command based on inputs
+        if [ "${{ github.event.inputs.test-type }}" = "unit" ]; then
+          echo "🧪 Running unit tests..."
+          ./run.sh unit
+        elif [ "${{ github.event.inputs.test-type }}" = "integration" ]; then
+          echo "🔗 Running integration tests..."
+          pytest -v -m integration
+        elif [ "${{ github.event.inputs.test-type }}" = "e2e" ]; then
+          echo "🏃 Running e2e tests..."
+          pytest -v -m e2e
+        else
+          echo "🚀 Running all tests..."
+          # Use unified test engine for consistent testing
+          bash scripts/test-engine.sh --ci-mode
+        fi
     
     - name: Upload coverage reports
+      if: github.event.inputs.test-type != 'quality-only' && (github.event.inputs.test-type == '' || github.event.inputs.test-type == 'all')
       uses: codecov/codecov-action@v3
       with:
         file: ./coverage.xml
         flags: unittests
-        name: codecov-umbrella
+        name: codecov-umbrella-python-${{ matrix.python-version }}
         fail_ci_if_error: false

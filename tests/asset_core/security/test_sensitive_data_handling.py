@@ -160,11 +160,11 @@ class TestSensitiveDataHandling:
         )
 
         def create_safe_dict(trade: Trade) -> dict[str, Any]:
-            data = trade.model_dump()
+            data: dict[str, Any] = trade.model_dump()
             if "metadata" in data:
                 sensitive_keys = {"api_key", "secret_key", "password", "private_key", "token"}
                 data["metadata"] = {k: v for k, v in data["metadata"].items() if k not in sensitive_keys}
-            return data  # type: ignore[no-any-return]
+            return data
 
         safe_serialized = create_safe_dict(trade_with_metadata)
         assert "api_key" not in safe_serialized["metadata"]
@@ -210,10 +210,13 @@ class TestSensitiveDataHandling:
         # Anonymization functions (simplified implementations)
         def anonymize_email(email: str) -> str:
             """Anonymize email by hashing username part."""
+            import hashlib
+
             if "@" in email:
                 username, domain = email.split("@", 1)
-                hashed = hash(username) % 10000
-                return f"user_{abs(hashed)}@{domain}"
+                # Use sha256 for consistent hashing across runs
+                hashed = int(hashlib.sha256(username.encode()).hexdigest()[:8], 16) % 10000
+                return f"user_{hashed}@{domain}"
             return "anonymized_email"
 
         def anonymize_ip(ip: str) -> str:
@@ -225,8 +228,11 @@ class TestSensitiveDataHandling:
 
         def pseudonymize_user_id(user_id: str) -> str:
             """Create consistent pseudonym for user ID."""
-            pseudo_hash = hash(user_id) % 100000
-            return f"pseudo_user_{abs(pseudo_hash)}"
+            import hashlib
+
+            # Use sha256 for consistent hashing across runs
+            pseudo_hash = int(hashlib.sha256(user_id.encode()).hexdigest()[:8], 16) % 100000
+            return f"pseudo_user_{pseudo_hash}"
 
         def mask_financial_data(data: str) -> str:
             """Mask financial data like credit cards."""

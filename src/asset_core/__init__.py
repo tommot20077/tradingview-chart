@@ -33,7 +33,55 @@ from .exceptions import (
     WebSocketError,
 )
 
-__version__ = "0.1.1"
+__version__ = "0.2.1"
+
+__all__ = [
+    "__version__",
+    # Modules
+    "config",
+    "models",
+    "network",
+    "storage",
+    "events",
+    "observability",
+    "patterns",
+    "providers",
+    "types",
+    # Exceptions
+    "CoreError",
+    "ConfigurationError",
+    "DataProviderError",
+    "ConnectionError",
+    "AuthenticationError",
+    "RateLimitError",
+    "StorageError",
+    "StorageConnectionError",
+    "StorageWriteError",
+    "StorageReadError",
+    "EventBusError",
+    "ValidationError",
+    "NetworkError",
+    "WebSocketError",
+    "TimeoutError",
+    "DataValidationError",
+    "ResourceExhaustedError",
+    "CircuitBreakerError",
+]
+"""Asset Core - Core library for asset trading data infrastructure."""
+
+# Configuration
+# Models and data structures
+# Network components
+# Storage components
+# Event system
+# Observability
+# Patterns
+# Providers
+# Type definitions
+
+# Exceptions
+
+__version__ = "0.2.1"
 
 __all__ = [
     "__version__",

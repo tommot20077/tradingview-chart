@@ -84,9 +84,7 @@ class TestBaseCoreSettingsConstruction:
         Expected Result:
             - All dictionary values should be correctly assigned to settings fields
         """
-        config_dict = {"app_name": "dict-app", "environment": "staging", "debug": False}
-
-        settings = BaseCoreSettings(**config_dict)
+        settings = BaseCoreSettings(app_name="dict-app", environment="staging", debug=False)
 
         assert settings.app_name == "dict-app"
         assert settings.environment == "staging"

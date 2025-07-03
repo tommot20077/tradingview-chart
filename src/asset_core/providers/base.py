@@ -53,7 +53,7 @@ class AbstractDataProvider(ABC):
         """
 
     @abstractmethod
-    async def stream_trades(
+    def stream_trades(
         self,
         symbol: str,
         *,
@@ -76,7 +76,7 @@ class AbstractDataProvider(ABC):
         pass
 
     @abstractmethod
-    async def stream_klines(
+    def stream_klines(
         self,
         symbol: str,
         interval: KlineInterval,

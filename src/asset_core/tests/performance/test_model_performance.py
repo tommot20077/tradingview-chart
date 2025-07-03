@@ -7,7 +7,7 @@ and memory footprint measurements.
 
 import json
 import time
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from datetime import UTC, datetime
 from decimal import Decimal
 
@@ -21,7 +21,7 @@ try:
     from memory_profiler import profile
 except ImportError:
     # Create a no-op decorator if memory_profiler is not available
-    def profile(func):
+    def profile(func: Callable) -> Callable:
         return func
 
 
@@ -307,7 +307,7 @@ class TestModelPerformance:
         assert len(valid_klines) == 50_000
         assert validation_errors == 1_000  # All should have failed validation
 
-    @profile
+    @profile  # type: ignore
     def test_memory_footprint(self, sample_trades: list[Trade], sample_klines: list[Kline]) -> None:
         """Test memory consumption of creating and holding large numbers of model instances.
 

@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 import pytest
 from pydantic import Field, ValidationError
+from pydantic_settings import SettingsConfigDict
 
 from asset_core.config.base import BaseCoreSettings
 from asset_core.config.network import BaseNetworkConfig
@@ -28,9 +29,10 @@ class CompositeApplicationConfig(BaseCoreSettings, BaseNetworkConfig, BaseObserv
     api_key: str = Field(..., description="API key for external services")
     feature_flags: dict[str, bool] = Field(default_factory=dict, description="Feature toggle flags")
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+    )
 
 
 class NetworkStorageConfig(BaseNetworkConfig, BaseStorageConfig):

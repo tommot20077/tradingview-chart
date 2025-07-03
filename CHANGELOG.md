@@ -5,6 +5,57 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [crypto-single 0.1.1] - 2025-07-03
+
+### Refactored
+- **Configuration System**: Overhauled the `SingleCryptoSettings` class, introducing extensive validation rules for nearly every configuration parameter, especially for production environments. This includes strict checks for database URLs, secret keys, and API credentials.
+- **Testing Infrastructure**: Restructured the entire testing suite by moving all tests to a root-level `tests/` directory and removing all contract tests from the `crypto_single` module. This simplifies the project structure and aligns with standard practices.
+- **CI/CD Pipeline**: Enhanced the GitHub Actions workflow (`ci.yml`) to support manual triggers (`workflow_dispatch`), multi-version Python testing (3.8-3.12), and selective test execution (e.g., unit, integration, quality-only).
+- **Test Execution Scripts**: Simplified `run.sh` and `test-engine.sh` to directly use `pytest` for test execution, removing complex module detection logic and improving readability.
+
+### Added
+- **Comprehensive Unit Tests**: Added a significant number of new unit tests for `asset_core`, covering previously untested areas such as `ws_client`, `logging`, `metrics`, and `storage` repositories.
+- **Enhanced Security Validation**: Implemented numerous security-focused validators for configuration settings, ensuring that production environments adhere to strict security standards.
+
+### Removed
+- **Legacy Test Files**: Deleted all contract and unit tests from `src/crypto_single/tests/`, which have been replaced by the new, more comprehensive tests in the root `tests/` directory.
+- **Old Configuration Backups**: Removed `pyproject_backup.toml` and `pyproject_old.toml` to clean up the project root.
+
+### Developer Experience
+- **Improved Configuration Safety**: The new validation system provides developers with immediate feedback on configuration errors, reducing runtime issues.
+- **Flexible and Faster CI**: Developers can now manually trigger specific tests on specific Python versions, speeding up the development and validation cycle.
+- **Simplified Project Navigation**: The new test structure makes it easier to locate and manage tests for different parts of the application.
+
+---
+
+## [asset-core 0.2.1] - 2025-07-02
+
+### Added
+- **Missing Unit Tests**: Added comprehensive unit tests for previously untested components:
+  - `tests/asset_core/units/network/test_ws_client.py`: WebSocket client unit tests
+  - `tests/asset_core/units/observability/test_logging.py`: Logging system unit tests 
+  - `tests/asset_core/units/observability/test_metrics.py`: Metrics system unit tests
+- **Test Coverage Analysis**: Added detailed analysis documentation (`missing_tests.md`, `missing_tests_analysis.md`) identifying missing test cases and test categorization suggestions
+
+### Enhanced
+- **Core Architecture**: Comprehensive improvements across all asset_core modules (31 files modified)
+- **Code Documentation**: Enhanced ABOUTME comments and inline documentation throughout the codebase
+- **Test Framework**: Significant updates to existing test suites with improved coverage and reliability
+- **Build Configuration**: Updated project dependencies and development tooling configuration
+
+### Improved
+- **Code Quality**: Extensive refactoring and code formatting improvements across 91 files
+- **Test Organization**: Better categorization of unit vs integration tests
+- **Error Handling**: Enhanced exception handling and validation throughout the system
+- **Performance**: Optimized data models and observability components
+
+### Infrastructure
+- **Project Structure**: Continued refinement of the unified monorepo structure
+- **Testing Tools**: Enhanced test engine with improved path handling and validation
+- **Development Workflow**: Improved build scripts and dependency management
+
+---
+
 ## [asset-core 0.2.0] - 2025-06-29
 
 ### Changed

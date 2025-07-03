@@ -73,7 +73,7 @@ class TestBaseEventConstruction:
     def test_valid_base_event_creation(self) -> None:
         """Test valid BaseEvent instance creation."""
         test_data = {"message": "test", "value": 123}
-        event = BaseEvent(event_type=EventType.SYSTEM, source="test_service", data=test_data)
+        event: BaseEvent[dict[str, Any]] = BaseEvent(event_type=EventType.SYSTEM, source="test_service", data=test_data)
 
         assert event.event_type == EventType.SYSTEM
         assert event.source == "test_service"
@@ -85,12 +85,93 @@ class TestBaseEventConstruction:
         assert isinstance(event.timestamp, datetime)
         assert event.timestamp.tzinfo == UTC
 
+    def test_event_id_uniqueness(self) -> None:
+        """Test that event_id is unique across multiple BaseEvent instances."""
+        # Create a large number of BaseEvent instances to test uniqueness
+        num_events = 1000
+        events = []
+
+        for i in range(num_events):
+            event: BaseEvent[dict[str, Any]] = BaseEvent(
+                event_type=EventType.SYSTEM, source="test_service", data={"index": i}
+            )
+            events.append(event)
+
+        # Collect all event IDs
+        event_ids = [event.event_id for event in events]
+
+        # Assert all event IDs are unique
+        assert len(set(event_ids)) == num_events, "All event IDs should be unique"
+
+        # Additional verification: check that all event IDs are valid UUIDs
+        for event_id in event_ids:
+            try:
+                UUID(event_id)
+            except ValueError:
+                pytest.fail(f"event_id '{event_id}' is not a valid UUID")
+
+    def test_timestamp_precision_rapid_creation(self) -> None:
+        """Test timestamp behavior when events are created rapidly."""
+        import time
+
+        # Create events in rapid succession
+        events = []
+        for i in range(10):
+            event: BaseEvent[dict[str, Any]] = BaseEvent(
+                event_type=EventType.SYSTEM, source="test_service", data={"index": i}
+            )
+            events.append(event)
+            # Small delay to potentially create different timestamps
+            time.sleep(0.001)  # 1ms delay
+
+        # Collect all timestamps
+        timestamps = [event.timestamp for event in events]
+
+        # Even if some timestamps are identical, the event_id should ensure uniqueness
+        # This test observes the timestamp behavior and verifies event_id uniqueness
+        event_ids = [event.event_id for event in events]
+        assert len(set(event_ids)) == len(events), "Event IDs should be unique even with rapid creation"
+
+        # All timestamps should be valid UTC datetime objects
+        for timestamp in timestamps:
+            assert isinstance(timestamp, datetime)
+            assert timestamp.tzinfo == UTC
+
+    def test_metadata_default_factory_isolation(self) -> None:
+        """Test that metadata default factory creates isolated dictionaries."""
+        # Create two BaseEvent instances
+        event1: BaseEvent[dict[str, Any]] = BaseEvent(
+            event_type=EventType.SYSTEM, source="test_service", data={"key": "value1"}
+        )
+
+        event2: BaseEvent[dict[str, Any]] = BaseEvent(
+            event_type=EventType.SYSTEM, source="test_service", data={"key": "value2"}
+        )
+
+        # Initially both metadata should be empty but separate
+        assert event1.metadata == {}
+        assert event2.metadata == {}
+        assert event1.metadata is not event2.metadata, "Metadata dictionaries should be separate instances"
+
+        # Modify metadata of event1
+        event1.metadata["test_key"] = "test_value"
+        event1.metadata["number"] = 42
+
+        # Assert that event2's metadata remains unchanged
+        assert event2.metadata == {}, "Event2 metadata should remain unchanged"
+        assert "test_key" not in event2.metadata
+        assert "number" not in event2.metadata
+
+        # Verify event1's metadata has the changes
+        assert event1.metadata["test_key"] == "test_value"
+        assert event1.metadata["number"] == 42
+
     def test_base_event_with_all_fields(self) -> None:
         """Test BaseEvent creation with all optional fields provided."""
         test_data = {"key": "value"}
         test_time = datetime(2023, 1, 1, 12, 0, 0, tzinfo=UTC)
 
-        event = BaseEvent(
+        event: BaseEvent[dict[str, Any]] = BaseEvent(
             event_type=EventType.TRADE,
             source="binance",
             data=test_data,
@@ -269,7 +350,7 @@ class TestTradeEvent:
         event = TradeEvent(source="binance", data=sample_trade)
 
         with pytest.raises(ValidationError):
-            event.event_type = EventType.SYSTEM
+            event.event_type = EventType.SYSTEM  # type: ignore
 
     def test_trade_event_with_trade_data(self, sample_trade: Trade) -> None:
         """Test TradeEvent with actual trade data."""
@@ -354,6 +435,23 @@ class TestConnectionEvent:
         for status in statuses:
             event = ConnectionEvent(status=status, source="test_client")
             assert event.data["status"] == status.value
+
+    def test_connection_event_invalid_status_type(self) -> None:
+        """Test ConnectionEvent with non-ConnectionStatus value raises AttributeError."""
+        # Test with various invalid status types
+        invalid_statuses = [
+            "invalid_string",  # String that's not a ConnectionStatus
+            123,  # Integer
+            None,  # None
+            ["connected"],  # List
+            {"status": "connected"},  # Dict
+        ]
+
+        for invalid_status in invalid_statuses:
+            with pytest.raises(AttributeError):
+                # This should raise AttributeError because status.value is called
+                # but non-ConnectionStatus objects don't have a 'value' attribute
+                ConnectionEvent(status=invalid_status, source="test_client")  # type: ignore
 
 
 @pytest.mark.unit

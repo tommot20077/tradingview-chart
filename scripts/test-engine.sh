@@ -157,7 +157,7 @@ check_uv() {
 # Run quality checks (linting and type checking)
 run_quality_checks() {
     print_status "Running Quality Checks"
-    echo "======================"
+    echo "======================="
     
     # Run linting
     print_status "Running linting (ruff check)"
@@ -187,59 +187,34 @@ run_quality_checks() {
     return 0
 }
 
-# Normalize test paths for the current module
-normalize_test_paths_for_module() {
-    local module_name="$1"
-    local normalized_args=()
+# Process test arguments to handle direct pytest paths
+process_test_args() {
+    local processed_args=()
     
     for arg in "${TEST_ARGS[@]}"; do
         # Check if argument looks like a path (contains / and doesn't start with -)
         if [[ "$arg" == *"/"* && ! "$arg" == -* ]]; then
-            # Handle absolute paths: src/module_name/...
-            if [[ "$arg" == "src/$module_name/"* ]]; then
-                local normalized_path="${arg#src/$module_name/}"
-                print_debug "Normalized absolute path: $arg -> $normalized_path"
-                normalized_args+=("$normalized_path")
-            # Handle relative paths: ./module_name/...
-            elif [[ "$arg" == "./$module_name/"* ]]; then
-                local normalized_path="${arg#./$module_name/}"
-                print_debug "Normalized relative path: $arg -> $normalized_path"
-                normalized_args+=("$normalized_path")
-            # Path is for a different module, skip for this module
-            elif [[ "$arg" == "src/"* || "$arg" == "./"* ]]; then
-                continue
+            # If it's already a tests/ path, keep as is (direct pytest path)
+            if [[ "$arg" == "tests/"* ]]; then
+                processed_args+=("$arg")
+                print_debug "Direct test path: $arg"
+            else
+                # Not a test path, keep as is (probably a pytest option)
+                processed_args+=("$arg")
             fi
         else
-            # Not a path, keep as is
-            normalized_args+=("$arg")
+            # Not a path, keep as is (pytest option or argument)
+            processed_args+=("$arg")
         fi
     done
     
-    # Update TEST_ARGS with normalized paths
-    TEST_ARGS=("${normalized_args[@]}")
+    # Update TEST_ARGS with processed paths
+    TEST_ARGS=("${processed_args[@]}")
 }
 
-# Test a single module (unified structure)
-test_module() {
-    local module_name="$1"
-    local module_path="$PROJECT_ROOT/src/$module_name"
-    local test_path="$PROJECT_ROOT/tests/$module_name"
-    
-    print_status "Testing module: $module_name"
-    
-    # Verify module exists and is ready
-    if [ ! -d "$module_path" ]; then
-        print_error "Module directory not found: $module_path"
-        return 1
-    fi
-    
-    if [ ! -d "$test_path" ]; then
-        print_error "Module test directory not found: $test_path"
-        return 1
-    fi
-    
-    # Normalize test paths for this module before changing directory
-    normalize_test_paths_for_module "$module_name"
+# Run tests directly with pytest (simplified approach)
+run_tests_directly() {
+    print_status "Running tests directly with pytest"
     
     # Stay in project root (unified structure with single pyproject.toml)
     print_debug "Working in project root for unified structure"
@@ -272,29 +247,27 @@ test_module() {
         print_debug "Using default coverage settings from pytest.ini"
     fi
     
-    # Add verbosity
-    if [ ${#TEST_ARGS[@]} -eq 0 ]; then
-        test_cmd="$test_cmd -v"
-    fi
+    # Add verbosity for better output
+    test_cmd="$test_cmd -v"
     
-    # Add test arguments or default to module test directory
+    # Add test arguments or default to all tests
     if [ ${#TEST_ARGS[@]} -gt 0 ]; then
         test_cmd="$test_cmd ${TEST_ARGS[*]}"
         print_debug "Using test arguments: ${TEST_ARGS[*]}"
     else
-        test_cmd="$test_cmd tests/$module_name/"
-        print_debug "Testing all tests in tests/$module_name/ directory"
+        test_cmd="$test_cmd tests/"
+        print_debug "Testing all tests in tests/ directory"
     fi
     
     print_debug "Executing: $test_cmd"
     
     # Execute tests
     if $test_cmd; then
-        print_success "Module $module_name tests passed"
+        print_success "Tests passed"
         return 0
     else
         local exit_code=$?
-        print_error "Module $module_name tests failed (exit code: $exit_code)"
+        print_error "Tests failed (exit code: $exit_code)"
         print_error "Check the test output above for specific failure details"
         return 1
     fi
@@ -376,80 +349,75 @@ validate_global_test_paths() {
     echo "$target_modules" | xargs # Trim spaces
 }
 
-# Test all modules
-test_all_modules() {
-    local modules_to_test
+# Execute tests (simplified approach)
+execute_tests() {
+    # Process test arguments
+    process_test_args
     
-    if [ -n "$TEST_MODULES" ]; then
-        modules_to_test="$TEST_MODULES"
-        print_status "Testing specified modules: $modules_to_test"
-    else
-        # Check if we have specific path arguments that determine modules
-        if ! validate_global_test_paths; then
-            return 1
+    # Check if we have specific test paths
+    local has_test_paths=false
+    for arg in "${TEST_ARGS[@]}"; do
+        if [[ "$arg" == "tests/"* ]]; then
+            has_test_paths=true
+            break
         fi
-        # Re-run to get the actual target modules (since function can't both validate and return)
-        local target_modules=""
-        local has_path_args=false
-        for arg in "${TEST_ARGS[@]}"; do
-            if [[ "$arg" == *"/"* && ! "$arg" == -* ]]; then
-                has_path_args=true
-                if [[ "$arg" == "src/"*"/"* ]]; then
-                    local module_name="${arg#src/}"
-                    module_name="${module_name%%/*}"
-                    if [[ "$target_modules" != *"$module_name"* ]]; then
-                        target_modules="$target_modules $module_name"
-                    fi
-                fi
-            fi
-        done
-        target_modules=$(echo "$target_modules" | xargs) # Trim spaces
-        print_debug "Target modules from path validation: '$target_modules'"
-        
-        if [ -n "$target_modules" ]; then
-            modules_to_test="$target_modules"
-            print_status "Testing modules with specified paths: $modules_to_test"
-        else
-            if ! modules_to_test=$(detect_modules); then
-                return 1
-            fi
-            print_status "Testing detected modules: $modules_to_test"
-        fi
-    fi
-    
-    local failed_modules=""
-    local total_modules=0
-    local passed_modules=0
-    
-    # Test each module
-    for module in $modules_to_test; do
-        total_modules=$((total_modules + 1))
-        
-        print_status "[$total_modules] Testing module: $module"
-        
-        if test_module "$module"; then
-            passed_modules=$((passed_modules + 1))
-        else
-            failed_modules="$failed_modules $module"
-        fi
-        
-        echo "" # Add spacing between modules
     done
     
-    # Report results
-    print_status "Test Results Summary"
-    echo "===================="
-    echo "Total modules: $total_modules"
-    echo "Passed: $passed_modules"
-    echo "Failed: $((total_modules - passed_modules))"
-    
-    if [ -n "$failed_modules" ]; then
-        print_error "Failed modules:$failed_modules"
-        return 1
+    if [ "$has_test_paths" = true ]; then
+        print_status "Running tests with specific paths"
+        # Run tests directly with the provided paths
+        if ! run_tests_directly; then
+            return 1
+        fi
+    elif [ -n "$TEST_MODULES" ]; then
+        # Legacy module-based testing (for backward compatibility)
+        print_status "Testing specified modules: $TEST_MODULES"
+        
+        local failed_modules=""
+        local total_modules=0
+        local passed_modules=0
+        
+        # Test each module using the legacy approach
+        for module in $TEST_MODULES; do
+            total_modules=$((total_modules + 1))
+            
+            print_status "[$total_modules] Testing module: $module"
+            
+            # Set TEST_ARGS to test the specific module
+            TEST_ARGS=("tests/$module/")
+            
+            if run_tests_directly; then
+                passed_modules=$((passed_modules + 1))
+            else
+                failed_modules="$failed_modules $module"
+            fi
+            
+            echo "" # Add spacing between modules
+        done
+        
+        # Report results
+        print_status "Test Results Summary"
+        echo "===================="
+        echo "Total modules: $total_modules"
+        echo "Passed: $passed_modules"
+        echo "Failed: $((total_modules - passed_modules))"
+        
+        if [ -n "$failed_modules" ]; then
+            print_error "Failed modules:$failed_modules"
+            return 1
+        else
+            print_success "All modules passed!"
+            return 0
+        fi
     else
-        print_success "All modules passed!"
-        return 0
+        # No specific paths or modules, run all tests
+        print_status "Running all tests"
+        if ! run_tests_directly; then
+            return 1
+        fi
     fi
+    
+    return 0
 }
 
 # Main execution
@@ -480,7 +448,7 @@ main() {
     fi
     
     # Execute tests
-    if ! test_all_modules; then
+    if ! execute_tests; then
         print_error "Test execution failed"
         return 1
     fi
