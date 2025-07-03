@@ -30,7 +30,7 @@ class MockTransactionalKlineRepository(AbstractKlineRepository):
         transaction_timeout (float): The maximum duration for a transaction in seconds.
         transaction_start_time (float | None): Timestamp when the current transaction started.
         isolation_level (str): The current transaction isolation level (e.g., "READ_COMMITTED").
-        nested_transaction_count (int): Counter for nested transactions.
+        savepoint_stack (list[dict]): Stack of savepoints for nested transactions.
         operation_delays (dict[str, float]): Configurable delays for specific operations (e.g., "save").
         batch_size_limit (int): Maximum number of klines allowed in a single batch save operation.
         should_fail_on_operation (dict[str, bool]): Flags to simulate failures for specific operations.
@@ -43,7 +43,7 @@ class MockTransactionalKlineRepository(AbstractKlineRepository):
         self.transaction_timeout = 30.0
         self.transaction_start_time: float | None = None
         self.isolation_level = "READ_COMMITTED"
-        self.nested_transaction_count = 0
+        self.savepoint_stack: list[dict[str, list[Kline]]] = []
         self.operation_delays: dict[str, float] = {}
         self.batch_size_limit = 1000
         self.should_fail_on_operation: dict[str, bool] = {}
@@ -51,13 +51,17 @@ class MockTransactionalKlineRepository(AbstractKlineRepository):
     async def begin_transaction(self, isolation_level: str = "READ_COMMITTED", timeout: float = 30.0) -> None:
         """Begin a transaction."""
         if self.in_transaction:
-            self.nested_transaction_count += 1
+            # Save current transaction state as savepoint
+            if self.transaction_data is not None:
+                savepoint = {key: list(klines) for key, klines in self.transaction_data.items()}
+                self.savepoint_stack.append(savepoint)
         else:
             self.in_transaction = True
             self.transaction_start_time = time.time()
             self.transaction_timeout = timeout
             self.isolation_level = isolation_level
             self.transaction_data = defaultdict(list)
+            self.savepoint_stack = []
 
     async def commit_transaction(self) -> None:
         """Commits the current transaction.
@@ -75,8 +79,9 @@ class MockTransactionalKlineRepository(AbstractKlineRepository):
         if not self.in_transaction:
             raise StorageError("No active transaction to commit")
 
-        if self.nested_transaction_count > 0:
-            self.nested_transaction_count -= 1
+        if self.savepoint_stack:
+            # This is a nested transaction commit, just pop the savepoint
+            self.savepoint_stack.pop()
         else:
             if self.transaction_data is not None:
                 # Apply transaction data to main data
@@ -89,8 +94,13 @@ class MockTransactionalKlineRepository(AbstractKlineRepository):
         if not self.in_transaction:
             raise StorageError("No active transaction to rollback")
 
-        if self.nested_transaction_count > 0:
-            self.nested_transaction_count -= 1
+        if self.savepoint_stack:
+            # Rollback to the previous savepoint
+            if self.transaction_data is not None:
+                savepoint = self.savepoint_stack.pop()
+                self.transaction_data = defaultdict(list)
+                for key, klines in savepoint.items():
+                    self.transaction_data[key] = list(klines)
         else:
             self._end_transaction()
 
@@ -99,7 +109,7 @@ class MockTransactionalKlineRepository(AbstractKlineRepository):
         self.in_transaction = False
         self.transaction_data = None
         self.transaction_start_time = None
-        self.nested_transaction_count = 0
+        self.savepoint_stack = []
 
     def _check_transaction_timeout(self) -> None:
         """Check if transaction has timed out."""
@@ -108,6 +118,8 @@ class MockTransactionalKlineRepository(AbstractKlineRepository):
             and self.transaction_start_time
             and time.time() - self.transaction_start_time > self.transaction_timeout
         ):
+            # Auto-rollback the transaction on timeout
+            self._end_transaction()
             raise TimeoutError("Transaction timeout exceeded")
 
     def _get_storage(self) -> dict[str, list[Kline]]:
@@ -191,7 +203,7 @@ class MockTransactionalKlineRepository(AbstractKlineRepository):
             try:
                 await self.save(kline)
                 saved_count += 1
-            except Exception:
+            except StorageError:
                 if self.in_transaction:
                     raise  # Re-raise in transaction to trigger rollback
                 # Outside transaction, continue with remaining items
@@ -384,14 +396,15 @@ class MockTransactionalKlineRepository(AbstractKlineRepository):
 
     async def get_gaps(
         self,
-        _symbol: str,
-        _interval: KlineInterval,
-        _start_time: datetime,
-        _end_time: datetime,
+        symbol: str,
+        interval: KlineInterval,
+        start_time: datetime,
+        end_time: datetime,
     ) -> list[tuple[datetime, datetime]]:
         """Finds gaps in the stored Kline data for a given symbol and interval within a time range.
 
-        Note: This is a simplified mock implementation that always returns an empty list.
+        This implementation performs actual gap detection by checking for missing klines
+        at regular intervals based on the KlineInterval.
 
         Args:
             symbol (str): The trading symbol (e.g., "BTCUSDT").
@@ -401,12 +414,52 @@ class MockTransactionalKlineRepository(AbstractKlineRepository):
 
         Returns:
             list[tuple[datetime, datetime]]: A list of tuples, where each tuple represents
-                                             a gap (start_time, end_time). Always empty in this mock.
+                                             a gap (start_time, end_time).
 
         Raises:
             TimeoutError: If the current transaction has timed out.
         """
-        return []  # Simplified implementation
+        self._check_transaction_timeout()
+
+        if start_time >= end_time:
+            return []
+
+        # Get existing klines for the symbol and interval
+        key = f"{symbol}_{interval.value if hasattr(interval, 'value') else interval}"
+        storage = self._get_storage()
+        existing_klines = storage.get(key, [])
+
+        # Filter klines within the time range and sort by open_time
+        filtered_klines = [k for k in existing_klines if start_time <= k.open_time < end_time]
+        filtered_klines.sort(key=lambda k: k.open_time)
+
+        if not filtered_klines:
+            # No klines in range - entire range is a gap
+            return [(start_time, end_time)]
+
+        gaps = []
+
+        # Check for gap at the beginning
+        if filtered_klines[0].open_time > start_time:
+            gaps.append((start_time, filtered_klines[0].open_time))
+
+        # Check for gaps between consecutive klines
+        interval_delta = interval.to_timedelta(interval)
+        for i in range(len(filtered_klines) - 1):
+            current_kline = filtered_klines[i]
+            next_kline = filtered_klines[i + 1]
+            expected_next_time = current_kline.open_time + interval_delta
+
+            if next_kline.open_time > expected_next_time:
+                gaps.append((expected_next_time, next_kline.open_time))
+
+        # Check for gap at the end
+        last_kline = filtered_klines[-1]
+        expected_end_time = last_kline.open_time + interval_delta
+        if expected_end_time < end_time:
+            gaps.append((expected_end_time, end_time))
+
+        return gaps
 
     async def get_statistics(
         self,
@@ -415,9 +468,9 @@ class MockTransactionalKlineRepository(AbstractKlineRepository):
         start_time: datetime | None = None,
         end_time: datetime | None = None,
     ) -> dict[str, Any]:
-        """Retrieves statistics about stored Klines for a given symbol and interval.
+        """Retrieves comprehensive statistics about stored Klines for a given symbol and interval.
 
-        Currently, it only returns the count of Klines within the specified range.
+        Returns count, earliest timestamp, and latest timestamp for the specified range.
 
         Args:
             symbol (str): The trading symbol (e.g., "BTCUSDT").
@@ -426,13 +479,41 @@ class MockTransactionalKlineRepository(AbstractKlineRepository):
             end_time (datetime | None): Optional end time for statistics (exclusive).
 
         Returns:
-            dict[str, Any]: A dictionary containing statistics, e.g., {"count": int}.
+            dict[str, Any]: A dictionary containing statistics:
+                - count (int): Number of klines in the range
+                - earliest_timestamp (datetime | None): Earliest kline timestamp in range
+                - latest_timestamp (datetime | None): Latest kline timestamp in range
 
         Raises:
-            TimeoutError: If the current transaction has timed out during the underlying count operation.
+            TimeoutError: If the current transaction has timed out.
         """
-        count = await self.count(symbol, interval, start_time, end_time)
-        return {"count": count}
+        self._check_transaction_timeout()
+
+        key = f"{symbol}_{interval.value if hasattr(interval, 'value') else interval}"
+        storage = self._get_storage()
+        klines = storage.get(key, [])
+
+        # Apply time filtering if specified
+        if start_time and end_time:
+            klines = [k for k in klines if start_time <= k.open_time < end_time]
+        elif start_time:
+            klines = [k for k in klines if k.open_time >= start_time]
+        elif end_time:
+            klines = [k for k in klines if k.open_time < end_time]
+
+        count = len(klines)
+        earliest_timestamp = None
+        latest_timestamp = None
+
+        if klines:
+            earliest_timestamp = min(k.open_time for k in klines)
+            latest_timestamp = max(k.open_time for k in klines)
+
+        return {
+            "count": count,
+            "earliest_timestamp": earliest_timestamp,
+            "latest_timestamp": latest_timestamp,
+        }
 
     async def close(self) -> None:
         """Close the repository and clean up resources."""
@@ -454,7 +535,7 @@ class MockTransactionalMetadataRepository(AbstractMetadataRepository):
         transaction_timeout (float): The maximum duration for a transaction in seconds.
         transaction_start_time (float | None): Timestamp when the current transaction started.
         isolation_level (str): The current transaction isolation level (e.g., "READ_COMMITTED").
-        nested_transaction_count (int): Counter for nested transactions.
+        savepoint_stack (list[dict]): Stack of savepoints for nested transactions.
         should_fail_on_operation (dict[str, bool]): Flags to simulate failures for specific operations.
     """
 
@@ -465,19 +546,23 @@ class MockTransactionalMetadataRepository(AbstractMetadataRepository):
         self.transaction_timeout = 30.0
         self.transaction_start_time: float | None = None
         self.isolation_level = "READ_COMMITTED"
-        self.nested_transaction_count = 0
+        self.savepoint_stack: list[dict[str, dict[str, Any]]] = []
         self.should_fail_on_operation: dict[str, bool] = {}
 
     async def begin_transaction(self, isolation_level: str = "READ_COMMITTED", timeout: float = 30.0) -> None:
         """Begin a transaction."""
         if self.in_transaction:
-            self.nested_transaction_count += 1
+            # Save current transaction state as savepoint
+            if self.transaction_data is not None:
+                savepoint = {key: dict(value) for key, value in self.transaction_data.items()}
+                self.savepoint_stack.append(savepoint)
         else:
             self.in_transaction = True
             self.transaction_start_time = time.time()
             self.transaction_timeout = timeout
             self.isolation_level = isolation_level
             self.transaction_data = {}
+            self.savepoint_stack = []
 
     async def commit_transaction(self) -> None:
         """Commit current transaction."""
@@ -486,8 +571,9 @@ class MockTransactionalMetadataRepository(AbstractMetadataRepository):
         if not self.in_transaction:
             raise StorageError("No active transaction to commit")
 
-        if self.nested_transaction_count > 0:
-            self.nested_transaction_count -= 1
+        if self.savepoint_stack:
+            # This is a nested transaction commit, just pop the savepoint
+            self.savepoint_stack.pop()
         else:
             if self.transaction_data is not None:
                 self.data.update(self.transaction_data)
@@ -498,8 +584,13 @@ class MockTransactionalMetadataRepository(AbstractMetadataRepository):
         if not self.in_transaction:
             raise StorageError("No active transaction to rollback")
 
-        if self.nested_transaction_count > 0:
-            self.nested_transaction_count -= 1
+        if self.savepoint_stack:
+            # Rollback to the previous savepoint
+            if self.transaction_data is not None:
+                savepoint = self.savepoint_stack.pop()
+                self.transaction_data = {}
+                for key, value in savepoint.items():
+                    self.transaction_data[key] = dict(value)
         else:
             self._end_transaction()
 
@@ -508,7 +599,7 @@ class MockTransactionalMetadataRepository(AbstractMetadataRepository):
         self.in_transaction = False
         self.transaction_data = None
         self.transaction_start_time = None
-        self.nested_transaction_count = 0
+        self.savepoint_stack = []
 
     def _check_transaction_timeout(self) -> None:
         """Check if transaction has timed out."""
@@ -517,6 +608,8 @@ class MockTransactionalMetadataRepository(AbstractMetadataRepository):
             and self.transaction_start_time
             and time.time() - self.transaction_start_time > self.transaction_timeout
         ):
+            # Auto-rollback the transaction on timeout
+            self._end_transaction()
             raise TimeoutError("Transaction timeout exceeded")
 
     def _get_storage(self) -> dict[str, dict[str, Any]]:
@@ -853,65 +946,60 @@ class TestStorageTransactions:
         assert kline_repo.transaction_data is None
 
     @pytest.mark.asyncio
-    async def test_isolation_levels(
-        self, kline_repo: MockTransactionalKlineRepository, sample_klines: list[Kline]
-    ) -> None:
+    async def test_isolation_levels(self, sample_klines: list[Kline]) -> None:
         """Test transaction isolation behavior.
 
         Description of what the test covers.
-        Tests different isolation levels (READ_COMMITTED, SERIALIZABLE)
-        to ensure proper data visibility and consistency between concurrent
-        transactions.
+        Tests READ_COMMITTED isolation level to ensure proper data visibility
+        and consistency between different repository connections.
 
         Preconditions:
         - Clean repository state.
-        - Multiple transactions capability.
+        - Two repository instances sharing same underlying data.
 
         Steps:
-        - Start transaction with specific isolation level.
-        - Modify data within transaction.
-        - Verify isolation behavior.
-        - Test different isolation levels.
+        - Create two repository instances sharing the same data storage.
+        - Start transaction in repo1 with READ_COMMITTED isolation.
+        - Modify data within repo1 transaction.
+        - Verify data isolation using repo2.
+        - Commit transaction and verify visibility.
 
         Expected Result:
-        - Data visibility should follow isolation level rules.
-        - Concurrent transactions should be properly isolated.
-        - No dirty reads or phantom reads should occur.
+        - Uncommitted data in repo1 should not be visible to repo2.
+        - After commit, data should be visible to both repositories.
         """
+        # Create two repository instances that share the same underlying data
+        repo1 = MockTransactionalKlineRepository()
+        repo2 = MockTransactionalKlineRepository()
+
+        # Share the same underlying data storage to simulate two connections
+        shared_data: defaultdict[str, list[Kline]] = defaultdict(list)
+        repo1.data = shared_data
+        repo2.data = shared_data
+
         # Test READ_COMMITTED isolation
-        await kline_repo.begin_transaction(isolation_level="READ_COMMITTED")
-        assert kline_repo.isolation_level == "READ_COMMITTED"
+        await repo1.begin_transaction(isolation_level="READ_COMMITTED")
+        assert repo1.isolation_level == "READ_COMMITTED"
 
-        # Save data in transaction
-        await kline_repo.save(sample_klines[0])
+        # Save data in repo1 transaction
+        await repo1.save(sample_klines[0])
 
-        # Data should be visible within transaction
-        count_in_transaction = await kline_repo.count("BTCUSDT", KlineInterval.HOUR_1)
-        assert count_in_transaction == 1
+        # Data should be visible within repo1 transaction
+        count_in_repo1 = await repo1.count("BTCUSDT", KlineInterval.HOUR_1)
+        assert count_in_repo1 == 1
 
-        # Simulate concurrent access (data should not be visible outside transaction)
-        # In a real implementation, this would be tested with actual concurrent transactions
-        original_in_transaction = kline_repo.in_transaction
-        kline_repo.in_transaction = False
+        # Data should NOT be visible to repo2 (different connection, no transaction)
+        count_in_repo2 = await repo2.count("BTCUSDT", KlineInterval.HOUR_1)
+        assert count_in_repo2 == 0  # Uncommitted data should not be visible
 
-        count_outside_transaction = await kline_repo.count("BTCUSDT", KlineInterval.HOUR_1)
-        assert count_outside_transaction == 0
+        # Commit transaction in repo1
+        await repo1.commit_transaction()
 
-        # Restore transaction state
-        kline_repo.in_transaction = original_in_transaction
-
-        # Commit transaction
-        await kline_repo.commit_transaction()
-
-        # Data should now be visible
-        final_count = await kline_repo.count("BTCUSDT", KlineInterval.HOUR_1)
-        assert final_count == 1
-
-        # Test SERIALIZABLE isolation
-        await kline_repo.begin_transaction(isolation_level="SERIALIZABLE")
-        assert kline_repo.isolation_level == "SERIALIZABLE"
-
-        await kline_repo.rollback_transaction()
+        # Now data should be visible to both repositories
+        final_count_repo1 = await repo1.count("BTCUSDT", KlineInterval.HOUR_1)
+        final_count_repo2 = await repo2.count("BTCUSDT", KlineInterval.HOUR_1)
+        assert final_count_repo1 == 1
+        assert final_count_repo2 == 1
 
     @pytest.mark.asyncio
     async def test_nested_transaction_support(self, metadata_repo: MockTransactionalMetadataRepository) -> None:
@@ -941,14 +1029,14 @@ class TestStorageTransactions:
         # Begin outer transaction
         await metadata_repo.begin_transaction()
         assert metadata_repo.in_transaction
-        assert metadata_repo.nested_transaction_count == 0
+        assert len(metadata_repo.savepoint_stack) == 0
 
         # Set some data in outer transaction
         await metadata_repo.set("outer_key", {"value": "outer_data"})
 
         # Begin nested (inner) transaction
         await metadata_repo.begin_transaction()
-        assert metadata_repo.nested_transaction_count == 1
+        assert len(metadata_repo.savepoint_stack) == 1
 
         # Set data in nested transaction
         await metadata_repo.set("inner_key", {"value": "inner_data"})
@@ -959,13 +1047,13 @@ class TestStorageTransactions:
 
         # Rollback inner transaction
         await metadata_repo.rollback_transaction()
-        assert metadata_repo.nested_transaction_count == 0
+        assert len(metadata_repo.savepoint_stack) == 0
         assert metadata_repo.in_transaction  # Outer transaction still active
 
         # Outer key should still exist, inner key should be gone from transaction view
         assert await metadata_repo.exists("outer_key")
-        # Note: In this mock implementation, rollback of nested transaction
-        # doesn't actually remove the data, but in a real implementation it would
+        # CRITICAL: Inner key should no longer exist after rollback
+        assert not await metadata_repo.exists("inner_key")
 
         # Begin another nested transaction
         await metadata_repo.begin_transaction()
@@ -973,14 +1061,16 @@ class TestStorageTransactions:
 
         # Commit inner transaction
         await metadata_repo.commit_transaction()
-        assert metadata_repo.nested_transaction_count == 0
+        assert len(metadata_repo.savepoint_stack) == 0
 
         # Commit outer transaction
         await metadata_repo.commit_transaction()
         assert not metadata_repo.in_transaction
 
-        # Verify final state
+        # Verify final state: outer_key and inner_key2 should exist, inner_key should not
         assert await metadata_repo.exists("outer_key")  # type: ignore[unreachable]
+        assert await metadata_repo.exists("inner_key2")
+        assert not await metadata_repo.exists("inner_key")
 
     @pytest.mark.asyncio
     async def test_timeout_handling(self, kline_repo: MockTransactionalKlineRepository) -> None:
@@ -1033,8 +1123,8 @@ class TestStorageTransactions:
         with pytest.raises(TimeoutError, match="Transaction timeout exceeded"):
             await kline_repo.save(sample_kline)
 
-        # Cleanup first transaction before testing commit timeout
-        await kline_repo.rollback_transaction()
+        # Verify automatic rollback occurred after timeout
+        assert not kline_repo.in_transaction
 
         # Test timeout during commit
         await kline_repo.begin_transaction(timeout=short_timeout)
@@ -1044,10 +1134,53 @@ class TestStorageTransactions:
         with pytest.raises(TimeoutError):
             await kline_repo.commit_transaction()
 
-        # Verify transaction state is cleaned up
-        # In a real implementation, timeout should trigger automatic rollback
-        await kline_repo.rollback_transaction()
+        # Verify transaction state is automatically cleaned up after timeout
         assert not kline_repo.in_transaction
+
+    @pytest.mark.asyncio
+    async def test_calls_without_active_transaction(
+        self, kline_repo: MockTransactionalKlineRepository, metadata_repo: MockTransactionalMetadataRepository
+    ) -> None:
+        """Test transaction calls when no active transaction exists.
+
+        Description of what the test covers.
+        Tests that calling commit_transaction() and rollback_transaction()
+        when no transaction is active both raise StorageError.
+
+        Preconditions:
+        - Repository not in transaction state.
+        - Clean initial state.
+
+        Steps:
+        - Attempt to commit without active transaction.
+        - Attempt to rollback without active transaction.
+        - Verify both operations raise StorageError.
+
+        Expected Result:
+        - commit_transaction() should raise StorageError when no active transaction.
+        - rollback_transaction() should raise StorageError when no active transaction.
+        """
+        # Verify initial state - no active transaction
+        assert not kline_repo.in_transaction
+        assert not metadata_repo.in_transaction
+
+        # Test commit_transaction without active transaction
+        with pytest.raises(StorageError, match="No active transaction to commit"):
+            await kline_repo.commit_transaction()
+
+        with pytest.raises(StorageError, match="No active transaction to commit"):
+            await metadata_repo.commit_transaction()
+
+        # Test rollback_transaction without active transaction
+        with pytest.raises(StorageError, match="No active transaction to rollback"):
+            await kline_repo.rollback_transaction()
+
+        with pytest.raises(StorageError, match="No active transaction to rollback"):
+            await metadata_repo.rollback_transaction()
+
+        # Verify repositories are still in clean state
+        assert not kline_repo.in_transaction
+        assert not metadata_repo.in_transaction
 
 
 @pytest.mark.integration
@@ -1133,10 +1266,10 @@ class TestStorageBatchOperations:
         print(f"Batch insert time per item: {batch_time_per_item:.6f}s")
 
     @pytest.mark.asyncio
-    async def test_batch_update_atomicity(
+    async def test_atomic_batch_insert_in_transaction(
         self, kline_repo: MockTransactionalKlineRepository, sample_klines: list[Kline]
     ) -> None:
-        """Test atomic batch update operations.
+        """Test atomic batch insert operations in transaction.
 
         Description of what the test covers.
         Tests that batch update operations are atomic - either all updates

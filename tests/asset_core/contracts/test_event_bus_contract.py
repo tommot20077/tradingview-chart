@@ -784,6 +784,20 @@ class TestAbstractEventBusContract(BaseContractTest, AsyncContractTestMixin):
         with pytest.raises(RuntimeError):
             event_bus.get_subscription_count()
 
+        # Test that unsubscribe operations also fail when closed
+        with pytest.raises(RuntimeError):
+            event_bus.unsubscribe("test_sub_id")
+
+        with pytest.raises(RuntimeError):
+            event_bus.unsubscribe_all()
+
+        with pytest.raises(RuntimeError):
+            event_bus.unsubscribe_all(EventType.TRADE)
+
+        # Test that wait_for also fails when closed
+        with pytest.raises(RuntimeError):
+            await event_bus.wait_for(EventType.SYSTEM, timeout=0.1)
+
     @pytest.mark.asyncio
     async def test_handler_error_resilience(self, event_bus: MockEventBus) -> None:
         """Test that handler errors don't break the event bus.
@@ -866,3 +880,175 @@ class TestAbstractEventBusContract(BaseContractTest, AsyncContractTestMixin):
         # Cleanup
         for sub_id in handlers.values():
             event_bus.unsubscribe(sub_id)
+
+    def test_subscribe_invalid_handler_type(self, event_bus: MockEventBus) -> None:
+        """Test that invalid handler types raise ValueError.
+
+        Description of what the test covers.
+        Verifies that passing non-callable objects as handlers raises
+        appropriate ValueError exceptions.
+
+        Expected Result:
+        - Non-callable objects (None, string, int, etc.) raise ValueError.
+        - Error message is clear and helpful.
+        - Event bus remains operational after error.
+        """
+        # Test with None
+        with pytest.raises(ValueError, match="Handler must be callable"):
+            event_bus.subscribe(EventType.TRADE, None)  # type: ignore[arg-type]
+
+        # Test with string
+        with pytest.raises(ValueError, match="Handler must be callable"):
+            event_bus.subscribe(EventType.TRADE, "not_callable")  # type: ignore[arg-type]
+
+        # Test with integer
+        with pytest.raises(ValueError, match="Handler must be callable"):
+            event_bus.subscribe(EventType.TRADE, 42)  # type: ignore[arg-type]
+
+        # Test with dict
+        with pytest.raises(ValueError, match="Handler must be callable"):
+            event_bus.subscribe(EventType.TRADE, {"not": "callable"})  # type: ignore[arg-type]
+
+        # Verify event bus is still operational
+        assert not event_bus.is_closed
+        assert event_bus.get_subscription_count() == 0
+
+    @pytest.mark.asyncio
+    async def test_wait_for_timeout_zero(self, event_bus: MockEventBus) -> None:
+        """Test that wait_for with timeout=0 raises TimeoutError immediately.
+
+        Description of what the test covers.
+        Verifies that setting timeout=0 in wait_for causes an immediate
+        TimeoutError to be raised without waiting.
+
+        Expected Result:
+        - TimeoutError is raised immediately.
+        - No actual waiting occurs.
+        - Event bus remains operational.
+        """
+        # Test with timeout=0 should raise TimeoutError immediately
+        with pytest.raises(asyncio.TimeoutError):
+            await event_bus.wait_for(EventType.TRADE, timeout=0)
+
+        # Verify event bus is still operational
+        assert not event_bus.is_closed
+
+    @pytest.mark.asyncio
+    async def test_wait_for_always_false_filter(self, event_bus: MockEventBus) -> None:
+        """Test wait_for with filter function that always returns False.
+
+        Description of what the test covers.
+        Verifies that a filter function that always returns False
+        causes wait_for to timeout even when matching events are published.
+
+        Expected Result:
+        - TimeoutError is raised when filter never matches.
+        - Events are published but filtered out.
+        - Event bus remains operational.
+        """
+
+        # Define a filter that always returns False
+        def always_false_filter(_event: BaseEvent[Any]) -> bool:
+            return False
+
+        # Start a task that publishes events
+        async def publish_events() -> None:
+            await asyncio.sleep(0.01)
+            for i in range(3):
+                test_event = MockEvent(EventType.TRADE, "BTCUSDT", {"price": 50000 + i})
+                await event_bus.publish(test_event)
+                await asyncio.sleep(0.01)
+
+        publish_task = asyncio.create_task(publish_events())
+
+        # wait_for should timeout because filter never matches
+        with pytest.raises(asyncio.TimeoutError):
+            await event_bus.wait_for(EventType.TRADE, timeout=0.1, filter_func=always_false_filter)
+
+        await publish_task
+
+        # Verify event bus is still operational
+        assert not event_bus.is_closed
+
+    @pytest.mark.asyncio
+    async def test_publish_with_no_subscribers(self, event_bus: MockEventBus) -> None:
+        """Test publishing events when there are no subscribers.
+
+        Description of what the test covers.
+        Verifies that publishing events to an event bus with no subscribers
+        does not raise exceptions and completes successfully.
+
+        Expected Result:
+        - No exceptions are raised.
+        - Publish completes successfully.
+        - Event bus remains operational.
+        """
+        # Ensure no subscribers exist
+        assert event_bus.get_subscription_count() == 0
+
+        # Publish various types of events
+        events = [
+            MockEvent(EventType.TRADE, "BTCUSDT", {"price": 50000}),
+            MockEvent(EventType.KLINE, "ETHUSDT", {"ohlc": [3000, 3100, 2900, 3050]}),
+            MockEvent(EventType.SYSTEM, None, {"message": "test"}),
+        ]
+
+        # All publishes should succeed without error
+        for event in events:
+            await event_bus.publish(event)
+
+        # Verify event bus is still operational
+        assert not event_bus.is_closed
+        assert event_bus.get_subscription_count() == 0
+
+    @pytest.mark.asyncio
+    async def test_handler_error_logging(self, event_bus: MockEventBus) -> None:
+        """Test that handler errors are properly logged.
+
+        Description of what the test covers.
+        Verifies that when event handlers raise exceptions, the errors
+        are properly logged and don't break the event bus operation.
+
+        Expected Result:
+        - Handler errors are logged to stdout/stderr.
+        - Other handlers continue to receive events.
+        - Event bus remains operational.
+        """
+        from unittest.mock import patch
+
+        successful_events = []
+
+        def failing_handler(_event: BaseEvent[Any]) -> None:
+            raise ValueError("Test handler error")
+
+        def successful_handler(event: BaseEvent[Any]) -> None:
+            successful_events.append(event)
+
+        # Subscribe both handlers
+        failing_sub_id = event_bus.subscribe(EventType.TRADE, failing_handler)
+        successful_sub_id = event_bus.subscribe(EventType.TRADE, successful_handler)
+
+        # Patch print to capture error logging
+        with patch("builtins.print") as mock_print:
+            # Publish event
+            test_event = MockEvent(EventType.TRADE, "BTCUSDT", {"price": 50000})
+            await event_bus.publish(test_event)
+
+            await asyncio.sleep(0.001)
+
+            # Verify error was logged
+            mock_print.assert_called_once()
+            call_args = mock_print.call_args[0][0]
+            assert "Handler error:" in call_args
+            assert "Test handler error" in call_args
+
+        # Verify successful handler still received the event
+        assert len(successful_events) == 1
+        assert successful_events[0] == test_event
+
+        # Verify event bus is still operational
+        assert not event_bus.is_closed
+
+        # Cleanup
+        event_bus.unsubscribe(failing_sub_id)
+        event_bus.unsubscribe(successful_sub_id)

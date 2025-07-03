@@ -10,9 +10,14 @@ from typing import Any
 
 import pytest
 
+try:
+    import time_machine
+except ImportError:
+    time_machine = None  # type: ignore[assignment]
+
 from asset_core.storage.metadata_repo import AbstractMetadataRepository
-from .base_contract_test import AsyncContractTestMixin, BaseContractTest, \
-    MockImplementationBase
+
+from .base_contract_test import AsyncContractTestMixin, BaseContractTest, MockImplementationBase
 
 
 class MockMetadataRepository(AbstractMetadataRepository, MockImplementationBase):
@@ -69,10 +74,14 @@ class MockMetadataRepository(AbstractMetadataRepository, MockImplementationBase)
                                     and JSON-serializable.
 
         Raises:
-            ValueError: If `value` is not a dictionary or is not JSON-serializable.
+            ValueError: If `key` is empty string, or if `value` is not a dictionary or is not JSON-serializable.
             RuntimeError: If the repository is closed.
         """
         self._check_not_closed()
+
+        # Validate key is not empty string
+        if key == "":
+            raise ValueError("Key cannot be empty string")
 
         if not isinstance(value, dict):
             raise ValueError("Value must be a dictionary")
@@ -100,7 +109,13 @@ class MockMetadataRepository(AbstractMetadataRepository, MockImplementationBase)
             RuntimeError: If the repository is closed.
         """
         self._check_not_closed()
-        self._cleanup_expired(key)
+
+        # Check if key has expired before returning data
+        if self._is_expired(key):
+            # Remove expired key immediately
+            self._metadata.pop(key, None)
+            self._ttl_data.pop(key, None)
+            return None
 
         return self._metadata.get(key)
 
@@ -117,7 +132,13 @@ class MockMetadataRepository(AbstractMetadataRepository, MockImplementationBase)
             RuntimeError: If the repository is closed.
         """
         self._check_not_closed()
-        self._cleanup_expired(key)
+
+        # Check if key has expired before checking existence
+        if self._is_expired(key):
+            # Remove expired key immediately
+            self._metadata.pop(key, None)
+            self._ttl_data.pop(key, None)
+            return False
 
         return key in self._metadata
 
@@ -592,17 +613,17 @@ class TestAbstractMetadataRepositoryContract(BaseContractTest, AsyncContractTest
         # Test listing all keys
         all_keys = await repo.list_keys()
         assert len(all_keys) == 5
-        assert set(all_keys) == set(test_data.keys())
+        assert all_keys == sorted(test_data.keys())
 
         # Test prefix filtering
         user_keys = await repo.list_keys("user:")
         assert len(user_keys) == 2
         assert all(key.startswith("user:") for key in user_keys)
-        assert set(user_keys) == {"user:123", "user:456"}
+        assert user_keys == sorted(["user:123", "user:456"])
 
         config_keys = await repo.list_keys("config:")
         assert len(config_keys) == 2
-        assert set(config_keys) == {"config:app", "config:db"}
+        assert config_keys == sorted(["config:app", "config:db"])
 
         # Test non-matching prefix
         no_match_keys = await repo.list_keys("nonexistent:")
@@ -647,6 +668,44 @@ class TestAbstractMetadataRepositoryContract(BaseContractTest, AsyncContractTest
         # Note: Testing actual expiration would require time manipulation
         # which is complex in unit tests. The mock implementation shows
         # the expected behavior pattern.
+
+    @pytest.mark.asyncio
+    @pytest.mark.skipif(time_machine is None, reason="time-machine not installed")
+    async def test_ttl_expiration_and_cleanup(self, repo: MockMetadataRepository) -> None:
+        """Test TTL expiration and automatic cleanup behavior.
+
+        Description of what the test covers.
+        Verifies that keys with TTL expire correctly and are treated as
+        non-existent after their expiration time.
+
+        Expected Result:
+        - Keys exist and are accessible within TTL.
+        - Keys are inaccessible after TTL expiration.
+        - Expired keys are not included in list_keys() results.
+        """
+        ttl_data = {"temp": "data", "will_expire": True}
+
+        with time_machine.travel("2024-01-01 12:00:00") as traveler:
+            # Set a key with 60-second TTL
+            await repo.set_with_ttl("ttl:expire_test", ttl_data, 60)
+
+            # Should be accessible immediately
+            assert await repo.get("ttl:expire_test") == ttl_data
+            assert await repo.exists("ttl:expire_test") is True
+
+            keys = await repo.list_keys()
+            assert "ttl:expire_test" in keys
+
+            # Advance time by 61 seconds (beyond TTL)
+            traveler.shift(61)
+
+            # Key should now be expired and inaccessible
+            assert await repo.get("ttl:expire_test") is None
+            assert await repo.exists("ttl:expire_test") is False
+
+            # Expired key should not appear in list_keys
+            keys_after_expiry = await repo.list_keys()
+            assert "ttl:expire_test" not in keys_after_expiry
 
     @pytest.mark.asyncio
     async def test_sync_time_management_interface(self, repo: MockMetadataRepository) -> None:
@@ -769,3 +828,144 @@ class TestAbstractMetadataRepositoryContract(BaseContractTest, AsyncContractTest
         await self.assert_method_raises_when_not_ready(repo, "exists", RuntimeError, "test_key")
 
         await self.assert_method_raises_when_not_ready(repo, "list_keys", RuntimeError)
+
+        # Test additional methods that should also fail when closed
+        await self.assert_method_raises_when_not_ready(repo, "delete", RuntimeError, "test_key")
+
+        await self.assert_method_raises_when_not_ready(repo, "set_with_ttl", RuntimeError, "test_key", test_data, 60)
+
+        from datetime import UTC, datetime
+
+        test_timestamp = datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC)
+
+        await self.assert_method_raises_when_not_ready(repo, "get_last_sync_time", RuntimeError, "BTCUSDT", "klines_1m")
+
+        await self.assert_method_raises_when_not_ready(
+            repo, "set_last_sync_time", RuntimeError, "BTCUSDT", "klines_1m", test_timestamp
+        )
+
+        await self.assert_method_raises_when_not_ready(
+            repo, "get_backfill_status", RuntimeError, "BTCUSDT", "klines_1m"
+        )
+
+        test_status = {"status": "in_progress", "progress": 0.5, "last_updated": "2024-01-01T12:00:00Z"}
+        await self.assert_method_raises_when_not_ready(
+            repo, "set_backfill_status", RuntimeError, "BTCUSDT", "klines_1m", test_status
+        )
+
+    @pytest.mark.asyncio
+    async def test_key_and_prefix_boundary_conditions(self, repo: MockMetadataRepository) -> None:
+        """Test boundary conditions for keys and prefixes.
+
+        Description of what the test covers.
+        Verifies behavior with edge case keys and prefixes including
+        empty strings and None values.
+
+        Expected Result:
+        - Empty string keys behavior is defined (allowed or raises ValueError).
+        - list_keys(prefix=None) behaves same as list_keys().
+        - list_keys(prefix="") returns all keys.
+        - Prefix exactly matching a key is included in results.
+        """
+        # Set up test data
+        test_data = {
+            "user:123": {"name": "Alice"},
+            "user:456": {"name": "Bob"},
+            "user": {"type": "root"},  # Key that matches a common prefix
+            "config": {"app": "settings"},
+        }
+
+        for key, value in test_data.items():
+            await repo.set(key, value)
+
+        # Test empty string key behavior - define contract as ValueError
+        with pytest.raises(ValueError):
+            await repo.set("", {"empty": "key"})
+
+        # Test list_keys(prefix=None) behavior - should be same as list_keys()
+        all_keys_no_prefix = await repo.list_keys()
+        all_keys_none_prefix = await repo.list_keys(None)
+        assert all_keys_no_prefix == all_keys_none_prefix
+
+        # Test list_keys(prefix="") behavior - should return all keys
+        all_keys_empty_prefix = await repo.list_keys("")
+        assert all_keys_empty_prefix == sorted(test_data.keys())
+
+        # Test prefix exactly matching a key
+        user_prefix_keys = await repo.list_keys("user")
+        # Should include "user" key and "user:123", "user:456" keys
+        expected_user_keys = ["user", "user:123", "user:456"]
+        assert user_prefix_keys == sorted(expected_user_keys)
+
+        # Test prefix that matches only one exact key
+        config_prefix_keys = await repo.list_keys("config")
+        assert "config" in config_prefix_keys
+
+    @pytest.mark.asyncio
+    async def test_data_mutability_and_complexity(self, repo: MockMetadataRepository) -> None:
+        """Test data overwrite and complex data structure handling.
+
+        Description of what the test covers.
+        Verifies that data can be overwritten with completely different
+        structures and that complex nested data is handled correctly.
+
+        Expected Result:
+        - Data overwrite with different structure works correctly.
+        - Complex nested dictionaries are stored and retrieved without data loss.
+        - No corruption occurs with deeply nested structures.
+        """
+        test_key = "complex:data"
+
+        # Set initial simple structure
+        initial_data = {"a": 1}
+        await repo.set(test_key, initial_data)
+
+        retrieved = await repo.get(test_key)
+        assert retrieved == initial_data
+
+        # Overwrite with completely different structure
+        new_structure = {"b": {"c": [2, 3], "d": {"nested": True}}}
+        await repo.set(test_key, new_structure)
+
+        retrieved_new = await repo.get(test_key)
+        assert retrieved_new == new_structure
+        assert retrieved_new != initial_data
+
+        # Test complex, deeply nested dictionary
+        complex_data = {
+            "level1": {
+                "level2": {
+                    "level3": {
+                        "level4": {
+                            "arrays": [1, 2, {"nested_in_array": True}],
+                            "mixed_types": {
+                                "string": "value",
+                                "number": 42.5,
+                                "boolean": False,
+                                "null": None,
+                                "list": [{"item1": "value1"}, {"item2": ["nested", "array", {"deep": "structure"}]}],
+                            },
+                        }
+                    }
+                }
+            },
+            "metadata": {
+                "created": "2024-01-01T12:00:00Z",
+                "tags": ["test", "complex", "nested"],
+                "config": {"retries": 3, "timeout": 30.5, "enabled": True},
+            },
+        }
+
+        complex_key = "complex:nested"
+        await repo.set(complex_key, complex_data)
+
+        retrieved_complex = await repo.get(complex_key)
+        assert retrieved_complex == complex_data
+
+        # Verify no data corruption by checking specific nested values
+        assert retrieved_complex["level1"]["level2"]["level3"]["level4"]["arrays"][2]["nested_in_array"] is True
+        assert retrieved_complex["metadata"]["config"]["timeout"] == 30.5
+        assert (
+            retrieved_complex["level1"]["level2"]["level3"]["level4"]["mixed_types"]["list"][1]["item2"][2]["deep"]
+            == "structure"
+        )

@@ -5,6 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [asset-core 0.2.2] - 2025-07-05
+
+### Enhanced
+- **Comprehensive Test Framework**: Massive expansion of test coverage across all test categories
+  - Added extensive integration tests for config, models, network, and observability components
+  - Enhanced unit test coverage with new test modules for core functionality
+  - Improved test organization and structure for better maintainability
+- **Core Architecture Refinement**: Comprehensive improvements across the entire asset_core system
+  - Enhanced code documentation with improved ABOUTME comments
+  - Refined model implementations with better validation and error handling
+  - Optimized configuration management and observability components
+
+### Improved
+- **Code Quality**: Extensive code formatting and style improvements across 118 files
+  - Standardized code formatting and import organization
+  - Enhanced readability through consistent styling
+  - Improved docstrings and inline documentation
+- **Test Infrastructure**: Significant enhancements to testing capabilities
+  - Added contract tests for data providers, event bus, and storage repositories
+  - Enhanced test configuration and helper utilities
+  - Improved test coverage reporting and analysis
+
+### Infrastructure
+- **Project Configuration**: Updated build and development configurations
+  - Enhanced `pyproject.toml` with updated dependencies
+  - Improved `.gitignore` rules for better file management
+  - Version bump to 0.2.2 with updated package metadata
+
+### Developer Experience
+- **Enhanced Testing**: Developers now have access to comprehensive test suites covering all aspects of the system
+- **Better Code Organization**: Improved code structure and documentation make the codebase more accessible
+- **Development Tools**: Enhanced tooling support for testing and development workflows
+
+---
+
+### Git Commit Reference
+- Main Change: [45e2db2](https://github.com/tommot20077/tradingview-chart/commit/45e2db259f61646d41ee2b428bf428f13200e9b0) - v0.2.2
+
 ## [asset-core 0.2.1] - 2025-07-02
 
 ### Added

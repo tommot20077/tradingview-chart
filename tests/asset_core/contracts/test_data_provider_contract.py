@@ -33,6 +33,90 @@ class MockDataProvider(AbstractDataProvider, MockImplementationBase):
         self._provider_name = provider_name
         self._ping_latency = 50.0  # Mock latency in ms
 
+        # Predefined valid symbols for testing
+        self._valid_symbols = {"BTCUSDT", "ETHUSDT", "ADAUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT"}
+
+        # Predefined historical data for testing
+        self._predefined_trades = self._generate_predefined_trades()
+        self._predefined_klines = self._generate_predefined_klines()
+
+    def _generate_predefined_trades(self) -> dict[str, list[Trade]]:
+        """Generate predefined trade data for testing."""
+        trades_data = {}
+        base_time = datetime(2024, 1, 1, tzinfo=UTC)
+
+        for symbol in self._valid_symbols:
+            trades = []
+            base_price = 50000.0 if symbol == "BTCUSDT" else 3000.0
+
+            # Generate 200 trades across different time periods
+            for i in range(200):
+                trade = Trade(
+                    symbol=symbol,
+                    trade_id=f"predefined_trade_{symbol}_{i}",
+                    price=base_price + i * 10,
+                    quantity=1.0 + i * 0.1,
+                    timestamp=base_time.replace(
+                        hour=i // 10, minute=(i % 10) * 6, second=i % 60, microsecond=(i * 1000) % 1000000
+                    ),
+                    side="buy" if i % 2 == 0 else "sell",
+                    is_maker=i % 3 == 0,
+                )
+                trades.append(trade)
+
+            trades_data[symbol] = trades
+
+        return trades_data
+
+    def _generate_predefined_klines(self) -> dict[tuple[str, KlineInterval], list[Kline]]:
+        """Generate predefined kline data for testing."""
+        klines_data = {}
+        base_time = datetime(2024, 1, 1, tzinfo=UTC)
+
+        for symbol in self._valid_symbols:
+            for interval in [KlineInterval.MINUTE_1, KlineInterval.HOUR_1, KlineInterval.DAY_1]:
+                klines = []
+                base_price = 50000.0 if symbol == "BTCUSDT" else 3000.0
+
+                # Generate 50 klines across different time periods
+                for i in range(50):
+                    if interval == KlineInterval.MINUTE_1:
+                        # Use hours and minutes for MINUTE_1 interval
+                        hour_part = i // 60
+                        minute_part = i % 60
+                        open_time = base_time.replace(hour=hour_part, minute=minute_part, second=0, microsecond=0)
+                        close_time = open_time.replace(second=59, microsecond=999999)
+                    elif interval == KlineInterval.HOUR_1:
+                        # Use day and hour for HOUR_1 interval
+                        day_part = (i // 24) + 1
+                        hour_part = i % 24
+                        open_time = base_time.replace(day=day_part, hour=hour_part, minute=0, second=0, microsecond=0)
+                        close_time = open_time.replace(minute=59, second=59, microsecond=999999)
+                    else:  # DAY_1
+                        # Use day for DAY_1 interval
+                        day_part = (i % 28) + 1
+                        open_time = base_time.replace(day=day_part, hour=0, minute=0, second=0, microsecond=0)
+                        close_time = open_time.replace(hour=23, minute=59, second=59, microsecond=999999)
+
+                    kline = Kline(
+                        symbol=symbol,
+                        interval=interval,
+                        open_time=open_time,
+                        close_time=close_time,
+                        open_price=base_price + i * 50,
+                        high_price=base_price + i * 50 + 100,
+                        low_price=base_price + i * 50 - 100,
+                        close_price=base_price + i * 50 + 25,
+                        volume=100.0 + i * 10,
+                        quote_volume=base_price * 100 + i * 10000,
+                        trades_count=1000 + i * 100,
+                    )
+                    klines.append(kline)
+
+                klines_data[(symbol, interval)] = klines
+
+        return klines_data
+
     @property
     def name(self) -> str:
         return self._provider_name
@@ -60,10 +144,9 @@ class MockDataProvider(AbstractDataProvider, MockImplementationBase):
     async def disconnect(self) -> None:
         """Disconnects from the mock data provider.
 
-        Resets the `is_connected` flag.
+        Resets the `is_connected` flag. This operation is idempotent.
         """
-        if self._is_connected:
-            self._is_connected = False
+        self._is_connected = False
 
     async def stream_trades(self, symbol: str, *, start_from: datetime | None = None) -> AsyncIterator[Trade]:  # noqa: ARG002
         """Streams mock real-time trades for a given symbol.
@@ -78,9 +161,14 @@ class MockDataProvider(AbstractDataProvider, MockImplementationBase):
 
         Raises:
             RuntimeError: If the provider is not connected or is closed.
+            ValueError: If the symbol is not found.
         """
-        self._check_connected()
         self._check_not_closed()
+        self._check_connected()
+
+        # Check if symbol exists in our predefined valid symbols
+        if symbol not in self._valid_symbols:
+            raise ValueError(f"Symbol '{symbol}' not found")
 
         # Generate mock trades
         base_time = datetime.now(UTC)
@@ -117,9 +205,14 @@ class MockDataProvider(AbstractDataProvider, MockImplementationBase):
 
         Raises:
             RuntimeError: If the provider is not connected or is closed.
+            ValueError: If the symbol is not found.
         """
-        self._check_connected()
         self._check_not_closed()
+        self._check_connected()
+
+        # Check if symbol exists in our predefined valid symbols
+        if symbol not in self._valid_symbols:
+            raise ValueError(f"Symbol '{symbol}' not found")
 
         # Generate mock klines
         base_time = datetime.now(UTC)
@@ -159,32 +252,37 @@ class MockDataProvider(AbstractDataProvider, MockImplementationBase):
 
         Raises:
             RuntimeError: If the provider is not connected or is closed.
+            ValueError: If start_time > end_time.
         """
-        self._check_connected()
         self._check_not_closed()
+        self._check_connected()
 
-        # Generate mock historical trades
-        trades = []
-        base_time = start_time
-        count = min(limit or 100, 100)  # Cap at 100 for testing
+        # Validate time range
+        if start_time > end_time:
+            raise ValueError("start_time cannot be greater than end_time")
 
-        for i in range(count):
-            trade = Trade(
-                symbol=symbol,
-                trade_id=f"hist_trade_{i}",
-                price=49000.0 + i * 5,
-                quantity=0.5 + i * 0.05,
-                timestamp=base_time.replace(second=i % 60, microsecond=i * 1000),
-                side="buy" if i % 2 == 0 else "sell",
-                is_maker=i % 4 == 0,
-            )
-            trades.append(trade)
+        # Handle edge case where start_time equals end_time
+        if start_time == end_time:
+            return []
 
-            # Respect end_time if provided
-            if end_time and trade.timestamp >= end_time:
-                break
+        # Handle edge case where limit is 0
+        if limit is not None and limit <= 0:
+            return []
 
-        return trades
+        # Get predefined trades for the symbol
+        if symbol not in self._predefined_trades:
+            return []  # Return empty list for non-existent symbols
+
+        all_trades = self._predefined_trades[symbol]
+
+        # Filter trades by time range
+        filtered_trades = [trade for trade in all_trades if start_time <= trade.timestamp < end_time]
+
+        # Apply limit if specified
+        if limit is not None:
+            filtered_trades = filtered_trades[:limit]
+
+        return filtered_trades
 
     async def fetch_historical_klines(
         self,
@@ -209,39 +307,38 @@ class MockDataProvider(AbstractDataProvider, MockImplementationBase):
 
         Raises:
             RuntimeError: If the provider is not connected or is closed.
+            ValueError: If start_time > end_time.
         """
-        self._check_connected()
         self._check_not_closed()
+        self._check_connected()
 
-        # Generate mock historical klines
-        klines = []
-        base_time = start_time
-        count = min(limit or 50, 50)  # Cap at 50 for testing
+        # Validate time range
+        if start_time > end_time:
+            raise ValueError("start_time cannot be greater than end_time")
 
-        for i in range(count):
-            open_time = base_time.replace(hour=i % 24, minute=0, second=0, microsecond=0)
-            close_time = open_time.replace(minute=59, second=59, microsecond=999999)
+        # Handle edge case where start_time equals end_time
+        if start_time == end_time:
+            return []
 
-            # Respect end_time if provided
-            if end_time and open_time >= end_time:
-                break
+        # Handle edge case where limit is 0
+        if limit is not None and limit <= 0:
+            return []
 
-            kline = Kline(
-                symbol=symbol,
-                interval=interval,
-                open_time=open_time,
-                close_time=close_time,
-                open_price=48000.0 + i * 50,
-                high_price=48200.0 + i * 50,
-                low_price=47800.0 + i * 50,
-                close_price=48100.0 + i * 50,
-                volume=200.0 + i * 5,
-                quote_volume=9620000.0 + i * 10000,
-                trades_count=2000 + i * 50,
-            )
-            klines.append(kline)
+        # Get predefined klines for the symbol and interval
+        key = (symbol, interval)
+        if key not in self._predefined_klines:
+            return []  # Return empty list for non-existent symbols or intervals
 
-        return klines
+        all_klines = self._predefined_klines[key]
+
+        # Filter klines by time range
+        filtered_klines = [kline for kline in all_klines if start_time <= kline.open_time < end_time]
+
+        # Apply limit if specified
+        if limit is not None:
+            filtered_klines = filtered_klines[:limit]
+
+        return filtered_klines
 
     async def get_exchange_info(self) -> dict[str, Any]:
         """Retrieves mock exchange information.
@@ -252,8 +349,8 @@ class MockDataProvider(AbstractDataProvider, MockImplementationBase):
         Raises:
             RuntimeError: If the provider is not connected or is closed.
         """
-        self._check_connected()
         self._check_not_closed()
+        self._check_connected()
 
         return {
             "exchange": "MockExchange",
@@ -277,9 +374,14 @@ class MockDataProvider(AbstractDataProvider, MockImplementationBase):
 
         Raises:
             RuntimeError: If the provider is not connected or is closed.
+            ValueError: If the symbol is not found.
         """
-        self._check_connected()
         self._check_not_closed()
+        self._check_connected()
+
+        # Check if symbol exists in our predefined valid symbols
+        if symbol not in self._valid_symbols:
+            raise ValueError(f"Symbol '{symbol}' not found")
 
         return {
             "symbol": symbol,
@@ -303,8 +405,8 @@ class MockDataProvider(AbstractDataProvider, MockImplementationBase):
         Raises:
             RuntimeError: If the provider is not connected or is closed.
         """
-        self._check_connected()
         self._check_not_closed()
+        self._check_connected()
 
         # Simulate network ping
         await asyncio.sleep(0.001)
@@ -314,9 +416,11 @@ class MockDataProvider(AbstractDataProvider, MockImplementationBase):
         """Closes the provider and cleans up resources.
 
         This method disconnects the provider and sets its internal state to closed.
+        This operation is idempotent.
         """
-        await self.disconnect()
-        self._is_closed = True
+        if not self._is_closed:
+            await self.disconnect()
+            self._is_closed = True
 
     async def __aenter__(self) -> "MockDataProvider":
         """Asynchronous context manager entry point.
@@ -849,3 +953,234 @@ class TestAbstractDataProviderContract(BaseContractTest, AsyncContractTestMixin)
         await self.assert_method_raises_when_not_ready(provider, "stream_trades", RuntimeError, "BTCUSDT")
 
         await self.assert_method_raises_when_not_ready(provider, "ping", RuntimeError)
+
+    @pytest.mark.asyncio
+    async def test_historical_data_boundary_conditions(self, provider: MockDataProvider) -> None:
+        """Test various time range and limit boundary conditions for historical data fetching.
+
+        Description of what the test covers:
+        This test verifies that the historical data fetching methods handle edge cases
+        and boundary conditions correctly, including equal start/end times, invalid
+        time ranges, zero/negative limits, and empty result scenarios.
+
+        Expected Result:
+        - start_time == end_time should return empty list
+        - start_time > end_time should raise ValueError
+        - limit=0 should return empty list
+        - limit=1 should return single result
+        - Very large limits should be handled gracefully
+        - Time ranges with no data should return empty list
+        """
+        await provider.connect()
+
+        symbol = "BTCUSDT"
+        base_time = datetime(2024, 1, 1, tzinfo=UTC)
+        end_time = datetime(2024, 1, 1, 1, tzinfo=UTC)
+
+        # Test start_time == end_time (should return empty list)
+        trades = await provider.fetch_historical_trades(symbol, base_time, base_time)
+        assert trades == []
+
+        klines = await provider.fetch_historical_klines(symbol, KlineInterval.MINUTE_1, base_time, base_time)
+        assert klines == []
+
+        # Test start_time > end_time (should raise ValueError)
+        future_time = datetime(2024, 1, 2, tzinfo=UTC)
+        with pytest.raises(ValueError, match="start_time cannot be greater than end_time"):
+            await provider.fetch_historical_trades(symbol, future_time, base_time)
+
+        with pytest.raises(ValueError, match="start_time cannot be greater than end_time"):
+            await provider.fetch_historical_klines(symbol, KlineInterval.MINUTE_1, future_time, base_time)
+
+        # Test limit=0 (should return empty list)
+        trades = await provider.fetch_historical_trades(symbol, base_time, end_time, limit=0)
+        assert trades == []
+
+        klines = await provider.fetch_historical_klines(symbol, KlineInterval.MINUTE_1, base_time, end_time, limit=0)
+        assert klines == []
+
+        # Test limit=1 (should return single result)
+        trades = await provider.fetch_historical_trades(symbol, base_time, end_time, limit=1)
+        assert len(trades) == 1
+        assert isinstance(trades[0], Trade)
+
+        klines = await provider.fetch_historical_klines(symbol, KlineInterval.MINUTE_1, base_time, end_time, limit=1)
+        assert len(klines) == 1
+        assert isinstance(klines[0], Kline)
+
+        # Test very large limit (should be handled gracefully)
+        trades = await provider.fetch_historical_trades(symbol, base_time, end_time, limit=999999)
+        assert isinstance(trades, list)
+        assert len(trades) >= 0
+
+        klines = await provider.fetch_historical_klines(
+            symbol, KlineInterval.MINUTE_1, base_time, end_time, limit=999999
+        )
+        assert isinstance(klines, list)
+        assert len(klines) >= 0
+
+        # Test time range with no data (future date range)
+        future_start = datetime(2025, 1, 1, tzinfo=UTC)
+        future_end = datetime(2025, 1, 2, tzinfo=UTC)
+
+        trades = await provider.fetch_historical_trades(symbol, future_start, future_end)
+        assert trades == []
+
+        klines = await provider.fetch_historical_klines(symbol, KlineInterval.MINUTE_1, future_start, future_end)
+        assert klines == []
+
+    @pytest.mark.asyncio
+    async def test_get_symbol_info_nonexistent_symbol(self, provider: MockDataProvider) -> None:
+        """Test error handling for non-existent symbols in get_symbol_info.
+
+        Description of what the test covers:
+        This test verifies that the get_symbol_info method correctly handles
+        requests for symbols that don't exist in the provider's symbol list,
+        raising appropriate exceptions with clear error messages.
+
+        Expected Result:
+        - Valid symbols should return proper symbol info
+        - Invalid symbols should raise ValueError with descriptive message
+        - Error handling should be consistent
+        """
+        await provider.connect()
+
+        # Test valid symbol - should work
+        valid_symbol = "BTCUSDT"
+        symbol_info = await provider.get_symbol_info(valid_symbol)
+        assert isinstance(symbol_info, dict)
+        assert symbol_info["symbol"] == valid_symbol
+        assert "status" in symbol_info
+        assert "base_asset" in symbol_info
+        assert "quote_asset" in symbol_info
+
+        # Test non-existent symbol - should raise ValueError
+        invalid_symbol = "NONEXISTENT"
+        with pytest.raises(ValueError, match=f"Symbol '{invalid_symbol}' not found"):
+            await provider.get_symbol_info(invalid_symbol)
+
+        # Test another non-existent symbol with different format
+        invalid_symbol2 = "FAKECOIN"
+        with pytest.raises(ValueError, match=f"Symbol '{invalid_symbol2}' not found"):
+            await provider.get_symbol_info(invalid_symbol2)
+
+        # Test empty symbol
+        with pytest.raises(ValueError, match="Symbol '' not found"):
+            await provider.get_symbol_info("")
+
+    @pytest.mark.asyncio
+    async def test_stream_exception_handling(self, provider: MockDataProvider) -> None:
+        """Test exception handling for streaming methods.
+
+        Description of what the test covers:
+        This test verifies that streaming methods properly handle error conditions
+        such as streaming non-existent symbols and connection issues, raising
+        appropriate exceptions before or during stream generation.
+
+        Expected Result:
+        - Streaming non-existent symbols should raise ValueError
+        - Connection state should be properly validated
+        - Error messages should be clear and helpful
+        """
+        await provider.connect()
+
+        # Test streaming trades for non-existent symbol
+        invalid_symbol = "NONEXISTENT"
+        with pytest.raises(ValueError, match=f"Symbol '{invalid_symbol}' not found"):
+            async for _ in provider.stream_trades(invalid_symbol):
+                break  # Should not reach here due to exception
+
+        # Test streaming klines for non-existent symbol
+        with pytest.raises(ValueError, match=f"Symbol '{invalid_symbol}' not found"):
+            async for _ in provider.stream_klines(invalid_symbol, KlineInterval.MINUTE_1):
+                break  # Should not reach here due to exception
+
+        # Test streaming when not connected
+        await provider.disconnect()
+
+        valid_symbol = "BTCUSDT"
+        with pytest.raises(RuntimeError, match="Not connected"):
+            async for _ in provider.stream_trades(valid_symbol):
+                break  # Should not reach here due to exception
+
+        with pytest.raises(RuntimeError, match="Not connected"):
+            async for _ in provider.stream_klines(valid_symbol, KlineInterval.MINUTE_1):
+                break  # Should not reach here due to exception
+
+        # Test streaming when closed
+        await provider.close()
+
+        with pytest.raises(RuntimeError, match="Already closed"):
+            async for _ in provider.stream_trades(valid_symbol):
+                break  # Should not reach here due to exception
+
+        with pytest.raises(RuntimeError, match="Already closed"):
+            async for _ in provider.stream_klines(valid_symbol, KlineInterval.MINUTE_1):
+                break  # Should not reach here due to exception
+
+    @pytest.mark.asyncio
+    async def test_connection_management_idempotency(self, provider: MockDataProvider) -> None:
+        """Test idempotent behavior of connection management methods.
+
+        Description of what the test covers:
+        This test verifies that disconnect and close operations are idempotent,
+        meaning they can be called multiple times without causing errors or
+        side effects, ensuring robust resource management.
+
+        Expected Result:
+        - Multiple calls to disconnect should not raise errors
+        - Multiple calls to close should not raise errors
+        - State should remain consistent after multiple operations
+        - Operations should be safe to call in any order
+        """
+        await provider.connect()
+        assert provider.is_connected
+
+        # Test multiple disconnect calls (should be idempotent)
+        await provider.disconnect()
+        assert not provider.is_connected
+        assert not provider.is_closed  # type: ignore[unreachable]
+
+        # Second disconnect should not raise error
+        await provider.disconnect()
+        assert not provider.is_connected
+        assert not provider.is_closed
+
+        # Third disconnect should not raise error
+        await provider.disconnect()
+        assert not provider.is_connected
+        assert not provider.is_closed
+
+        # Test multiple close calls (should be idempotent)
+        await provider.close()
+        assert not provider.is_connected
+        assert provider.is_closed
+
+        # Second close should not raise error
+        await provider.close()
+        assert not provider.is_connected
+        assert provider.is_closed
+
+        # Third close should not raise error
+        await provider.close()
+        assert not provider.is_connected
+        assert provider.is_closed
+
+        # Test disconnect after close (should be safe)
+        await provider.disconnect()
+        assert not provider.is_connected
+        assert provider.is_closed
+
+        # Test another provider instance for different scenario
+        provider2 = MockDataProvider("test_provider_2")
+
+        # Test close without connect (should be idempotent)
+        await provider2.close()
+        assert not provider2.is_connected
+        assert provider2.is_closed
+
+        # Test multiple close calls on never-connected provider
+        await provider2.close()
+        await provider2.close()
+        assert not provider2.is_connected
+        assert provider2.is_closed

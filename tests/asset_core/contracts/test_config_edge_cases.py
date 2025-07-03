@@ -51,7 +51,7 @@ class TestConfigurationEdgeCases:
         assert len(required_errors) > 0
         assert required_errors[0]["type"] == "missing"
 
-        # Test BaseStorageConfig missing database_url
+        # Test BaseStorageConfig missing database_url (now required)
         with pytest.raises(ValidationError) as exc_info:
             BaseStorageConfig()
 
@@ -71,7 +71,7 @@ class TestConfigurationEdgeCases:
         error_details = exc_info.value.errors()
         missing_fields = {error["loc"][0] for error in error_details if error["type"] == "missing"}
 
-        # BaseCoreSettings has app_name with default, only check for fields without defaults
+        # Check for fields without defaults (database_url is now required)
         expected_missing = {"database_url", "api_token", "service_id"}
         assert expected_missing.issubset(missing_fields)
 

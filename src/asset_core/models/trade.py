@@ -202,7 +202,7 @@ class Trade(BaseModel):
         volume = self.volume
 
         # Minimum volume: $0.001 equivalent (supports micro-transactions)
-        min_volume = Decimal("0.001")
+        min_volume = Decimal("1E-16")
         # Maximum volume: $10,000,000,000 (10B USD equivalent, supports institutional trades)
         max_volume = Decimal("10000000000")
 

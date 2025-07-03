@@ -1185,29 +1185,40 @@ class TestValidationMixin:
         Steps:
         - Create custom validator.
         - Use ValidationMixin.create_pydantic_validator to create function.
-        - Test the created function with mock validation info.
+        - Test the created function with real Pydantic model.
         - Verify it behaves like Pydantic validator.
 
         Expected Result:
         - Function should be created successfully.
         - Function should handle Pydantic validation context correctly.
         """
-        validator = RangeValidator(min_value=0, max_value=100)
-        pydantic_validator = ValidationMixin.create_pydantic_validator(validator)
+        from pydantic import BaseModel, ValidationError, field_validator
 
-        # Mock Pydantic validation info
-        class MockValidationInfo:
-            def __init__(self, field_name: str):
-                self.field_name = field_name
+        validator = RangeValidator(min_value=0, max_value=100)
+        pydantic_validator_func = ValidationMixin.create_pydantic_validator(validator)
+
+        # Create a real Pydantic model that uses the validator
+        class TestModel(BaseModel):
+            value: int
+
+            @field_validator("value")
+            @classmethod
+            def validate_value(cls, v: int, info: Any) -> int:
+                result = pydantic_validator_func(v, info)
+                return int(result)
 
         # Test successful validation
-        result = pydantic_validator(50, MockValidationInfo("test_field"))
-        assert result == 50
+        model = TestModel(value=50)
+        assert model.value == 50
 
         # Test validation failure
-        with pytest.raises(ValueError) as exc_info:
-            pydantic_validator(150, MockValidationInfo("test_field"))
-        assert "exceeds maximum 100" in str(exc_info.value)
+        with pytest.raises(ValidationError) as exc_info:
+            TestModel(value=150)
+
+        # Verify the error contains our custom validation message
+        error_details = exc_info.value.errors()
+        assert len(error_details) > 0
+        assert "exceeds maximum 100" in str(error_details[0]["msg"])
 
     def test_create_pydantic_validator_with_none_info(self) -> None:
         """Test Pydantic validator function with None validation info.
@@ -1267,7 +1278,6 @@ class TestValidatorEdgeCases:
         - Infinity and NaN values should be handled gracefully
         - Appropriate errors should be raised for invalid values
         """
-        import math
 
         validator = RangeValidator(min_value=0, max_value=100, inclusive=True)
 
@@ -1282,10 +1292,10 @@ class TestValidatorEdgeCases:
         assert "below minimum 0" in str(exc_info.value)
 
         # Test NaN (Not a Number)
-        # NaN passes type check but comparisons behave unexpectedly
-        # This documents current behavior - NaN may pass through validation
-        nan_result = validator.validate(float("nan"), "test_field")
-        assert math.isnan(nan_result)  # NaN passes through due to comparison behavior
+        # NaN should be rejected as an invalid value for range validation
+        with pytest.raises(DataValidationError) as exc_info:
+            validator.validate(float("nan"), "test_field")
+        assert "NaN values are not allowed" in str(exc_info.value) or "Value must be numeric" in str(exc_info.value)
 
     def test_range_validator_with_very_large_decimals(self) -> None:
         """Test RangeValidator with extremely large Decimal values.

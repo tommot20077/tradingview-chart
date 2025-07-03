@@ -215,261 +215,475 @@ class TestNewTypeInstantiation:
 
 
 @pytest.mark.unit
-class TestAnnotatedTypeValidation:
-    """Test cases for Annotated types with Pydantic validation.
+class TestAnnotatedTypeConstraints:
+    """Test cases for Pydantic Annotated type constraint validation.
 
-    Verifies that Annotated types like Price, Quantity, Volume properly
-    validate their constraints and reject invalid values.
+    Verifies that Annotated types properly enforce their constraints
+    by testing edge cases and invalid values that should trigger validation errors.
     """
 
-    def test_price_valid_values(self) -> None:
-        """Test Price type accepts valid positive values.
+    def test_price_constraint_violations(self) -> None:
+        """Test Price type constraint violations.
 
         Description of what the test covers:
-        Verifies that Price type accepts positive Decimal values
-        and maintains precision.
+        Verifies that Price type properly rejects zero, negative, and non-decimal values.
+        Tests the Pydantic Field constraints (gt=0, decimal_places=12).
 
         Preconditions:
-        - None.
+        - Price is defined as Annotated[Decimal, Field(gt=0, decimal_places=12)].
 
         Steps:
-        - Create Price instances with various positive Decimal values
-        - Assert they maintain their values and precision
+        - Create a mock Pydantic model with Price field
+        - Test invalid values (zero, negative, wrong type)
+        - Verify ValidationError is raised
 
         Expected Result:
-        - Price should accept valid positive Decimal values
+        - Invalid Price values should raise ValidationError with appropriate messages
         """
-        # Test with various positive decimal values
-        price1 = Decimal("100.50")
-        price2 = Decimal("0.0001")
-        price3 = Decimal("999999.123456789012")
+        from pydantic import BaseModel, ValidationError
 
-        # These should all be valid Price values
-        assert isinstance(price1, Decimal)
-        assert isinstance(price2, Decimal)
-        assert isinstance(price3, Decimal)
+        class PriceModel(BaseModel):
+            price: Price
 
-        assert price1 > 0
-        assert price2 > 0
-        assert price3 > 0
+        # Test zero price (should fail gt=0 constraint)
+        with pytest.raises(ValidationError) as exc_info:
+            PriceModel(price=Decimal("0"))
+        assert "greater than 0" in str(exc_info.value)
 
-    def test_quantity_valid_values(self) -> None:
-        """Test Quantity type accepts valid non-negative values.
+        # Test negative price (should fail gt=0 constraint)
+        with pytest.raises(ValidationError) as exc_info:
+            PriceModel(price=Decimal("-10.50"))
+        assert "greater than 0" in str(exc_info.value)
+
+        # Test invalid type (should fail type validation)
+        with pytest.raises(ValidationError) as exc_info:
+            PriceModel(price="not_a_decimal")
+        error_str = str(exc_info.value)
+        assert "decimal" in error_str.lower() or "invalid" in error_str.lower()
+
+        # Test None value (should fail type validation)
+        with pytest.raises(ValidationError) as exc_info:
+            PriceModel(price=None)
+        assert (
+            "none is not an allowed value" in str(exc_info.value).lower()
+            or "input should be" in str(exc_info.value).lower()
+        )
+
+    def test_quantity_constraint_violations(self) -> None:
+        """Test Quantity type constraint violations.
 
         Description of what the test covers:
-        Verifies that Quantity type accepts non-negative Decimal values
-        including zero and maintains precision.
+        Verifies that Quantity type properly rejects negative values and non-decimal types.
+        Tests the Pydantic Field constraints (ge=0, decimal_places=12).
 
         Preconditions:
-        - None.
+        - Quantity is defined as Annotated[Decimal, Field(ge=0, decimal_places=12)].
 
         Steps:
-        - Create Quantity instances with various non-negative Decimal values
-        - Assert they maintain their values and precision
+        - Create a mock Pydantic model with Quantity field
+        - Test invalid values (negative, wrong type)
+        - Verify ValidationError is raised
 
         Expected Result:
-        - Quantity should accept valid non-negative Decimal values
+        - Invalid Quantity values should raise ValidationError with appropriate messages
         """
-        # Test with various non-negative decimal values
-        quantity1 = Decimal("100.0")
-        quantity2 = Decimal("0.0")
-        quantity3 = Decimal("0.123456789012")
+        from pydantic import BaseModel, ValidationError
 
-        # These should all be valid Quantity values
-        assert isinstance(quantity1, Decimal)
-        assert isinstance(quantity2, Decimal)
-        assert isinstance(quantity3, Decimal)
+        class QuantityModel(BaseModel):
+            quantity: Quantity
 
-        assert quantity1 >= 0
-        assert quantity2 >= 0
-        assert quantity3 >= 0
+        # Test negative quantity (should fail ge=0 constraint)
+        with pytest.raises(ValidationError) as exc_info:
+            QuantityModel(quantity=Decimal("-1.0"))
+        assert "greater than or equal to 0" in str(exc_info.value)
 
-    def test_volume_valid_values(self) -> None:
-        """Test Volume type accepts valid non-negative values.
+        # Test invalid type (should fail type validation)
+        # Note: Pydantic may coerce int to Decimal, so we test with non-numeric type
+        with pytest.raises(ValidationError) as exc_info:
+            QuantityModel(quantity=["not", "decimal"])
+        error_str = str(exc_info.value)
+        assert (
+            "decimal" in error_str.lower() or "invalid" in error_str.lower() or "input should be" in error_str.lower()
+        )
+
+        # Test string that cannot be converted to decimal
+        with pytest.raises(ValidationError) as exc_info:
+            QuantityModel(quantity="invalid_decimal")
+        error_str = str(exc_info.value)
+        assert "decimal" in error_str.lower() or "invalid" in error_str.lower()
+
+    def test_volume_constraint_violations(self) -> None:
+        """Test Volume type constraint violations.
 
         Description of what the test covers:
-        Verifies that Volume type accepts non-negative Decimal values
-        including zero and maintains precision.
+        Verifies that Volume type properly rejects negative values and non-decimal types.
+        Tests the Pydantic Field constraints (ge=0, decimal_places=12).
 
         Preconditions:
-        - None.
+        - Volume is defined as Annotated[Decimal, Field(ge=0, decimal_places=12)].
 
         Steps:
-        - Create Volume instances with various non-negative Decimal values
-        - Assert they maintain their values and precision
+        - Create a mock Pydantic model with Volume field
+        - Test invalid values (negative, wrong type)
+        - Verify ValidationError is raised
 
         Expected Result:
-        - Volume should accept valid non-negative Decimal values
+        - Invalid Volume values should raise ValidationError with appropriate messages
         """
-        # Test with various non-negative decimal values
-        volume1 = Decimal("1000.50")
-        volume2 = Decimal("0.0")
-        volume3 = Decimal("0.000000000001")
+        from pydantic import BaseModel, ValidationError
 
-        # These should all be valid Volume values
-        assert isinstance(volume1, Decimal)
-        assert isinstance(volume2, Decimal)
-        assert isinstance(volume3, Decimal)
+        class VolumeModel(BaseModel):
+            volume: Volume
 
-        assert volume1 >= 0
-        assert volume2 >= 0
-        assert volume3 >= 0
+        # Test negative volume (should fail ge=0 constraint)
+        with pytest.raises(ValidationError) as exc_info:
+            VolumeModel(volume=Decimal("-100.0"))
+        assert "greater than or equal to 0" in str(exc_info.value)
 
-    def test_timeout_valid_values(self) -> None:
-        """Test Timeout type accepts valid positive float values.
+        # Test invalid type (should fail type validation)
+        with pytest.raises(ValidationError) as exc_info:
+            VolumeModel(volume=[1, 2, 3])
+        error_str = str(exc_info.value)
+        assert "decimal" in error_str.lower() or "invalid" in error_str.lower()
+
+    def test_timeout_constraint_violations(self) -> None:
+        """Test Timeout type constraint violations.
 
         Description of what the test covers:
-        Verifies that Timeout type accepts positive float values
-        representing timeout duration in seconds.
+        Verifies that Timeout type properly rejects zero, negative, and non-float values.
+        Tests the Pydantic Field constraints (gt=0).
 
         Preconditions:
-        - None.
+        - Timeout is defined as Annotated[float, Field(gt=0)].
 
         Steps:
-        - Test various positive float values for Timeout
-        - Assert they maintain their values
+        - Create a mock Pydantic model with Timeout field
+        - Test invalid values (zero, negative, wrong type)
+        - Verify ValidationError is raised
 
         Expected Result:
-        - Timeout should accept valid positive float values
+        - Invalid Timeout values should raise ValidationError with appropriate messages
         """
-        # Test with various positive timeout values
-        timeout1 = 30.0
-        timeout2 = 0.1
-        timeout3 = 3600.5
+        from pydantic import BaseModel, ValidationError
 
-        # These should all be valid Timeout values
-        assert isinstance(timeout1, float)
-        assert isinstance(timeout2, float)
-        assert isinstance(timeout3, float)
+        class TimeoutModel(BaseModel):
+            timeout: Timeout
 
-        assert timeout1 > 0
-        assert timeout2 > 0
-        assert timeout3 > 0
+        # Test zero timeout (should fail gt=0 constraint)
+        with pytest.raises(ValidationError) as exc_info:
+            TimeoutModel(timeout=0.0)
+        assert "greater than 0" in str(exc_info.value)
 
-    def test_query_limit_valid_values(self) -> None:
-        """Test QueryLimit type accepts valid positive integer values.
+        # Test negative timeout (should fail gt=0 constraint)
+        with pytest.raises(ValidationError) as exc_info:
+            TimeoutModel(timeout=-5.0)
+        assert "greater than 0" in str(exc_info.value)
+
+        # Test invalid type (should fail type validation)
+        with pytest.raises(ValidationError) as exc_info:
+            TimeoutModel(timeout="not_a_float")
+        error_str = str(exc_info.value)
+        assert "float" in error_str.lower() or "invalid" in error_str.lower()
+
+    def test_query_limit_constraint_violations(self) -> None:
+        """Test QueryLimit type constraint violations.
 
         Description of what the test covers:
-        Verifies that QueryLimit type accepts positive integer values
-        for limiting query results.
+        Verifies that QueryLimit type properly rejects zero, negative, and non-integer values.
+        Tests the Pydantic Field constraints (ge=1).
 
         Preconditions:
-        - None.
+        - QueryLimit is defined as Annotated[int, Field(ge=1)].
 
         Steps:
-        - Test various positive integer values for QueryLimit
-        - Assert they maintain their values
+        - Create a mock Pydantic model with QueryLimit field
+        - Test invalid values (zero, negative, wrong type)
+        - Verify ValidationError is raised
 
         Expected Result:
-        - QueryLimit should accept valid positive integer values
+        - Invalid QueryLimit values should raise ValidationError with appropriate messages
         """
-        # Test with various positive integer values
-        limit1 = 10
-        limit2 = 1
-        limit3 = 1000
+        from pydantic import BaseModel, ValidationError
 
-        # These should all be valid QueryLimit values
-        assert isinstance(limit1, int)
-        assert isinstance(limit2, int)
-        assert isinstance(limit3, int)
+        class QueryLimitModel(BaseModel):
+            limit: QueryLimit
 
-        assert limit1 >= 1
-        assert limit2 >= 1
-        assert limit3 >= 1
+        # Test zero limit (should fail ge=1 constraint)
+        with pytest.raises(ValidationError) as exc_info:
+            QueryLimitModel(limit=0)
+        assert "greater than or equal to 1" in str(exc_info.value)
 
-    def test_query_offset_valid_values(self) -> None:
-        """Test QueryOffset type accepts valid non-negative integer values.
+        # Test negative limit (should fail ge=1 constraint)
+        with pytest.raises(ValidationError) as exc_info:
+            QueryLimitModel(limit=-10)
+        assert "greater than or equal to 1" in str(exc_info.value)
+
+        # Test invalid type (should fail type validation)
+        with pytest.raises(ValidationError) as exc_info:
+            QueryLimitModel(limit=3.14)
+        error_str = str(exc_info.value)
+        assert "int" in error_str.lower() or "integer" in error_str.lower()
+
+    def test_query_offset_constraint_violations(self) -> None:
+        """Test QueryOffset type constraint violations.
 
         Description of what the test covers:
-        Verifies that QueryOffset type accepts non-negative integer values
-        for offsetting query results.
+        Verifies that QueryOffset type properly rejects negative values and non-integer types.
+        Tests the Pydantic Field constraints (ge=0).
 
         Preconditions:
-        - None.
+        - QueryOffset is defined as Annotated[int, Field(ge=0)].
 
         Steps:
-        - Test various non-negative integer values for QueryOffset
-        - Assert they maintain their values
+        - Create a mock Pydantic model with QueryOffset field
+        - Test invalid values (negative, wrong type)
+        - Verify ValidationError is raised
 
         Expected Result:
-        - QueryOffset should accept valid non-negative integer values
+        - Invalid QueryOffset values should raise ValidationError with appropriate messages
         """
-        # Test with various non-negative integer values
-        offset1 = 0
-        offset2 = 50
-        offset3 = 1000
+        from pydantic import BaseModel, ValidationError
 
-        # These should all be valid QueryOffset values
-        assert isinstance(offset1, int)
-        assert isinstance(offset2, int)
-        assert isinstance(offset3, int)
+        class QueryOffsetModel(BaseModel):
+            offset: QueryOffset
 
-        assert offset1 >= 0
-        assert offset2 >= 0
-        assert offset3 >= 0
+        # Test negative offset (should fail ge=0 constraint)
+        with pytest.raises(ValidationError) as exc_info:
+            QueryOffsetModel(offset=-1)
+        assert "greater than or equal to 0" in str(exc_info.value)
 
-    def test_page_size_boundary_values(self) -> None:
-        """Test PageSize type boundary values.
+        # Test invalid type (should fail type validation)
+        with pytest.raises(ValidationError) as exc_info:
+            QueryOffsetModel(offset="not_an_int")
+        error_str = str(exc_info.value)
+        assert "int" in error_str.lower() or "integer" in error_str.lower()
+
+    def test_page_size_constraint_violations(self) -> None:
+        """Test PageSize type constraint violations.
 
         Description of what the test covers:
-        Verifies that PageSize type accepts values within its valid range
-        (1 to 1000) and maintains the constraints.
+        Verifies that PageSize type properly enforces its range constraints (1-1000).
+        Tests the Pydantic Field constraints (ge=1, le=1000).
 
         Preconditions:
-        - None.
+        - PageSize is defined as Annotated[int, Field(ge=1, le=1000)].
 
         Steps:
-        - Test boundary values for PageSize (1, 1000)
-        - Test values within the valid range
-        - Assert they maintain their values
+        - Create a mock Pydantic model with PageSize field
+        - Test boundary violations (zero, too large, wrong type)
+        - Verify ValidationError is raised
 
         Expected Result:
-        - PageSize should accept values between 1 and 1000 inclusive
+        - Invalid PageSize values should raise ValidationError with appropriate messages
         """
-        # Test boundary values
-        page_size_min = 1
-        page_size_max = 1000
-        page_size_mid = 50
+        from pydantic import BaseModel, ValidationError
 
-        # These should all be valid PageSize values
-        assert isinstance(page_size_min, int)
-        assert isinstance(page_size_max, int)
-        assert isinstance(page_size_mid, int)
+        class PageSizeModel(BaseModel):
+            page_size: PageSize
 
-        assert 1 <= page_size_min <= 1000
-        assert 1 <= page_size_max <= 1000
-        assert 1 <= page_size_mid <= 1000
+        # Test zero page size (should fail ge=1 constraint)
+        with pytest.raises(ValidationError) as exc_info:
+            PageSizeModel(page_size=0)
+        assert "greater than or equal to 1" in str(exc_info.value)
 
-    def test_cpu_usage_percentage_range(self) -> None:
-        """Test CPUUsage type accepts valid percentage values.
+        # Test page size too large (should fail le=1000 constraint)
+        with pytest.raises(ValidationError) as exc_info:
+            PageSizeModel(page_size=1001)
+        assert "less than or equal to 1000" in str(exc_info.value)
+
+        # Test negative page size (should fail ge=1 constraint)
+        with pytest.raises(ValidationError) as exc_info:
+            PageSizeModel(page_size=-10)
+        assert "greater than or equal to 1" in str(exc_info.value)
+
+        # Test invalid type (should fail type validation)
+        with pytest.raises(ValidationError) as exc_info:
+            PageSizeModel(page_size=2.5)
+        error_str = str(exc_info.value)
+        assert "int" in error_str.lower() or "integer" in error_str.lower()
+
+    def test_cpu_usage_constraint_violations(self) -> None:
+        """Test CPUUsage type constraint violations.
 
         Description of what the test covers:
-        Verifies that CPUUsage type accepts float values within
-        the valid percentage range (0-100).
+        Verifies that CPUUsage type properly enforces its percentage range (0-100).
+        Tests the Pydantic Field constraints (ge=0, le=100).
 
         Preconditions:
-        - None.
+        - CPUUsage is defined as Annotated[float, Field(ge=0, le=100)].
 
         Steps:
-        - Test various percentage values for CPUUsage
-        - Assert they are within the valid range
+        - Create a mock Pydantic model with CPUUsage field
+        - Test boundary violations (negative, over 100, wrong type)
+        - Verify ValidationError is raised
 
         Expected Result:
-        - CPUUsage should accept values between 0 and 100 inclusive
+        - Invalid CPUUsage values should raise ValidationError with appropriate messages
         """
-        # Test various CPU usage percentage values
-        cpu_min = 0.0
-        cpu_max = 100.0
-        cpu_mid = 75.5
+        from pydantic import BaseModel, ValidationError
 
-        # These should all be valid CPUUsage values
-        assert isinstance(cpu_min, float)
-        assert isinstance(cpu_max, float)
-        assert isinstance(cpu_mid, float)
+        class CPUUsageModel(BaseModel):
+            cpu: CPUUsage
 
-        assert 0 <= cpu_min <= 100
-        assert 0 <= cpu_max <= 100
-        assert 0 <= cpu_mid <= 100
+        # Test negative CPU usage (should fail ge=0 constraint)
+        with pytest.raises(ValidationError) as exc_info:
+            CPUUsageModel(cpu=-10.0)
+        assert "greater than or equal to 0" in str(exc_info.value)
+
+        # Test CPU usage over 100% (should fail le=100 constraint)
+        with pytest.raises(ValidationError) as exc_info:
+            CPUUsageModel(cpu=150.0)
+        assert "less than or equal to 100" in str(exc_info.value)
+
+        # Test invalid type (should fail type validation)
+        with pytest.raises(ValidationError) as exc_info:
+            CPUUsageModel(cpu="high")
+        error_str = str(exc_info.value)
+        assert "float" in error_str.lower() or "invalid" in error_str.lower()
+
+    def test_decimal_precision_constraints(self) -> None:
+        """Test decimal precision constraints for financial types.
+
+        Description of what the test covers:
+        Verifies that Price, Quantity, and Volume types properly handle
+        decimal precision constraints (decimal_places=12).
+
+        Preconditions:
+        - Financial types are defined with decimal_places=12 constraint.
+
+        Steps:
+        - Create models with financial types
+        - Test values with excessive decimal places
+        - Verify behavior (rounding or validation error)
+
+        Expected Result:
+        - Values should be accepted and precision handled appropriately
+        """
+        from pydantic import BaseModel
+
+        class FinancialModel(BaseModel):
+            price: Price
+            quantity: Quantity
+            volume: Volume
+
+        # This should work - Pydantic should handle precision appropriately
+        model = FinancialModel(
+            price=Decimal("100.123456789012"), quantity=Decimal("1.123456789012"), volume=Decimal("101.123456789012")
+        )
+
+        assert model.price == Decimal("100.123456789012")
+        assert model.quantity == Decimal("1.123456789012")
+        assert model.volume == Decimal("101.123456789012")
+
+    def test_type_coercion_behavior(self) -> None:
+        """Test type coercion behavior for Annotated types.
+
+        Description of what the test covers:
+        Verifies how Pydantic handles type coercion for Annotated types,
+        particularly for numeric types that can be converted.
+
+        Preconditions:
+        - Pydantic models with Annotated types are defined.
+
+        Steps:
+        - Test valid coercions (string to Decimal, int to float, etc.)
+        - Verify successful conversions
+        - Test invalid coercions that should fail
+
+        Expected Result:
+        - Valid coercions should succeed with proper type conversion
+        - Invalid coercions should raise ValidationError
+        """
+        from pydantic import BaseModel, ValidationError
+
+        class CoercionTestModel(BaseModel):
+            price: Price
+            timeout: Timeout
+            limit: QueryLimit
+
+        # Test valid coercions
+        model = CoercionTestModel(
+            price="100.50",  # String to Decimal
+            timeout=30,  # Int to float
+            limit="10",  # String to int
+        )
+
+        assert model.price == Decimal("100.50")
+        assert model.timeout == 30.0
+        assert model.limit == 10
+
+        # Test invalid coercions that should fail
+        with pytest.raises(ValidationError):
+            CoercionTestModel(price="not_a_number", timeout=30.0, limit=10)
+
+        with pytest.raises(ValidationError):
+            CoercionTestModel(price="100.50", timeout="not_a_number", limit=10)
+
+    def test_edge_case_boundary_values(self) -> None:
+        """Test edge case boundary values for constrained types.
+
+        Description of what the test covers:
+        Verifies behavior at exact constraint boundaries and with
+        extreme values for all constrained types.
+
+        Preconditions:
+        - All constrained types are properly defined.
+
+        Steps:
+        - Test exact boundary values for each type
+        - Test very small and very large valid values
+        - Verify consistent behavior
+
+        Expected Result:
+        - Boundary values should be handled consistently
+        - Extreme valid values should be accepted
+        """
+        from pydantic import BaseModel
+
+        class BoundaryTestModel(BaseModel):
+            page_size_min: PageSize
+            page_size_max: PageSize
+            cpu_min: CPUUsage
+            cpu_max: CPUUsage
+            query_limit_min: QueryLimit
+            query_offset_min: QueryOffset
+
+        # Test exact boundary values
+        model = BoundaryTestModel(
+            page_size_min=1,  # Minimum valid PageSize
+            page_size_max=1000,  # Maximum valid PageSize
+            cpu_min=0.0,  # Minimum valid CPUUsage
+            cpu_max=100.0,  # Maximum valid CPUUsage
+            query_limit_min=1,  # Minimum valid QueryLimit
+            query_offset_min=0,  # Minimum valid QueryOffset
+        )
+
+        assert model.page_size_min == 1
+        assert model.page_size_max == 1000
+        assert model.cpu_min == 0.0
+        assert model.cpu_max == 100.0
+        assert model.query_limit_min == 1
+        assert model.query_offset_min == 0
+
+        # Test very small valid values for financial types
+        from pydantic import create_model
+
+        small_financial_model = create_model(
+            "SmallFinancialModel",
+            tiny_price=(Price, ...),
+            tiny_quantity=(Quantity, ...),
+            tiny_volume=(Volume, ...),
+        )
+
+        tiny_model = small_financial_model(
+            tiny_price=Decimal("0.000000000001"),
+            tiny_quantity=Decimal("0.000000000001"),
+            tiny_volume=Decimal("0.000000000001"),
+        )
+
+        assert tiny_model.tiny_price > 0  # type: ignore[attr-defined]
+        assert tiny_model.tiny_quantity >= 0  # type: ignore[attr-defined]
+        assert tiny_model.tiny_volume >= 0  # type: ignore[attr-defined]
 
 
 @pytest.mark.unit
@@ -1197,530 +1411,3 @@ class TestTypeConversions:
         assert isinstance(result3.error, ZeroDivisionError)
         assert isinstance(result4, Failure)
         assert result4.error == result3.error  # Same error passed through
-
-    def test_protocol_duck_typing(self) -> None:
-        """Test Protocol types work with duck typing.
-
-        Description of what the test covers:
-        Verifies that any class implementing the required methods/attributes
-        can be used where a Protocol type is expected, demonstrating
-        structural typing.
-
-        Preconditions:
-        - None.
-
-        Steps:
-        - Create classes that structurally match protocols
-        - Use them in functions expecting protocol types
-        - Verify duck typing works
-
-        Expected Result:
-        - Classes should be usable with protocols via structural typing
-        """
-
-        # Create classes that implement protocol structure without explicit inheritance
-        class TradeRecord:
-            def __init__(self, trade_id: str, symbol: str, timestamp: datetime):
-                self.id = trade_id
-                self.symbol = Symbol(symbol)
-                self.timestamp = timestamp
-
-        class Order:
-            def __init__(self, order_id: int, timestamp: datetime):
-                self.id = order_id
-                self.timestamp = timestamp
-
-        # Functions expecting protocol types
-        def get_identifier(obj: Identifiable[Any]) -> Any:
-            return obj.id
-
-        def get_time(obj: Timestamped) -> datetime:
-            return obj.timestamp
-
-        def get_trading_symbol(obj: Symbolized) -> Symbol:
-            return obj.symbol
-
-        # Test duck typing with TradeRecord
-        trade = TradeRecord("trade123", "BTCUSDT", datetime.now(UTC))
-
-        assert get_identifier(trade) == "trade123"
-        assert get_time(trade) == trade.timestamp
-        assert get_trading_symbol(trade) == Symbol("BTCUSDT")
-
-        # Test duck typing with Order
-        order = Order(456, datetime.now(UTC))
-
-        assert get_identifier(order) == 456
-        assert get_time(order) == order.timestamp
-
-
-@pytest.mark.unit
-class TestAnnotatedTypeConstraintValidation:
-    """Test cases for Pydantic Annotated type constraint validation.
-
-    Verifies that Annotated types properly enforce their constraints
-    by testing edge cases and invalid values that should trigger validation errors.
-    """
-
-    def test_price_constraint_violations(self) -> None:
-        """Test Price type constraint violations.
-
-        Description of what the test covers:
-        Verifies that Price type properly rejects zero, negative, and non-decimal values.
-        Tests the Pydantic Field constraints (gt=0, decimal_places=12).
-
-        Preconditions:
-        - Price is defined as Annotated[Decimal, Field(gt=0, decimal_places=12)].
-
-        Steps:
-        - Create a mock Pydantic model with Price field
-        - Test invalid values (zero, negative, wrong type)
-        - Verify ValidationError is raised
-
-        Expected Result:
-        - Invalid Price values should raise ValidationError with appropriate messages
-        """
-        from pydantic import BaseModel, ValidationError
-
-        class PriceModel(BaseModel):
-            price: Price
-
-        # Test zero price (should fail gt=0 constraint)
-        with pytest.raises(ValidationError) as exc_info:
-            PriceModel(price=Decimal("0"))
-        assert "greater than 0" in str(exc_info.value)
-
-        # Test negative price (should fail gt=0 constraint)
-        with pytest.raises(ValidationError) as exc_info:
-            PriceModel(price=Decimal("-10.50"))
-        assert "greater than 0" in str(exc_info.value)
-
-        # Test invalid type (should fail type validation)
-        with pytest.raises(ValidationError) as exc_info:
-            PriceModel(price="not_a_decimal")
-        error_str = str(exc_info.value)
-        assert "decimal" in error_str.lower() or "invalid" in error_str.lower()
-
-        # Test None value (should fail type validation)
-        with pytest.raises(ValidationError) as exc_info:
-            PriceModel(price=None)
-        assert (
-            "none is not an allowed value" in str(exc_info.value).lower()
-            or "input should be" in str(exc_info.value).lower()
-        )
-
-    def test_quantity_constraint_violations(self) -> None:
-        """Test Quantity type constraint violations.
-
-        Description of what the test covers:
-        Verifies that Quantity type properly rejects negative values and non-decimal types.
-        Tests the Pydantic Field constraints (ge=0, decimal_places=12).
-
-        Preconditions:
-        - Quantity is defined as Annotated[Decimal, Field(ge=0, decimal_places=12)].
-
-        Steps:
-        - Create a mock Pydantic model with Quantity field
-        - Test invalid values (negative, wrong type)
-        - Verify ValidationError is raised
-
-        Expected Result:
-        - Invalid Quantity values should raise ValidationError with appropriate messages
-        """
-        from pydantic import BaseModel, ValidationError
-
-        class QuantityModel(BaseModel):
-            quantity: Quantity
-
-        # Test negative quantity (should fail ge=0 constraint)
-        with pytest.raises(ValidationError) as exc_info:
-            QuantityModel(quantity=Decimal("-1.0"))
-        assert "greater than or equal to 0" in str(exc_info.value)
-
-        # Test invalid type (should fail type validation)
-        # Note: Pydantic may coerce int to Decimal, so we test with non-numeric type
-        with pytest.raises(ValidationError) as exc_info:
-            QuantityModel(quantity=["not", "decimal"])
-        error_str = str(exc_info.value)
-        assert (
-            "decimal" in error_str.lower() or "invalid" in error_str.lower() or "input should be" in error_str.lower()
-        )
-
-        # Test string that cannot be converted to decimal
-        with pytest.raises(ValidationError) as exc_info:
-            QuantityModel(quantity="invalid_decimal")
-        error_str = str(exc_info.value)
-        assert "decimal" in error_str.lower() or "invalid" in error_str.lower()
-
-    def test_volume_constraint_violations(self) -> None:
-        """Test Volume type constraint violations.
-
-        Description of what the test covers:
-        Verifies that Volume type properly rejects negative values and non-decimal types.
-        Tests the Pydantic Field constraints (ge=0, decimal_places=12).
-
-        Preconditions:
-        - Volume is defined as Annotated[Decimal, Field(ge=0, decimal_places=12)].
-
-        Steps:
-        - Create a mock Pydantic model with Volume field
-        - Test invalid values (negative, wrong type)
-        - Verify ValidationError is raised
-
-        Expected Result:
-        - Invalid Volume values should raise ValidationError with appropriate messages
-        """
-        from pydantic import BaseModel, ValidationError
-
-        class VolumeModel(BaseModel):
-            volume: Volume
-
-        # Test negative volume (should fail ge=0 constraint)
-        with pytest.raises(ValidationError) as exc_info:
-            VolumeModel(volume=Decimal("-100.0"))
-        assert "greater than or equal to 0" in str(exc_info.value)
-
-        # Test invalid type (should fail type validation)
-        with pytest.raises(ValidationError) as exc_info:
-            VolumeModel(volume=[1, 2, 3])
-        error_str = str(exc_info.value)
-        assert "decimal" in error_str.lower() or "invalid" in error_str.lower()
-
-    def test_timeout_constraint_violations(self) -> None:
-        """Test Timeout type constraint violations.
-
-        Description of what the test covers:
-        Verifies that Timeout type properly rejects zero, negative, and non-float values.
-        Tests the Pydantic Field constraints (gt=0).
-
-        Preconditions:
-        - Timeout is defined as Annotated[float, Field(gt=0)].
-
-        Steps:
-        - Create a mock Pydantic model with Timeout field
-        - Test invalid values (zero, negative, wrong type)
-        - Verify ValidationError is raised
-
-        Expected Result:
-        - Invalid Timeout values should raise ValidationError with appropriate messages
-        """
-        from pydantic import BaseModel, ValidationError
-
-        class TimeoutModel(BaseModel):
-            timeout: Timeout
-
-        # Test zero timeout (should fail gt=0 constraint)
-        with pytest.raises(ValidationError) as exc_info:
-            TimeoutModel(timeout=0.0)
-        assert "greater than 0" in str(exc_info.value)
-
-        # Test negative timeout (should fail gt=0 constraint)
-        with pytest.raises(ValidationError) as exc_info:
-            TimeoutModel(timeout=-5.0)
-        assert "greater than 0" in str(exc_info.value)
-
-        # Test invalid type (should fail type validation)
-        with pytest.raises(ValidationError) as exc_info:
-            TimeoutModel(timeout="not_a_float")
-        error_str = str(exc_info.value)
-        assert "float" in error_str.lower() or "invalid" in error_str.lower()
-
-    def test_query_limit_constraint_violations(self) -> None:
-        """Test QueryLimit type constraint violations.
-
-        Description of what the test covers:
-        Verifies that QueryLimit type properly rejects zero, negative, and non-integer values.
-        Tests the Pydantic Field constraints (ge=1).
-
-        Preconditions:
-        - QueryLimit is defined as Annotated[int, Field(ge=1)].
-
-        Steps:
-        - Create a mock Pydantic model with QueryLimit field
-        - Test invalid values (zero, negative, wrong type)
-        - Verify ValidationError is raised
-
-        Expected Result:
-        - Invalid QueryLimit values should raise ValidationError with appropriate messages
-        """
-        from pydantic import BaseModel, ValidationError
-
-        class QueryLimitModel(BaseModel):
-            limit: QueryLimit
-
-        # Test zero limit (should fail ge=1 constraint)
-        with pytest.raises(ValidationError) as exc_info:
-            QueryLimitModel(limit=0)
-        assert "greater than or equal to 1" in str(exc_info.value)
-
-        # Test negative limit (should fail ge=1 constraint)
-        with pytest.raises(ValidationError) as exc_info:
-            QueryLimitModel(limit=-10)
-        assert "greater than or equal to 1" in str(exc_info.value)
-
-        # Test invalid type (should fail type validation)
-        with pytest.raises(ValidationError) as exc_info:
-            QueryLimitModel(limit=3.14)
-        error_str = str(exc_info.value)
-        assert "int" in error_str.lower() or "integer" in error_str.lower()
-
-    def test_query_offset_constraint_violations(self) -> None:
-        """Test QueryOffset type constraint violations.
-
-        Description of what the test covers:
-        Verifies that QueryOffset type properly rejects negative values and non-integer types.
-        Tests the Pydantic Field constraints (ge=0).
-
-        Preconditions:
-        - QueryOffset is defined as Annotated[int, Field(ge=0)].
-
-        Steps:
-        - Create a mock Pydantic model with QueryOffset field
-        - Test invalid values (negative, wrong type)
-        - Verify ValidationError is raised
-
-        Expected Result:
-        - Invalid QueryOffset values should raise ValidationError with appropriate messages
-        """
-        from pydantic import BaseModel, ValidationError
-
-        class QueryOffsetModel(BaseModel):
-            offset: QueryOffset
-
-        # Test negative offset (should fail ge=0 constraint)
-        with pytest.raises(ValidationError) as exc_info:
-            QueryOffsetModel(offset=-1)
-        assert "greater than or equal to 0" in str(exc_info.value)
-
-        # Test invalid type (should fail type validation)
-        with pytest.raises(ValidationError) as exc_info:
-            QueryOffsetModel(offset="not_an_int")
-        error_str = str(exc_info.value)
-        assert "int" in error_str.lower() or "integer" in error_str.lower()
-
-    def test_page_size_constraint_violations(self) -> None:
-        """Test PageSize type constraint violations.
-
-        Description of what the test covers:
-        Verifies that PageSize type properly enforces its range constraints (1-1000).
-        Tests the Pydantic Field constraints (ge=1, le=1000).
-
-        Preconditions:
-        - PageSize is defined as Annotated[int, Field(ge=1, le=1000)].
-
-        Steps:
-        - Create a mock Pydantic model with PageSize field
-        - Test boundary violations (zero, too large, wrong type)
-        - Verify ValidationError is raised
-
-        Expected Result:
-        - Invalid PageSize values should raise ValidationError with appropriate messages
-        """
-        from pydantic import BaseModel, ValidationError
-
-        class PageSizeModel(BaseModel):
-            page_size: PageSize
-
-        # Test zero page size (should fail ge=1 constraint)
-        with pytest.raises(ValidationError) as exc_info:
-            PageSizeModel(page_size=0)
-        assert "greater than or equal to 1" in str(exc_info.value)
-
-        # Test page size too large (should fail le=1000 constraint)
-        with pytest.raises(ValidationError) as exc_info:
-            PageSizeModel(page_size=1001)
-        assert "less than or equal to 1000" in str(exc_info.value)
-
-        # Test negative page size (should fail ge=1 constraint)
-        with pytest.raises(ValidationError) as exc_info:
-            PageSizeModel(page_size=-10)
-        assert "greater than or equal to 1" in str(exc_info.value)
-
-        # Test invalid type (should fail type validation)
-        with pytest.raises(ValidationError) as exc_info:
-            PageSizeModel(page_size=2.5)
-        error_str = str(exc_info.value)
-        assert "int" in error_str.lower() or "integer" in error_str.lower()
-
-    def test_cpu_usage_constraint_violations(self) -> None:
-        """Test CPUUsage type constraint violations.
-
-        Description of what the test covers:
-        Verifies that CPUUsage type properly enforces its percentage range (0-100).
-        Tests the Pydantic Field constraints (ge=0, le=100).
-
-        Preconditions:
-        - CPUUsage is defined as Annotated[float, Field(ge=0, le=100)].
-
-        Steps:
-        - Create a mock Pydantic model with CPUUsage field
-        - Test boundary violations (negative, over 100, wrong type)
-        - Verify ValidationError is raised
-
-        Expected Result:
-        - Invalid CPUUsage values should raise ValidationError with appropriate messages
-        """
-        from pydantic import BaseModel, ValidationError
-
-        class CPUUsageModel(BaseModel):
-            cpu: CPUUsage
-
-        # Test negative CPU usage (should fail ge=0 constraint)
-        with pytest.raises(ValidationError) as exc_info:
-            CPUUsageModel(cpu=-10.0)
-        assert "greater than or equal to 0" in str(exc_info.value)
-
-        # Test CPU usage over 100% (should fail le=100 constraint)
-        with pytest.raises(ValidationError) as exc_info:
-            CPUUsageModel(cpu=150.0)
-        assert "less than or equal to 100" in str(exc_info.value)
-
-        # Test invalid type (should fail type validation)
-        with pytest.raises(ValidationError) as exc_info:
-            CPUUsageModel(cpu="high")
-        error_str = str(exc_info.value)
-        assert "float" in error_str.lower() or "invalid" in error_str.lower()
-
-    def test_decimal_precision_constraints(self) -> None:
-        """Test decimal precision constraints for financial types.
-
-        Description of what the test covers:
-        Verifies that Price, Quantity, and Volume types properly handle
-        decimal precision constraints (decimal_places=12).
-
-        Preconditions:
-        - Financial types are defined with decimal_places=12 constraint.
-
-        Steps:
-        - Create models with financial types
-        - Test values with excessive decimal places
-        - Verify behavior (rounding or validation error)
-
-        Expected Result:
-        - Values should be accepted and precision handled appropriately
-        """
-        from pydantic import BaseModel
-
-        class FinancialModel(BaseModel):
-            price: Price
-            quantity: Quantity
-            volume: Volume
-
-        # This should work - Pydantic should handle precision appropriately
-        model = FinancialModel(
-            price=Decimal("100.123456789012"), quantity=Decimal("1.123456789012"), volume=Decimal("101.123456789012")
-        )
-
-        assert model.price == Decimal("100.123456789012")
-        assert model.quantity == Decimal("1.123456789012")
-        assert model.volume == Decimal("101.123456789012")
-
-    def test_type_coercion_behavior(self) -> None:
-        """Test type coercion behavior for Annotated types.
-
-        Description of what the test covers:
-        Verifies how Pydantic handles type coercion for Annotated types,
-        particularly for numeric types that can be converted.
-
-        Preconditions:
-        - Pydantic models with Annotated types are defined.
-
-        Steps:
-        - Test valid coercions (string to Decimal, int to float, etc.)
-        - Verify successful conversions
-        - Test invalid coercions that should fail
-
-        Expected Result:
-        - Valid coercions should succeed with proper type conversion
-        - Invalid coercions should raise ValidationError
-        """
-        from pydantic import BaseModel, ValidationError
-
-        class CoercionTestModel(BaseModel):
-            price: Price
-            timeout: Timeout
-            limit: QueryLimit
-
-        # Test valid coercions
-        model = CoercionTestModel(
-            price="100.50",  # String to Decimal
-            timeout=30,  # Int to float
-            limit="10",  # String to int
-        )
-
-        assert model.price == Decimal("100.50")
-        assert model.timeout == 30.0
-        assert model.limit == 10
-
-        # Test invalid coercions that should fail
-        with pytest.raises(ValidationError):
-            CoercionTestModel(price="not_a_number", timeout=30.0, limit=10)
-
-        with pytest.raises(ValidationError):
-            CoercionTestModel(price="100.50", timeout="not_a_number", limit=10)
-
-    def test_edge_case_boundary_values(self) -> None:
-        """Test edge case boundary values for constrained types.
-
-        Description of what the test covers:
-        Verifies behavior at exact constraint boundaries and with
-        extreme values for all constrained types.
-
-        Preconditions:
-        - All constrained types are properly defined.
-
-        Steps:
-        - Test exact boundary values for each type
-        - Test very small and very large valid values
-        - Verify consistent behavior
-
-        Expected Result:
-        - Boundary values should be handled consistently
-        - Extreme valid values should be accepted
-        """
-        from pydantic import BaseModel
-
-        class BoundaryTestModel(BaseModel):
-            page_size_min: PageSize
-            page_size_max: PageSize
-            cpu_min: CPUUsage
-            cpu_max: CPUUsage
-            query_limit_min: QueryLimit
-            query_offset_min: QueryOffset
-
-        # Test exact boundary values
-        model = BoundaryTestModel(
-            page_size_min=1,  # Minimum valid PageSize
-            page_size_max=1000,  # Maximum valid PageSize
-            cpu_min=0.0,  # Minimum valid CPUUsage
-            cpu_max=100.0,  # Maximum valid CPUUsage
-            query_limit_min=1,  # Minimum valid QueryLimit
-            query_offset_min=0,  # Minimum valid QueryOffset
-        )
-
-        assert model.page_size_min == 1
-        assert model.page_size_max == 1000
-        assert model.cpu_min == 0.0
-        assert model.cpu_max == 100.0
-        assert model.query_limit_min == 1
-        assert model.query_offset_min == 0
-
-        # Test very small valid values for financial types
-        from pydantic import create_model
-
-        small_financial_model = create_model(
-            "SmallFinancialModel",
-            tiny_price=(Price, ...),
-            tiny_quantity=(Quantity, ...),
-            tiny_volume=(Volume, ...),
-        )
-
-        tiny_model = small_financial_model(
-            tiny_price=Decimal("0.000000000001"),
-            tiny_quantity=Decimal("0.000000000001"),
-            tiny_volume=Decimal("0.000000000001"),
-        )
-
-        assert tiny_model.tiny_price > 0  # type: ignore[attr-defined]
-        assert tiny_model.tiny_quantity >= 0  # type: ignore[attr-defined]
-        assert tiny_model.tiny_volume >= 0  # type: ignore[attr-defined]

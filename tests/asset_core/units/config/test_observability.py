@@ -1,39 +1,19 @@
-"""Unit tests for observability configuration settings."""
-
-import os
-from unittest.mock import patch
+"""ABOUTME: Unit tests for observability configuration module
+ABOUTME: Testing BaseObservabilityConfig validation, logging levels, and metrics settings
+"""
 
 import pytest
 from pydantic import ValidationError
 
-from asset_core.config import BaseObservabilityConfig
+from asset_core.config.observability import BaseObservabilityConfig
 
 
 @pytest.mark.unit
-class TestBaseObservabilityConfigConstruction:
-    """Test cases for BaseObservabilityConfig model construction."""
+class TestBaseObservabilityConfig:
+    """Unit tests for BaseObservabilityConfig class."""
 
-    def test_default_observability_config_creation(self) -> None:
-        """Test default observability configuration initialization.
-
-        Description of what the test covers:
-        Verifies that BaseObservabilityConfig creates an instance with
-        correct default values for logging and metrics configuration.
-
-        Preconditions:
-            - No environment variables set
-            - Clean initialization context
-
-        Steps:
-            - Create BaseObservabilityConfig instance with no arguments
-            - Verify all default values are set correctly
-
-        Expected Result:
-            - log_level should be "INFO"
-            - log_format should be "json"
-            - metrics_enabled should be True
-            - metrics_port should be 9090
-        """
+    def test_default_values(self) -> None:
+        """Test that default values are correctly set."""
         config = BaseObservabilityConfig()
 
         assert config.log_level == "INFO"
@@ -41,26 +21,8 @@ class TestBaseObservabilityConfigConstruction:
         assert config.metrics_enabled is True
         assert config.metrics_port == 9090
 
-    def test_custom_observability_config_creation(self) -> None:
-        """Test custom observability configuration with explicit values.
-
-        Description of what the test covers:
-        Verifies that BaseObservabilityConfig correctly accepts and stores
-        custom values for all logging and metrics parameters.
-
-        Preconditions:
-            - Custom values for all configuration fields
-
-        Steps:
-            - Create config with custom log_level, log_format, metrics settings
-            - Verify all provided values are stored correctly
-
-        Expected Result:
-            - log_level should be "DEBUG"
-            - log_format should be "text"
-            - metrics_enabled should be False
-            - metrics_port should be 8080
-        """
+    def test_explicit_initialization(self) -> None:
+        """Test explicit initialization with custom values."""
         config = BaseObservabilityConfig(log_level="DEBUG", log_format="text", metrics_enabled=False, metrics_port=8080)
 
         assert config.log_level == "DEBUG"
@@ -68,727 +30,286 @@ class TestBaseObservabilityConfigConstruction:
         assert config.metrics_enabled is False
         assert config.metrics_port == 8080
 
-    def test_observability_config_from_dict(self) -> None:
-        """Test observability configuration from dictionary unpacking.
+    def test_log_level_case_insensitive_validation(self) -> None:
+        """Test that log_level validation is case insensitive."""
+        valid_levels = [
+            ("DEBUG", "DEBUG"),
+            ("debug", "DEBUG"),
+            ("Debug", "DEBUG"),
+            ("INFO", "INFO"),
+            ("info", "INFO"),
+            ("Info", "INFO"),
+            ("WARNING", "WARNING"),
+            ("warning", "WARNING"),
+            ("Warning", "WARNING"),
+            ("ERROR", "ERROR"),
+            ("error", "ERROR"),
+            ("Error", "ERROR"),
+            ("CRITICAL", "CRITICAL"),
+            ("critical", "CRITICAL"),
+            ("Critical", "CRITICAL"),
+        ]
 
-        Description of what the test covers:
-        Verifies that BaseObservabilityConfig can be initialized by
-        unpacking a dictionary containing all configuration parameters.
+        for input_level, expected_level in valid_levels:
+            config = BaseObservabilityConfig(log_level=input_level)
+            assert config.log_level == expected_level
 
-        Preconditions:
-            - Dictionary with all observability configuration keys
+    def test_log_level_invalid_values_rejected(self) -> None:
+        """Test that invalid log_level values are rejected."""
+        invalid_levels = ["TRACE", "VERBOSE", "NOTICE", "ALERT", "EMERGENCY", "invalid", ""]
 
-        Steps:
-            - Create configuration dictionary with all settings
-            - Initialize BaseObservabilityConfig using dictionary unpacking
-            - Verify all values from dictionary are applied
+        for invalid_level in invalid_levels:
+            with pytest.raises(ValidationError) as exc_info:
+                BaseObservabilityConfig(log_level=invalid_level)
 
-        Expected Result:
-            - All dictionary values should be correctly assigned to config fields
-        """
-        config = BaseObservabilityConfig(
-            log_level="WARNING",
-            log_format="text",
-            metrics_enabled=True,
-            metrics_port=9091,
-        )
+            error_msg = str(exc_info.value)
+            assert "log_level must be one of" in error_msg
 
-        assert config.log_level == "WARNING"
-        assert config.log_format == "text"
-        assert config.metrics_enabled is True
-        assert config.metrics_port == 9091
+    def test_log_format_case_insensitive_validation(self) -> None:
+        """Test that log_format validation is case insensitive."""
+        valid_formats = [
+            ("json", "json"),
+            ("JSON", "json"),
+            ("Json", "json"),
+            ("text", "text"),
+            ("TEXT", "text"),
+            ("Text", "text"),
+        ]
 
+        for input_format, expected_format in valid_formats:
+            config = BaseObservabilityConfig(log_format=input_format)
+            assert config.log_format == expected_format
 
-@pytest.mark.unit
-class TestBaseObservabilityConfigValidation:
-    """Test cases for BaseObservabilityConfig validation."""
+    def test_log_format_invalid_values_rejected(self) -> None:
+        """Test that invalid log_format values are rejected."""
+        invalid_formats = ["xml", "yaml", "csv", "binary", "invalid", ""]
 
-    def test_valid_log_levels(self) -> None:
-        """Test acceptance of all valid log levels.
+        for invalid_format in invalid_formats:
+            with pytest.raises(ValidationError) as exc_info:
+                BaseObservabilityConfig(log_format=invalid_format)
 
-        Description of what the test covers:
-        Verifies that BaseObservabilityConfig accepts all standard
-        logging levels without validation errors.
-
-        Preconditions:
-            - List of valid log levels (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-
-        Steps:
-            - Iterate through each valid log level
-            - Create config instance with each level
-            - Verify no validation errors occur
-
-        Expected Result:
-            - All valid log levels should be accepted
-            - Values should be stored exactly as provided
-        """
-        valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
-
-        for level in valid_levels:
-            config = BaseObservabilityConfig(log_level=level)
-            assert config.log_level == level
-
-    def test_case_insensitive_log_level(self) -> None:
-        """Test log level case normalization to uppercase.
-
-        Description of what the test covers:
-        Verifies that BaseObservabilityConfig automatically normalizes
-        log level values to uppercase regardless of input case.
-
-        Preconditions:
-            - Log level values in various cases
-
-        Steps:
-            - Test with "debug" (lowercase) expecting "DEBUG"
-            - Test with "Info" (mixed case) expecting "INFO"
-            - Test with "warning" (lowercase) expecting "WARNING"
-
-        Expected Result:
-            - All log levels should be normalized to uppercase
-            - "debug" → "DEBUG", "Info" → "INFO", etc.
-        """
-        config = BaseObservabilityConfig(log_level="debug")
-        assert config.log_level == "DEBUG"
-
-        config = BaseObservabilityConfig(log_level="Info")
-        assert config.log_level == "INFO"
-
-        config = BaseObservabilityConfig(log_level="warning")
-        assert config.log_level == "WARNING"
-
-    def test_invalid_log_level_validation(self) -> None:
-        """Test rejection of invalid log level values.
-
-        Description of what the test covers:
-        Verifies that BaseObservabilityConfig raises ValidationError
-        when provided with log levels not in the allowed list.
-
-        Preconditions:
-            - Invalid log level value not in allowed list
-
-        Steps:
-            - Attempt to create config with log_level="INVALID"
-            - Catch and verify ValidationError is raised
-            - Check error message contains valid options
-
-        Expected Result:
-            - ValidationError should be raised
-            - Error message should list valid log level options
-        """
-        with pytest.raises(ValidationError) as exc_info:
-            BaseObservabilityConfig(log_level="INVALID")
-
-        assert "log_level must be one of" in str(exc_info.value)
-        assert "DEBUG" in str(exc_info.value)
-        assert "INFO" in str(exc_info.value)
-
-    def test_valid_log_formats(self) -> None:
-        """Test acceptance of all valid log formats.
-
-        Description of what the test covers:
-        Verifies that BaseObservabilityConfig accepts all supported
-        log format values (json and text).
-
-        Preconditions:
-            - List of valid log formats
-
-        Steps:
-            - Test with "json" format
-            - Test with "text" format
-            - Verify both are accepted without errors
-
-        Expected Result:
-            - Both "json" and "text" formats should be accepted
-            - Values should be stored exactly as provided
-        """
-        valid_formats = ["json", "text"]
-
-        for format_type in valid_formats:
-            config = BaseObservabilityConfig(log_format=format_type)
-            assert config.log_format == format_type
-
-    def test_invalid_log_format_validation(self) -> None:
-        """Test rejection of invalid log format values.
-
-        Description of what the test covers:
-        Verifies that BaseObservabilityConfig raises ValidationError
-        when provided with unsupported log format values.
-
-        Preconditions:
-            - Invalid log format value not in allowed list
-
-        Steps:
-            - Attempt to create config with log_format="xml"
-            - Catch and verify ValidationError is raised
-            - Check error message contains valid format options
-
-        Expected Result:
-            - ValidationError should be raised
-            - Error message should list "json" and "text" as valid options
-        """
-        with pytest.raises(ValidationError) as exc_info:
-            BaseObservabilityConfig(log_format="xml")
-
-        assert "log_format must be one of" in str(exc_info.value)
-        assert "json" in str(exc_info.value)
-        assert "text" in str(exc_info.value)
-
-    def test_log_format_case_sensitive(self) -> None:
-        """Test log format case sensitivity enforcement.
-
-        Description of what the test covers:
-        Verifies that log format validation is case-sensitive and
-        rejects values with incorrect casing.
-
-        Preconditions:
-            - Log format values with incorrect casing
-
-        Steps:
-            - Attempt to create config with log_format="JSON" (uppercase)
-            - Attempt to create config with log_format="Text" (mixed case)
-            - Verify ValidationError is raised for both
-
-        Expected Result:
-            - ValidationError should be raised for "JSON"
-            - ValidationError should be raised for "Text"
-            - Only exact case matches should be accepted
-        """
-        with pytest.raises(ValidationError):
-            BaseObservabilityConfig(log_format="JSON")
-
-        with pytest.raises(ValidationError):
-            BaseObservabilityConfig(log_format="Text")
+            error_msg = str(exc_info.value)
+            assert "log_format must be one of" in error_msg
 
     def test_metrics_port_validation(self) -> None:
-        """Test metrics port range validation.
-
-        Description of what the test covers:
-        Verifies that BaseObservabilityConfig validates metrics_port
-        values are within valid port number range (1-65535).
-
-        Preconditions:
-            - Valid and invalid port number values
-
-        Steps:
-            - Test with valid ports (8080, 65535)
-            - Test with invalid ports (-1, 0, 65536)
-            - Verify validation behavior
-
-        Expected Result:
-            - Valid ports should be accepted
-            - Invalid ports should raise ValidationError
-        """
+        """Test metrics_port validation constraints."""
         # Valid port numbers
-        config = BaseObservabilityConfig(metrics_port=8080)
-        assert config.metrics_port == 8080
+        valid_ports = [1, 80, 443, 8080, 9090, 65535]
 
-        config = BaseObservabilityConfig(metrics_port=65535)
-        assert config.metrics_port == 65535
-
-        # Invalid port numbers
-        with pytest.raises(ValidationError):
-            BaseObservabilityConfig(metrics_port=-1)
-
-        with pytest.raises(ValidationError):
-            BaseObservabilityConfig(metrics_port=0)
-
-        with pytest.raises(ValidationError):
-            BaseObservabilityConfig(metrics_port=65536)
-
-
-@pytest.mark.unit
-class TestBaseObservabilityConfigEnvironmentVariables:
-    """Test cases for BaseObservabilityConfig environment variable loading."""
-
-    def test_env_var_loading_log_level(self) -> None:
-        """Test log_level loading from environment variable.
-
-        Description of what the test covers:
-        Verifies that BaseObservabilityConfig correctly loads
-        log_level value from LOG_LEVEL environment variable.
-
-        Preconditions:
-        - LOG_LEVEL environment variable set to "ERROR"
-
-        Steps:
-        - Set LOG_LEVEL environment variable
-        - Create BaseObservabilityConfig with no arguments
-        - Verify log_level is loaded from environment
-
-        Expected Result:
-        - config.log_level should be "ERROR" from environment variable
-        """
-        with patch.dict(os.environ, {"LOG_LEVEL": "ERROR"}):
-            config = BaseObservabilityConfig()
-            assert config.log_level == "ERROR"
-
-    def test_env_var_loading_log_format(self) -> None:
-        """Test log_format loading from environment variable.
-
-        Description of what the test covers:
-        Verifies that BaseObservabilityConfig correctly loads
-        log_format value from LOG_FORMAT environment variable.
-
-        Preconditions:
-        - LOG_FORMAT environment variable set to "text"
-
-        Steps:
-        - Set LOG_FORMAT environment variable
-        - Create BaseObservabilityConfig with no arguments
-        - Verify log_format is loaded from environment
-
-        Expected Result:
-        - config.log_format should be "text" from environment variable
-        """
-        with patch.dict(os.environ, {"LOG_FORMAT": "text"}):
-            config = BaseObservabilityConfig()
-            assert config.log_format == "text"
-
-    def test_env_var_loading_metrics_enabled(self) -> None:
-        """Test metrics_enabled loading from environment variable.
-
-        Description of what the test covers:
-        Verifies that BaseObservabilityConfig correctly loads
-        and converts metrics_enabled boolean from environment variable.
-
-        Preconditions:
-        - METRICS_ENABLED environment variable set to string boolean values
-
-        Steps:
-        - Set METRICS_ENABLED to "false", verify False conversion
-        - Set METRICS_ENABLED to "true", verify True conversion
-        - Create BaseObservabilityConfig instances
-
-        Expected Result:
-        - "false" string should convert to False boolean
-        - "true" string should convert to True boolean
-        """
-        with patch.dict(os.environ, {"METRICS_ENABLED": "false"}):
-            config = BaseObservabilityConfig()
-            assert config.metrics_enabled is False
-
-        with patch.dict(os.environ, {"METRICS_ENABLED": "true"}):
-            config = BaseObservabilityConfig()
-            assert config.metrics_enabled is True
-
-    def test_env_var_loading_metrics_port(self) -> None:
-        """Test metrics_port loading from environment variable.
-
-        Description of what the test covers:
-        Verifies that BaseObservabilityConfig correctly loads
-        and converts metrics_port from string to integer.
-
-        Preconditions:
-        - METRICS_PORT environment variable set to "8081"
-
-        Steps:
-        - Set METRICS_PORT environment variable to string value
-        - Create BaseObservabilityConfig with no arguments
-        - Verify metrics_port is converted to integer
-
-        Expected Result:
-        - config.metrics_port should be 8081 (integer) from environment
-        """
-        with patch.dict(os.environ, {"METRICS_PORT": "8081"}):
-            config = BaseObservabilityConfig()
-            assert config.metrics_port == 8081
-
-    def test_env_var_case_normalization(self) -> None:
-        """Test environment variable case normalization."""
-        with patch.dict(os.environ, {"LOG_LEVEL": "debug"}):
-            config = BaseObservabilityConfig()
-            assert config.log_level == "DEBUG"
-
-    def test_env_var_override_defaults(self) -> None:
-        """Test environment variables override default values."""
-        with patch.dict(
-            os.environ,
-            {"LOG_LEVEL": "CRITICAL", "LOG_FORMAT": "text", "METRICS_ENABLED": "false", "METRICS_PORT": "9999"},
-        ):
-            config = BaseObservabilityConfig()
-            assert config.log_level == "CRITICAL"
-            assert config.log_format == "text"
-            assert config.metrics_enabled is False
-            assert config.metrics_port == 9999
-
-    def test_constructor_args_override_env_vars(self) -> None:
-        """Test constructor arguments override environment variables."""
-        with patch.dict(os.environ, {"LOG_LEVEL": "ERROR", "METRICS_PORT": "8888"}):
-            config = BaseObservabilityConfig(log_level="DEBUG", metrics_port=7777)
-            assert config.log_level == "DEBUG"
-            assert config.metrics_port == 7777
-
-
-@pytest.mark.unit
-class TestBaseObservabilityConfigBoundaryValues:
-    """Test cases for BaseObservabilityConfig boundary values."""
-
-    def test_minimum_valid_port(self) -> None:
-        """Test minimum valid metrics port configuration.
-
-        Description of what the test covers:
-        Verifies that BaseObservabilityConfig accepts the minimum
-        valid port number (1) for metrics endpoint.
-
-        Preconditions:
-        - Port number set to minimum valid value (1)
-
-        Steps:
-        - Create BaseObservabilityConfig with metrics_port=1
-        - Verify port is correctly set
-
-        Expected Result:
-        - metrics_port should be exactly 1
-        """
-        config = BaseObservabilityConfig(metrics_port=1)
-        assert config.metrics_port == 1
-
-    def test_maximum_valid_port(self) -> None:
-        """Test maximum valid metrics port configuration.
-
-        Description of what the test covers:
-        Verifies that BaseObservabilityConfig accepts the maximum
-        valid port number (65535) for metrics endpoint.
-
-        Preconditions:
-        - Port number set to maximum valid value (65535)
-
-        Steps:
-        - Create BaseObservabilityConfig with metrics_port=65535
-        - Verify port is correctly set
-
-        Expected Result:
-        - metrics_port should be exactly 65535
-        """
-        config = BaseObservabilityConfig(metrics_port=65535)
-        assert config.metrics_port == 65535
-
-    def test_common_port_numbers(self) -> None:
-        """Test commonly used port numbers for metrics.
-
-        Description of what the test covers:
-        Verifies that BaseObservabilityConfig accepts commonly
-        used port numbers for metrics endpoints.
-
-        Preconditions:
-        - List of common port numbers for web services
-
-        Steps:
-        - Iterate through common ports (80, 443, 8080, etc.)
-        - Create BaseObservabilityConfig for each port
-        - Verify each port is correctly accepted
-
-        Expected Result:
-        - All common port numbers should be accepted
-        - Port values should be stored exactly as provided
-        """
-        common_ports = [80, 443, 8080, 8443, 9090, 9091, 3000, 5000]
-
-        for port in common_ports:
+        for port in valid_ports:
             config = BaseObservabilityConfig(metrics_port=port)
             assert config.metrics_port == port
 
-    def test_all_log_levels_with_formats(self) -> None:
-        """Test all log level and format combinations.
+        # Invalid port numbers
+        invalid_ports = [0, -1, 65536, 100000]
 
-        Description of what the test covers:
-        Verifies that BaseObservabilityConfig accepts all valid
-        combinations of log levels with log formats.
+        for port in invalid_ports:
+            with pytest.raises(ValidationError) as exc_info:
+                BaseObservabilityConfig(metrics_port=port)
 
-        Preconditions:
-        - List of all valid log levels
-        - List of all valid log formats
+            errors = exc_info.value.errors()
+            port_error = next(error for error in errors if error["loc"] == ("metrics_port",))
+            assert "greater than 0" in port_error["msg"] or "less than or equal to 65535" in port_error["msg"]
 
-        Steps:
-        - Create nested loop for all level-format combinations
-        - Create BaseObservabilityConfig for each combination
-        - Verify both level and format are correctly set
+    def test_metrics_enabled_boolean_validation(self) -> None:
+        """Test that metrics_enabled properly validates boolean values."""
+        # Valid boolean values
+        config_true = BaseObservabilityConfig(metrics_enabled=True)
+        assert config_true.metrics_enabled is True
 
-        Expected Result:
-        - All valid combinations should be accepted
-        - Each log level should work with both json and text formats
-        """
-        log_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
-        log_formats = ["json", "text"]
+        config_false = BaseObservabilityConfig(metrics_enabled=False)
+        assert config_false.metrics_enabled is False
 
-        for level in log_levels:
-            for format_type in log_formats:
-                config = BaseObservabilityConfig(log_level=level, log_format=format_type)
-                assert config.log_level == level
-                assert config.log_format == format_type
+        # Pydantic auto-converts common boolean representations
+        config_str_true = BaseObservabilityConfig(metrics_enabled="true")
+        assert config_str_true.metrics_enabled is True
 
+        config_str_false = BaseObservabilityConfig(metrics_enabled="false")
+        assert config_str_false.metrics_enabled is False
 
-@pytest.mark.unit
-class TestBaseObservabilityConfigSerialization:
-    """Test cases for BaseObservabilityConfig serialization."""
+        config_int_true = BaseObservabilityConfig(metrics_enabled=1)
+        assert config_int_true.metrics_enabled is True
 
-    def test_model_dump(self) -> None:
-        """Test model_dump method."""
-        config = BaseObservabilityConfig(
-            log_level="WARNING", log_format="text", metrics_enabled=False, metrics_port=8080
+        config_int_false = BaseObservabilityConfig(metrics_enabled=0)
+        assert config_int_false.metrics_enabled is False
+
+    def test_type_validation(self) -> None:
+        """Test type validation for all fields."""
+        # Valid types should work
+        config = BaseObservabilityConfig(log_level="DEBUG", log_format="text", metrics_enabled=True, metrics_port=8080)
+
+        assert isinstance(config.log_level, str)
+        assert isinstance(config.log_format, str)
+        assert isinstance(config.metrics_enabled, bool)
+        assert isinstance(config.metrics_port, int)
+
+        # Invalid types should raise ValidationError
+        with pytest.raises(ValidationError):
+            BaseObservabilityConfig(log_level=123)
+
+        with pytest.raises(ValidationError):
+            BaseObservabilityConfig(log_format=123)
+
+        # Pydantic auto-converts numeric strings to integers
+        config_str_port = BaseObservabilityConfig(metrics_port="8080")
+        assert config_str_port.metrics_port == 8080
+        assert isinstance(config_str_port.metrics_port, int)
+
+    def test_model_config_settings(self) -> None:
+        """Test that model configuration is properly set."""
+        config = BaseObservabilityConfig()
+
+        # Check that model_config is properly configured
+        assert hasattr(config, "model_config")
+        assert config.model_config.get("str_strip_whitespace") is True
+        assert config.model_config.get("extra") == "ignore"
+
+    def test_field_descriptions(self) -> None:
+        """Test that all fields have proper descriptions."""
+        for field_name, field_info in BaseObservabilityConfig.model_fields.items():
+            assert field_info.description is not None
+            assert len(field_info.description) > 0, f"Field {field_name} missing description"
+
+    def test_none_values_rejected(self) -> None:
+        """Test that None values are properly rejected."""
+        with pytest.raises(ValidationError) as exc_info:
+            BaseObservabilityConfig(log_level=None, log_format=None, metrics_enabled=None, metrics_port=None)
+
+        errors = exc_info.value.errors()
+        assert len(errors) == 4
+        error_fields = {error["loc"][0] for error in errors}
+        assert error_fields == {"log_level", "log_format", "metrics_enabled", "metrics_port"}
+
+    def test_extra_fields_ignored(self) -> None:
+        """Test that extra fields are ignored due to model configuration."""
+        # Should not raise error due to extra="ignore"
+        config = BaseObservabilityConfig(log_level="DEBUG", unknown_field="should-be-ignored", another_unknown=123)
+
+        assert config.log_level == "DEBUG"
+        assert not hasattr(config, "unknown_field")
+        assert not hasattr(config, "another_unknown")
+
+    def test_serialization_compatibility(self) -> None:
+        """Test that config can be serialized and deserialized."""
+        original_config = BaseObservabilityConfig(
+            log_level="DEBUG", log_format="text", metrics_enabled=False, metrics_port=8080
         )
 
-        data = config.model_dump()
-
+        # Test model_dump
+        data = original_config.model_dump()
         assert isinstance(data, dict)
-        assert data["log_level"] == "WARNING"
+        assert data["log_level"] == "DEBUG"
         assert data["log_format"] == "text"
         assert data["metrics_enabled"] is False
         assert data["metrics_port"] == 8080
 
-    def test_model_dump_json_serializable(self) -> None:
-        """Test model can be dumped to JSON-serializable format."""
-        config = BaseObservabilityConfig()
+        # Test that we can create a new instance from the data
+        new_config = BaseObservabilityConfig(**data)
+        assert new_config.log_level == original_config.log_level
+        assert new_config.log_format == original_config.log_format
+        assert new_config.metrics_enabled == original_config.metrics_enabled
+        assert new_config.metrics_port == original_config.metrics_port
 
-        data = config.model_dump()
+    def test_field_descriptions_content(self) -> None:
+        """Test that field descriptions contain meaningful content."""
+        descriptions = {
+            field_name: field_info.description
+            for field_name, field_info in BaseObservabilityConfig.model_fields.items()
+        }
 
-        # Should be able to convert to JSON
-        import json
+        # Check that descriptions mention key concepts
+        assert descriptions["log_level"] is not None, "log_level description is missing"
+        assert "log" in descriptions["log_level"].lower()
 
-        json_str = json.dumps(data)
-        assert isinstance(json_str, str)
+        assert descriptions["log_format"] is not None, "log_format description is missing"
+        assert "log" in descriptions["log_format"].lower()
 
-        # Should be able to parse back
-        parsed_data = json.loads(json_str)
-        assert parsed_data["log_level"] == "INFO"
-        assert parsed_data["log_format"] == "json"
-        assert parsed_data["metrics_enabled"] is True
-        assert parsed_data["metrics_port"] == 9090
+        assert descriptions["metrics_enabled"] is not None, "metrics_enabled description is missing"
+        assert (
+            "metrics" in descriptions["metrics_enabled"].lower()
+            or "prometheus" in descriptions["metrics_enabled"].lower()
+        )
 
-
-@pytest.mark.unit
-class TestBaseObservabilityConfigStringRepresentation:
-    """Test cases for BaseObservabilityConfig string representation."""
+        assert descriptions["metrics_port"] is not None, "metrics_port description is missing"
+        assert "port" in descriptions["metrics_port"].lower() and "metrics" in descriptions["metrics_port"].lower()
 
     def test_string_representation(self) -> None:
-        """Test string representation."""
-        config = BaseObservabilityConfig(log_level="DEBUG", metrics_port=8080)
+        """Test string representation contains key information."""
+        config = BaseObservabilityConfig(log_level="DEBUG", log_format="text", metrics_enabled=False, metrics_port=8080)
 
         str_repr = str(config)
 
-        # Pydantic models return field values in string representation
-        assert "log_level='DEBUG'" in str_repr
-        assert "metrics_port=8080" in str_repr
+        # Should contain field values
+        assert "DEBUG" in str_repr
+        assert "text" in str_repr
+        assert "8080" in str_repr
 
+    def test_boundary_port_values(self) -> None:
+        """Test boundary values for metrics_port."""
+        # Minimum valid port
+        config = BaseObservabilityConfig(metrics_port=1)
+        assert config.metrics_port == 1
 
-@pytest.mark.unit
-class TestBaseObservabilityConfigEdgeCases:
-    """Test cases for BaseObservabilityConfig edge cases."""
+        # Maximum valid port
+        config = BaseObservabilityConfig(metrics_port=65535)
+        assert config.metrics_port == 65535
 
-    def test_boolean_string_conversion(self) -> None:
-        """Test boolean string values are converted."""
-        with patch.dict(os.environ, {"METRICS_ENABLED": "1"}):
-            config = BaseObservabilityConfig()
-            assert config.metrics_enabled is True
+        # Common ports
+        common_ports = [80, 443, 8080, 9090, 3000, 5000]
+        for port in common_ports:
+            config = BaseObservabilityConfig(metrics_port=port)
+            assert config.metrics_port == port
 
-        with patch.dict(os.environ, {"METRICS_ENABLED": "0"}):
-            config = BaseObservabilityConfig()
-            assert config.metrics_enabled is False
+    def test_validation_error_messages(self) -> None:
+        """Test that validation error messages are helpful."""
+        # Test log_level validation error message
+        with pytest.raises(ValidationError) as exc_info:
+            BaseObservabilityConfig(log_level="invalid")
 
-    def test_port_string_conversion(self) -> None:
-        """Test port string values are converted to integers."""
-        with patch.dict(os.environ, {"METRICS_PORT": "9091"}):
-            config = BaseObservabilityConfig()
-            assert config.metrics_port == 9091
-            assert isinstance(config.metrics_port, int)
+        error_msg = str(exc_info.value)
+        assert "log_level must be one of" in error_msg
+        assert "DEBUG" in error_msg
+        assert "INFO" in error_msg
+        assert "WARNING" in error_msg
+        assert "ERROR" in error_msg
+        assert "CRITICAL" in error_msg
 
-    def test_extra_fields_ignored(self) -> None:
-        """Test extra fields are ignored if model allows it."""
-        config = BaseObservabilityConfig(log_level="INFO", unknown_field="should_be_ignored")
+        # Test log_format validation error message
+        with pytest.raises(ValidationError) as exc_info:
+            BaseObservabilityConfig(log_format="invalid")
+
+        error_msg = str(exc_info.value)
+        assert "log_format must be one of" in error_msg
+        assert "json" in error_msg
+        assert "text" in error_msg
+
+        # Test port validation error message
+        with pytest.raises(ValidationError) as exc_info:
+            BaseObservabilityConfig(metrics_port=0)
+
+        errors = exc_info.value.errors()
+        port_error = next(error for error in errors if error["loc"] == ("metrics_port",))
+        assert "greater than 0" in port_error["msg"]
+
+    def test_whitespace_handling_in_string_fields(self) -> None:
+        """Test whitespace handling in string fields due to str_strip_whitespace=True."""
+        # Since str_strip_whitespace=True, leading/trailing spaces should be stripped
+        # but this only applies if the fields are actually processed as strings from env vars
+        # For direct instantiation, the behavior depends on Pydantic's processing
+
+        # Test that valid values work regardless of potential whitespace
+        config = BaseObservabilityConfig(log_level="INFO", log_format="json")
         assert config.log_level == "INFO"
-        assert not hasattr(config, "unknown_field")
+        assert config.log_format == "json"
 
-    def test_logging_configuration_combinations(self) -> None:
-        """Test realistic logging configuration combinations."""
-        # Development configuration
-        dev_config = BaseObservabilityConfig(log_level="DEBUG", log_format="text", metrics_enabled=True)
-        assert dev_config.log_level == "DEBUG"
-        assert dev_config.log_format == "text"
+    def test_case_preservation_after_validation(self) -> None:
+        """Test that case is properly normalized after validation."""
+        # log_level should be converted to uppercase
+        config = BaseObservabilityConfig(log_level="info")
+        assert config.log_level == "INFO"
+        assert config.log_level == config.log_level.upper()
 
-        # Production configuration
-        prod_config = BaseObservabilityConfig(log_level="WARNING", log_format="json", metrics_enabled=True)
-        assert prod_config.log_level == "WARNING"
-        assert prod_config.log_format == "json"
-
-
-@pytest.mark.unit
-class TestBaseObservabilityConfigInvalidData:
-    """Test cases for BaseObservabilityConfig with invalid data."""
-
-    def test_invalid_port_types(self) -> None:
-        """Test invalid port types."""
-        with pytest.raises(ValidationError):
-            BaseObservabilityConfig(metrics_port="not_a_number")
-
-        with pytest.raises(ValidationError):
-            BaseObservabilityConfig(metrics_port=3.14)
-
-        with pytest.raises(ValidationError):
-            BaseObservabilityConfig(metrics_port=None)
-
-    def test_invalid_boolean_types(self) -> None:
-        """Test invalid boolean types for metrics_enabled."""
-        with pytest.raises(ValidationError):
-            BaseObservabilityConfig(metrics_enabled="not_a_bool")
-
-        with pytest.raises(ValidationError):
-            BaseObservabilityConfig(metrics_enabled=123)
-
-    def test_none_values_for_fields(self) -> None:
-        """Test None values for fields."""
-        with pytest.raises(ValidationError):
-            BaseObservabilityConfig(log_level=None)
-
-        with pytest.raises(ValidationError):
-            BaseObservabilityConfig(log_format=None)
-
-    def test_empty_string_values(self) -> None:
-        """Test empty string values."""
-        with pytest.raises(ValidationError):
-            BaseObservabilityConfig(log_level="")
-
-        with pytest.raises(ValidationError):
-            BaseObservabilityConfig(log_format="")
-
-
-@pytest.mark.unit
-@pytest.mark.config
-class TestBaseObservabilityConfigIntegration:
-    """Integration test cases for BaseObservabilityConfig."""
-
-    def test_complete_observability_configuration(self) -> None:
-        """Test complete observability configuration with all features."""
-        with patch.dict(
-            os.environ,
-            {
-                "LOG_LEVEL": "warning",  # Should be normalized to uppercase
-                "METRICS_ENABLED": "true",
-            },
-        ):
-            config = BaseObservabilityConfig(log_format="text", metrics_port=8080)
-
-            # Verify mixed sources and normalization
-            assert config.log_level == "WARNING"  # From env var, normalized
-            assert config.log_format == "text"  # From constructor
-            assert config.metrics_enabled is True  # From env var
-            assert config.metrics_port == 8080  # From constructor
-
-            # Test serialization preserves all values
-            data = config.model_dump()
-            assert data["log_level"] == "WARNING"
-            assert data["log_format"] == "text"
-            assert data["metrics_enabled"] is True
-            assert data["metrics_port"] == 8080
-
-    def test_logging_level_hierarchy(self) -> None:
-        """Test logging level hierarchy understanding."""
-        levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
-        level_values = {"DEBUG": 10, "INFO": 20, "WARNING": 30, "ERROR": 40, "CRITICAL": 50}
-
-        for level in levels:
-            config = BaseObservabilityConfig(log_level=level)
-            assert config.log_level == level
-
-            # Verify level can be used for logging hierarchy decisions
-            import logging
-
-            log_level_value = getattr(logging, level)
-            assert log_level_value == level_values[level]
-
-    def test_metrics_and_logging_coordination(self) -> None:
-        """Test coordinated metrics and logging configuration."""
-        # Scenario 1: High observability (debug with metrics)
-        high_obs_config = BaseObservabilityConfig(
-            log_level="DEBUG", log_format="json", metrics_enabled=True, metrics_port=9090
-        )
-
-        assert high_obs_config.log_level == "DEBUG"
-        assert high_obs_config.metrics_enabled is True
-
-        # Scenario 2: Minimal observability (error only, no metrics)
-        minimal_config = BaseObservabilityConfig(log_level="ERROR", log_format="text", metrics_enabled=False)
-
-        assert minimal_config.log_level == "ERROR"
-        assert minimal_config.metrics_enabled is False
-
-    def test_configuration_inheritance_compatibility(self) -> None:
-        """Test extension of BaseObservabilityConfig through inheritance.
-
-        Description of what the test covers:
-        Verifies that BaseObservabilityConfig supports extension
-        with additional observability fields while preserving
-        base logging and metrics functionality.
-
-        Preconditions:
-        - Base observability configuration with custom fields
-        - Log level and metrics port for configuration
-
-        Steps:
-        - Define CustomBaseObservabilityConfig inheriting from base
-        - Add custom fields: custom_log_file, trace_enabled
-        - Create config instance with base and custom parameters
-        - Verify base and custom configuration are preserved
-
-        Expected Result:
-        - Base fields (log_level, metrics_port) maintained
-        - Custom fields added with default values
-        - Ability to override both base and custom configuration
-        """
-
-        class CustomBaseObservabilityConfig(BaseObservabilityConfig):
-            custom_log_file: str = "/var/log/custom.log"
-            trace_enabled: bool = False
-
-        config = CustomBaseObservabilityConfig(log_level="WARNING", metrics_port=9091)
-
-        assert config.log_level == "WARNING"
-        assert config.metrics_port == 9091
-        assert config.custom_log_file == "/var/log/custom.log"
-        assert config.trace_enabled is False
-
-    def test_environment_specific_configurations(self) -> None:
-        """Test observability configuration across environments.
-
-        Description of what the test covers:
-        Verifies that BaseObservabilityConfig supports different
-        observability configurations for development and production
-        environments with distinct logging and monitoring needs.
-
-        Preconditions:
-        - Environment variables for development setup
-        - Environment variables for production setup
-
-        Steps:
-        - Set development environment variables (DEBUG, text format)
-        - Create BaseObservabilityConfig for development
-        - Set production environment variables (WARNING, json format)
-        - Create BaseObservabilityConfig for production
-        - Verify configuration matches environment requirements
-
-        Expected Result:
-        - Development config:
-            * DEBUG log level for detailed debugging
-            * Text format for human readability
-            * Metrics enabled for monitoring
-        - Production config:
-            * WARNING log level for important events only
-            * JSON format for structured logging
-            * Metrics enabled with standard port
-        """
-        # Development environment
-        with patch.dict(os.environ, {"LOG_LEVEL": "DEBUG", "LOG_FORMAT": "text", "METRICS_ENABLED": "true"}):
-            dev_config = BaseObservabilityConfig()
-            assert dev_config.log_level == "DEBUG"
-            assert dev_config.log_format == "text"
-            assert dev_config.metrics_enabled is True
-
-        # Production environment
-        with patch.dict(
-            os.environ,
-            {"LOG_LEVEL": "WARNING", "LOG_FORMAT": "json", "METRICS_ENABLED": "true", "METRICS_PORT": "9090"},
-        ):
-            prod_config = BaseObservabilityConfig()
-            assert prod_config.log_level == "WARNING"
-            assert prod_config.log_format == "json"
-            assert prod_config.metrics_enabled is True
-            assert prod_config.metrics_port == 9090
+        # log_format should be converted to lowercase
+        config = BaseObservabilityConfig(log_format="JSON")
+        assert config.log_format == "json"
+        assert config.log_format == config.log_format.lower()

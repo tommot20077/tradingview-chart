@@ -1,6 +1,6 @@
 """Network configuration settings."""
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -12,6 +12,9 @@ class BaseNetworkConfig(BaseSettings):
     """
 
     model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
         str_strip_whitespace=True,
         extra="ignore",
     )
@@ -43,3 +46,20 @@ class BaseNetworkConfig(BaseSettings):
         ge=0,
     )
     """Timeout in seconds for WebSocket ping responses. Must be non-negative."""
+
+    @model_validator(mode="after")
+    def validate_ping_settings(self) -> "BaseNetworkConfig":
+        """Validates that ping timeout is less than ping interval when ping is enabled.
+
+        Args:
+            self: The BaseNetworkConfig instance to validate.
+
+        Returns:
+            The validated BaseNetworkConfig instance.
+
+        Raises:
+            ValueError: If ping_timeout >= ping_interval when ping is enabled.
+        """
+        if self.ws_ping_interval > 0 and self.ws_ping_timeout >= self.ws_ping_interval:
+            raise ValueError("ws_ping_timeout must be less than ws_ping_interval when ping is enabled")
+        return self

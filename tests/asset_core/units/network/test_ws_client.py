@@ -1,11 +1,12 @@
 import asyncio
 import builtins
 import contextlib
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, call
 
 import pytest
-import websockets
 from pytest_mock import MockerFixture
+from websockets import State
+from websockets.client import ClientConnection
 from websockets.exceptions import ConnectionClosed, WebSocketException
 
 from asset_core.exceptions import ConnectionError, TimeoutError, WebSocketError
@@ -24,17 +25,21 @@ def mock_logger(mocker: MockerFixture) -> MagicMock:
 @pytest.fixture
 def mock_websockets_connect(mocker: MockerFixture) -> tuple[AsyncMock, AsyncMock]:
     """Fixture to mock websockets.connect."""
-    mock_ws = AsyncMock()  # Remove spec since WebSocketClientProtocol may not be available
-    mock_ws.close = AsyncMock()
-    mock_ws.send = AsyncMock()
-    # Default behavior for recv is to simulate a closed connection to prevent infinite loops.
-    mock_ws.recv = AsyncMock(side_effect=ConnectionClosed(None, None))
-    mock_ws.state = websockets.State.OPEN
+    mock_connection = AsyncMock(spec=ClientConnection)
 
-    mock_connect = mocker.patch("websockets.connect", new_callable=AsyncMock)
-    mock_connect.return_value = mock_ws
+    # 2. 手動設定 state，這樣 client.is_connected 才能正常運作
+    mock_connection.state = State.OPEN
 
-    return mock_connect, mock_ws
+    # 3. 確保重要的 awaitable 方法有預設回傳值
+    mock_connection.close = AsyncMock()
+    mock_connection.send = AsyncMock()
+    mock_connection.recv = AsyncMock(side_effect=ConnectionClosed(None, None))
+
+    # 使用 mocker 來 patch 正確的路徑，並確保它是 AsyncMock
+    mock_connect_func = mocker.patch("asset_core.network.ws_client.websockets.connect", new_callable=AsyncMock)
+    mock_connect_func.return_value = mock_connection
+
+    return mock_connect_func, mock_connection
 
 
 @pytest.fixture
@@ -84,7 +89,7 @@ class TestRobustWebSocketClient:
         mock_connect, mock_ws = mock_websockets_connect
         client = RobustWebSocketClient(url=TEST_URL, **mock_callbacks)
 
-        await client.connect()
+        await client.connect(timeout=5)
 
         assert client.is_connected
         assert client._ws == mock_ws
@@ -111,7 +116,7 @@ class TestRobustWebSocketClient:
         client = RobustWebSocketClient(url=TEST_URL, **mock_callbacks)
 
         with pytest.raises(TimeoutError, match="Failed to establish initial connection"):
-            await client.connect()
+            await client.connect(timeout=5)
 
         assert not client.is_connected
         assert client._running is False
@@ -178,44 +183,59 @@ class TestRobustWebSocketClient:
         assert mock_callbacks["on_message"].call_count == 2
 
     @pytest.mark.asyncio
-    async def test_reconnection_logic(
+    async def test_connection_loop_successful_reconnection(
         self,
         mock_websockets_connect: tuple[AsyncMock, AsyncMock],
-        mock_asyncio_sleep: AsyncMock,
-        mock_callbacks: dict[str, MagicMock],
+        mocker: MockerFixture,
     ) -> None:
-        """Test the reconnection logic with exponential backoff."""
+        """Test that the connection loop properly handles reconnection after initial failure."""
         mock_connect, mock_ws = mock_websockets_connect
+        error_event = asyncio.Event()
+        connect_event = asyncio.Event()
+        sleep_event = asyncio.Event()
 
-        # First connection fails, second succeeds
         mock_connect.side_effect = [
             WebSocketException("Initial connection failed"),
-            mock_ws,  # This should be the actual mock_ws
+            mock_ws,
         ]
+        mock_ws.recv.side_effect = [ConnectionClosed(None, None)]
 
-        client = RobustWebSocketClient(url=TEST_URL, **mock_callbacks, reconnect_interval=1, max_reconnect_attempts=3)
+        original_asyncio_sleep = asyncio.sleep
 
-        # We need to manually drive the connection loop to test reconnection
-        async def drive_connection() -> None:
-            client._running = True
-            # First attempt
-            with pytest.raises(ConnectionError):
-                await client._connect()
+        async def mock_sleep_side_effect(_: float) -> None:
+            sleep_event.set()
+            await original_asyncio_sleep(0)  # Yield control immediately
 
-            # Simulate waiting for reconnect
-            await asyncio.sleep(client.reconnect_interval)
-            client._reconnect_count += 1
+        mocker.patch("asyncio.sleep", side_effect=mock_sleep_side_effect)
 
-            # Second attempt
-            await client._connect()
+        client = RobustWebSocketClient(
+            url=TEST_URL,
+            on_error=lambda _: error_event.set(),
+            on_connect=lambda: connect_event.set(),
+            reconnect_interval=0.1,
+            max_reconnect_attempts=3,
+        )
 
-        await asyncio.wait_for(drive_connection(), timeout=2)
+        client._running = True
+        connection_task = asyncio.create_task(client._connection_loop())
 
-        # Check that sleep was called for backoff
-        mock_asyncio_sleep.assert_called_once_with(1)
-        # Check that on_connect was called on the second attempt
-        mock_callbacks["on_connect"].assert_called_once()
-        assert client.is_connected
+        try:
+            # --- First Attempt (Failure) ---
+            await asyncio.wait_for(error_event.wait(), timeout=1)
+            # Wait for the sleep to be called after the first failure
+            await asyncio.wait_for(sleep_event.wait(), timeout=1)
+            assert mock_connect.call_count == 1
+
+            # --- Second Attempt (Success) ---
+            sleep_event.clear()  # Clear the event for the next sleep call
+            await asyncio.wait_for(connect_event.wait(), timeout=1)
+            assert mock_connect.call_count == 2
+
+        finally:
+            client._running = False
+            connection_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await connection_task
 
     @pytest.mark.asyncio
     async def test_close_method(
@@ -225,7 +245,7 @@ class TestRobustWebSocketClient:
         _, mock_ws = mock_websockets_connect
         client = RobustWebSocketClient(url=TEST_URL, **mock_callbacks)
 
-        await client.connect()
+        await client.connect(timeout=5)
         assert client.is_connected
 
         connection_task = client._connection_task
@@ -287,16 +307,17 @@ class TestRobustWebSocketClient:
         mock_callbacks["on_error"].assert_called_once_with(test_exception)
 
     @pytest.mark.asyncio
-    async def test_max_reconnect_attempts_stops_client(
+    async def test_max_reconnect_attempts_stops_client_with_error_callback(
         self,
         mock_websockets_connect: tuple[AsyncMock, AsyncMock],
         mock_callbacks: dict[str, MagicMock],
     ) -> None:
-        """Test that client stops running after max_reconnect_attempts is reached.
+        """Test that client stops running after max_reconnect_attempts is reached and calls on_error.
 
-        This test verifies the scenario described in missing_tests.md line 169:
+        This test verifies the scenario described in missing_tests.md:
         - max_reconnect_attempts reached
         - assert client stops running
+        - assert on_error callback is invoked indicating permanent failure
         """
         mock_connect, _ = mock_websockets_connect
 
@@ -306,7 +327,7 @@ class TestRobustWebSocketClient:
         client = RobustWebSocketClient(
             url=TEST_URL,
             **mock_callbacks,
-            reconnect_interval=1,  # Very short interval for faster test
+            reconnect_interval=0.01,  # Very short interval for faster test
             max_reconnect_attempts=2,  # Small number for faster test
         )
 
@@ -316,7 +337,7 @@ class TestRobustWebSocketClient:
 
         # Wait for the connection task to complete (it should stop after max attempts)
         try:
-            await asyncio.wait_for(connection_task, timeout=5.0)
+            await asyncio.wait_for(connection_task, timeout=2.0)
         except builtins.TimeoutError:
             # If it didn't finish, that's a problem - cancel it
             connection_task.cancel()
@@ -328,18 +349,20 @@ class TestRobustWebSocketClient:
         assert not client._running
         assert client._reconnect_count >= 2
 
+        # Verify connection was attempted the expected number of times
+        # Should be max_reconnect_attempts + 1 (initial attempt + retries)
+        assert mock_connect.call_count >= 2
+
+        # Verify on_error was called for each failed connection attempt
+        assert mock_callbacks["on_error"].call_count >= 2
+
     @pytest.mark.asyncio
-    async def test_unlimited_reconnect_attempts(
+    async def test_unlimited_reconnect_attempts_continues_indefinitely(
         self,
         mock_websockets_connect: tuple[AsyncMock, AsyncMock],
         mock_callbacks: dict[str, MagicMock],
     ) -> None:
-        """Test that client continues attempting reconnections with max_reconnect_attempts = -1.
-
-        This test verifies the scenario described in missing_tests.md line 173:
-        - max_reconnect_attempts = -1
-        - assert unlimited reconnections
-        """
+        """Test that client continues attempting reconnections with max_reconnect_attempts = -1."""
         mock_connect, _ = mock_websockets_connect
 
         # Configure connection to always fail
@@ -348,33 +371,158 @@ class TestRobustWebSocketClient:
         client = RobustWebSocketClient(
             url=TEST_URL,
             **mock_callbacks,
-            reconnect_interval=1,  # Very short interval for faster test
+            reconnect_interval=0.01,  # Very short interval for faster test
             max_reconnect_attempts=-1,  # Unlimited attempts
         )
 
-        # Test the condition logic directly by simulating high reconnect count
-        client._reconnect_count = 100  # Simulate many failed attempts
+        # Start the connection manually to control the test
         client._running = True
+        connection_task = asyncio.create_task(client._connection_loop())
 
-        # Test that the condition for unlimited reconnections works
-        # With max_reconnect_attempts = -1, this should be True
-        unlimited_condition = (
-            client.max_reconnect_attempts == -1 or client._reconnect_count < client.max_reconnect_attempts
-        )
-        assert unlimited_condition, "Unlimited reconnection condition should be True"
+        # Let the connection loop run for a short time
+        await asyncio.sleep(0.1)
 
-        # Test with limited attempts for comparison
-        client_limited = RobustWebSocketClient(
-            url=TEST_URL,
-            **mock_callbacks,
-            max_reconnect_attempts=5,
-        )
-        client_limited._reconnect_count = 100  # Many failed attempts
-        client_limited._running = True
+        # The client should still be running and attempting connections
+        assert client._running
+        assert client._reconnect_count > 0
 
-        # With limited attempts, this should be False when count exceeds limit
-        limited_condition = (
-            client_limited.max_reconnect_attempts == -1
-            or client_limited._reconnect_count < client_limited.max_reconnect_attempts
+        # Verify that multiple connection attempts were made
+        initial_attempts = mock_connect.call_count
+        assert initial_attempts > 0
+
+        # Allow more time for additional attempts
+        await asyncio.sleep(0.1)
+
+        # Should continue making connection attempts
+        assert mock_connect.call_count > initial_attempts
+        assert client._running  # Should still be running
+
+        # Clean up
+        client._running = False
+        connection_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await connection_task
+
+    @pytest.mark.asyncio
+    async def test_connection_state_management_during_lifecycle(
+        self,
+        mock_websockets_connect: tuple[AsyncMock, AsyncMock],
+        mock_callbacks: dict[str, MagicMock],
+    ) -> None:
+        """Test that connection state is properly managed throughout the client lifecycle."""
+        mock_connect, mock_connection = mock_websockets_connect
+
+        client = RobustWebSocketClient(url=TEST_URL, **mock_callbacks)
+        assert not client.is_connected
+        assert not client._running
+        assert client._reconnect_count == 0
+
+        await client.connect(timeout=5)
+
+        assert client.is_connected
+        assert client._running  # type: ignore[unreachable]
+        mock_connect.assert_called_once_with(TEST_URL, extra_headers={}, ping_interval=30, ping_timeout=10)
+        mock_callbacks["on_connect"].assert_called_once()
+        assert client._reconnect_count == 0
+
+        await client.close()
+
+        assert not client.is_connected
+        assert not client._running
+        mock_callbacks["on_disconnect"].assert_called_once()
+        mock_connection.close.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_connection_cancellation(
+        self,
+        mock_websockets_connect: tuple[AsyncMock, AsyncMock],
+        mock_callbacks: dict[str, MagicMock],
+    ) -> None:
+        """測試客戶端能否優雅地處理連線任務被取消的情況。"""
+        mock_connect, _ = mock_websockets_connect
+
+        # 1. 模擬 connect() 會永遠阻塞
+        never_set_event = asyncio.Event()
+        mock_connect.side_effect = never_set_event.wait
+
+        client = RobustWebSocketClient(url=TEST_URL, **mock_callbacks)
+        assert not client.is_connected
+        assert not client._running
+
+        # 2. 在背景任務中啟動連線
+        connect_task = asyncio.create_task(client.connect())
+        await asyncio.sleep(0)  # 讓事件循環執行 connect_task
+
+        # 3. 驗證狀態變為「運行中」
+        assert not client.is_connected
+        assert client._running
+
+        # 4. 取消連線任務
+        connect_task.cancel()  # type: ignore[unreachable]
+
+        # 5. 等待任務結束，並捕獲 CancelledError
+        with pytest.raises(asyncio.CancelledError):
+            await connect_task
+
+        # 6. 驗證取消後，客戶端狀態已完全重置
+        assert not client.is_connected
+        # ****** 修正後的斷言 ******
+        # 因為 `close()` 被呼叫，所以 `_running` 應該是 False
+        assert not client._running
+
+        # 7. 驗證回調
+        mock_callbacks["on_connect"].assert_not_called()
+
+        # ****** 修正後的斷言 ******
+        # client.close() -> _connection_task.cancel() -> _connection_loop 的 finally 區塊
+        # -> _disconnect() -> on_disconnect() 被呼叫。這是一個正確的清理流程。
+        mock_callbacks["on_disconnect"].assert_called_once()
+
+    # 測試案例 3: 連線失敗與重試
+    @pytest.mark.asyncio
+    async def test_reconnect_on_initial_failure(
+        self,
+        mock_websockets_connect: tuple[AsyncMock, AsyncMock],
+        mock_callbacks: dict[str, MagicMock],
+    ) -> None:
+        """測試客戶端在初次連線失敗時是否會自動重試。"""
+        mock_connect, mock_connection = mock_websockets_connect
+
+        # 1. 模擬第一次連線失敗，第二次成功
+        connection_error = ConnectionError("Connection refused")
+        mock_connect.side_effect = [connection_error, mock_connection]
+
+        # 使用較短的重連間隔以加速測試
+        client = RobustWebSocketClient(url=TEST_URL, **mock_callbacks, reconnect_interval=0.01)
+
+        # 2. 執行連線，這會觸發一次失敗和一次成功的重試
+        await client.connect(timeout=5)
+
+        # 3. 驗證最終狀態
+        assert client.is_connected
+        assert client._running
+        assert client._reconnect_count == 0  # 成功重連後計數器重置為0
+
+        # 4. 驗證 mock 和 callback 的呼叫情況
+        assert mock_connect.call_count == 2
+        mock_connect.assert_has_calls(
+            [
+                call(TEST_URL, extra_headers={}, ping_interval=30, ping_timeout=10),
+                call(TEST_URL, extra_headers={}, ping_interval=30, ping_timeout=10),
+            ]
         )
-        assert not limited_condition, "Limited reconnection condition should be False when exceeded"
+
+        # `on_error` 應該在 _connection_loop 中被呼叫一次，錯誤會被包裝
+        mock_callbacks["on_error"].assert_called_once()
+        # 驗證錯誤類型和消息內容
+        called_error = mock_callbacks["on_error"].call_args[0][0]
+        assert isinstance(called_error, ConnectionError)
+        # 錯誤消息可能包含 trace_id 和其他前綴，檢查核心錯誤消息
+        error_str = str(called_error)
+        assert "Failed to connect:" in error_str and "Connection refused" in error_str
+        # `on_connect` 應該在第二次成功後被呼叫
+        mock_callbacks["on_connect"].assert_called_once()
+        # 在重連過程中，`on_disconnect` 也會被呼叫一次 (在失敗的連線嘗試後)
+        mock_callbacks["on_disconnect"].assert_called_once()
+
+        await client.close()

@@ -193,8 +193,8 @@ class TradeEvent(BaseEvent[Trade]):
             **data: Arbitrary keyword arguments to initialize the `BaseEvent`.
                     The `event_type` is automatically set to `EventType.TRADE`.
         """
-        if "event_type" not in data:
-            data["event_type"] = EventType.TRADE
+        # Always force event_type to TRADE regardless of input
+        data["event_type"] = EventType.TRADE
         super().__init__(**data)
 
 
@@ -214,8 +214,8 @@ class KlineEvent(BaseEvent[Kline]):
             **data: Arbitrary keyword arguments to initialize the `BaseEvent`.
                     The `event_type` is automatically set to `EventType.KLINE`.
         """
-        if "event_type" not in data:
-            data["event_type"] = EventType.KLINE
+        # Always force event_type to KLINE regardless of input
+        data["event_type"] = EventType.KLINE
         super().__init__(**data)
 
 

@@ -14,6 +14,9 @@ class BaseStorageConfig(BaseSettings):
     """
 
     model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
         str_strip_whitespace=True,
         extra="ignore",
     )
@@ -26,9 +29,11 @@ class BaseStorageConfig(BaseSettings):
 
     # Database settings
     database_url: str = Field(
-        ..., description="Database connection URL. Must be provided by the application.", min_length=1
+        ...,
+        description="Database connection URL. Required for all environments.",
+        min_length=1,
     )
-    """The database connection URL. This field is mandatory and must be provided by the application."""
+    """The database connection URL. Required for all environments."""
     database_pool_size: int = Field(default=10, description="Database connection pool size.", gt=0)
     """The maximum number of connections to maintain in the database connection pool. Must be greater than 0."""
     database_timeout: int = Field(default=30, description="Database connection timeout in seconds.", gt=0)

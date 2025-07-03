@@ -92,6 +92,16 @@ class RangeValidator(BaseValidator):
                 field_value=value,
             )
 
+        # Check for NaN values
+        import math
+
+        if isinstance(value, float) and math.isnan(value):
+            raise DataValidationError(
+                "NaN values are not allowed",
+                field_name=field_name,
+                field_value=value,
+            )
+
         if self.min_value is not None:
             if self.inclusive and value < self.min_value:
                 raise DataValidationError(

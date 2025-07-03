@@ -24,6 +24,10 @@ class ConcreteRateLimiter(AbstractRateLimiter):
         if not self._allow_acquire:
             return False
 
+        # Contract: Non-positive tokens are a no-op and always return True
+        if tokens <= 0:
+            return True
+
         if tokens <= self._available_tokens:
             self._available_tokens -= tokens
             return True
@@ -315,12 +319,35 @@ class TestAbstractRateLimiter:
         assert result is True  # Should succeed as no tokens are requested
 
     @pytest.mark.asyncio
-    async def test_acquire_with_negative_tokens(self) -> None:
-        """Test acquiring negative tokens."""
+    async def test_acquire_with_non_positive_tokens(self) -> None:
+        """Test acquiring zero or negative tokens.
+
+        Contract Definition:
+        - Requesting tokens <= 0 is a no-op and must always return True
+        - No tokens are consumed for non-positive requests
+        - This behavior ensures consistent API usage
+        """
         limiter = ConcreteRateLimiter(allow_acquire=True, max_tokens=10)
-        # This behavior depends on implementation, but should handle gracefully
-        await limiter.acquire(tokens=-1)
-        # Implementation specific - could be True or False
+        initial_tokens = 10
+
+        # Test zero tokens - should always succeed and consume nothing
+        result = await limiter.acquire(tokens=0)
+        assert result is True
+        assert limiter._available_tokens == initial_tokens  # Unchanged
+
+        # Test negative tokens - should always succeed and consume nothing
+        result = await limiter.acquire(tokens=-1)
+        assert result is True
+        assert limiter._available_tokens == initial_tokens  # Unchanged
+
+        result = await limiter.acquire(tokens=-5)
+        assert result is True
+        assert limiter._available_tokens == initial_tokens  # Unchanged
+
+        # Verify normal operation still works
+        result = await limiter.acquire(tokens=3)
+        assert result is True
+        assert limiter._available_tokens == initial_tokens - 3
 
     def test_docstring_presence(self) -> None:
         """Test that the abstract class has proper documentation."""
@@ -507,50 +534,67 @@ class TestTokenBucketRateLimiter:
         assert stats["denied_count"] == 3
         assert stats["success_rate"] == 5.0 / 8.0  # 5 successful out of 8 total
 
-    @pytest.mark.asyncio
-    async def test_time_window_reset_with_refill(self) -> None:
-        """Test that tokens are refilled over time windows.
+    def test_time_window_reset_with_refill_deterministic(self) -> None:
+        """Test that tokens are refilled over time windows using deterministic time control.
 
         Test Description:
         Verifies that the token bucket refills tokens according to
-        the configured refill rate and interval.
+        the configured refill rate and interval using time-machine
+        for deterministic testing.
 
         Test Steps:
-        1. Exhaust tokens
-        2. Wait for refill interval
-        3. Verify tokens are refilled
-        4. Test new requests succeed
+        1. Create limiter with specific refill configuration
+        2. Exhaust tokens
+        3. Use time-machine to advance time precisely
+        4. Verify tokens are refilled correctly
 
         Expected Results:
-        - Tokens are refilled after time interval
-        - New requests succeed after refill
+        - Tokens are refilled exactly according to configuration
+        - Time-based refill is deterministic and precise
         - Refill respects configured rate and capacity
         """
-        # Create limiter with fast refill for testing
-        fast_limiter = TokenBucketRateLimiter(
-            capacity=4,
-            refill_rate=4.0,  # 4 tokens per second
+        pytest.importorskip("time_machine")
+        import datetime
+
+        import time_machine
+
+        # Create limiter with predictable refill rate
+        test_limiter = TokenBucketRateLimiter(
+            capacity=10,
+            refill_rate=5.0,  # 5 tokens per second
             refill_interval=1.0,
-            initial_tokens=4,
+            initial_tokens=10,
         )
 
-        # Exhaust all tokens
-        for _i in range(4):
-            result = await fast_limiter.acquire(tokens=1)
+        # Use deterministic time control
+        initial_time = datetime.datetime.now()
+        with time_machine.travel(initial_time) as traveler:
+            # Consume all tokens
+            for _i in range(10):
+                result = asyncio.run(test_limiter.acquire(tokens=1))
+                assert result is True
+
+            assert test_limiter.get_available_tokens() == 0
+
+            # Advance time by exactly 1 second
+            traveler.shift(datetime.timedelta(seconds=1))
+
+            # Trigger refill by attempting acquisition
+            result = asyncio.run(test_limiter.acquire(tokens=1))
+            assert result is True  # Should succeed as tokens were refilled
+
+            # Should have refilled 5 tokens (rate=5, interval=1), minus 1 just acquired
+            assert test_limiter.get_available_tokens() == 4
+
+            # Advance time by another 2 seconds
+            traveler.shift(datetime.timedelta(seconds=2))
+
+            # Should refill to capacity (10 tokens total)
+            # Force refill by attempting another acquisition
+            result = asyncio.run(test_limiter.acquire(tokens=1))
             assert result is True
-
-        assert fast_limiter.get_available_tokens() == 0
-
-        # Wait for refill (slightly more than 1 second)
-        await asyncio.sleep(1.1)
-
-        # Should have refilled tokens
-        result = await fast_limiter.acquire(tokens=1)
-        assert result is True
-
-        # Check that tokens were actually refilled
-        available_before_refill = fast_limiter.get_available_tokens()
-        assert available_before_refill >= 0  # Should have some tokens available
+            # Should have full capacity minus 1 acquired token = 9
+            assert test_limiter.get_available_tokens() == 9
 
     @pytest.mark.asyncio
     async def test_concurrent_requests_handling(self, limiter: TokenBucketRateLimiter) -> None:
@@ -991,3 +1035,202 @@ class TestTokenBucketRateLimiter:
 
         result = await fractional_limiter.acquire(tokens=1)
         assert result is True
+
+    def test_error_handling_comprehensive(self) -> None:
+        """Test comprehensive error handling for invalid configurations.
+
+        Test Description:
+        Verifies that the rate limiter properly validates all parameters
+        and provides meaningful error messages for invalid configurations.
+
+        Test Steps:
+        1. Test various invalid parameter combinations
+        2. Verify appropriate exceptions are raised
+        3. Test boundary conditions
+
+        Expected Results:
+        - Invalid configurations raise ValueError with descriptive messages
+        - Boundary conditions are handled correctly
+        - Error messages are informative for debugging
+        """
+        # Test invalid capacity values
+        with pytest.raises(ValueError, match="Capacity must be positive"):
+            TokenBucketRateLimiter(capacity=0)
+
+        with pytest.raises(ValueError, match="Capacity must be positive"):
+            TokenBucketRateLimiter(capacity=-5)
+
+        # Test invalid refill rate values
+        with pytest.raises(ValueError, match="Refill rate must be positive"):
+            TokenBucketRateLimiter(capacity=10, refill_rate=0)
+
+        with pytest.raises(ValueError, match="Refill rate must be positive"):
+            TokenBucketRateLimiter(capacity=10, refill_rate=-1.5)
+
+        # Test invalid refill interval values
+        with pytest.raises(ValueError, match="Refill interval must be positive"):
+            TokenBucketRateLimiter(capacity=10, refill_rate=1.0, refill_interval=0)
+
+        with pytest.raises(ValueError, match="Refill interval must be positive"):
+            TokenBucketRateLimiter(capacity=10, refill_rate=1.0, refill_interval=-0.5)
+
+        # Test valid boundary cases should work
+        # Very small positive values should be accepted
+        limiter_small = TokenBucketRateLimiter(capacity=1, refill_rate=0.001, refill_interval=0.001)
+        assert limiter_small.capacity == 1
+        assert limiter_small.refill_rate == 0.001
+        assert limiter_small.refill_interval == 0.001
+
+        # Very large values should be accepted
+        limiter_large = TokenBucketRateLimiter(capacity=1000000, refill_rate=10000.0, refill_interval=3600.0)
+        assert limiter_large.capacity == 1000000
+        assert limiter_large.refill_rate == 10000.0
+        assert limiter_large.refill_interval == 3600.0
+
+    def test_metrics_accuracy_comprehensive(self) -> None:
+        """Test comprehensive accuracy of rate limiter metrics and statistics.
+
+        Test Description:
+        Verifies that all metrics accurately reflect the rate limiter's
+        state and operations history.
+
+        Test Steps:
+        1. Perform various operations on the rate limiter
+        2. Check metrics accuracy at each step
+        3. Verify all statistical calculations
+
+        Expected Results:
+        - All metrics accurately reflect operations
+        - Statistical calculations are mathematically correct
+        - Metrics remain consistent across operations
+        """
+        limiter = TokenBucketRateLimiter(capacity=10, refill_rate=2.0, refill_interval=1.0, initial_tokens=10)
+
+        # Test initial state metrics
+        initial_stats = limiter.get_stats()
+        assert initial_stats["capacity"] == 10
+        assert initial_stats["available_tokens"] == 10
+        assert initial_stats["refill_rate"] == 2.0
+        assert initial_stats["refill_interval"] == 1.0
+        assert initial_stats["acquire_count"] == 0
+        assert initial_stats["denied_count"] == 0
+        assert initial_stats["total_tokens_consumed"] == 0
+        assert initial_stats["success_rate"] == 0.0  # No operations yet
+
+        # Perform successful operations and verify metrics
+        for i in range(5):
+            result = asyncio.run(limiter.acquire(tokens=2))
+            assert result is True
+
+            stats = limiter.get_stats()
+            assert stats["acquire_count"] == i + 1
+            assert stats["denied_count"] == 0
+            assert stats["total_tokens_consumed"] == (i + 1) * 2
+            assert stats["available_tokens"] == 10 - (i + 1) * 2
+            assert stats["success_rate"] == 1.0  # All successful so far
+
+        # Now limiter should be exhausted (10 tokens consumed)
+        assert limiter.get_available_tokens() == 0
+
+        # Perform failed operations and verify metrics
+        for i in range(3):
+            result = asyncio.run(limiter.acquire(tokens=1))
+            assert result is False
+
+            stats = limiter.get_stats()
+            assert stats["acquire_count"] == 5  # Still 5 successful
+            assert stats["denied_count"] == i + 1
+            assert stats["total_tokens_consumed"] == 10  # No additional consumption
+            assert stats["available_tokens"] == 0
+
+            # Calculate expected success rate: 5 successful / (5 + i + 1) total
+            total_attempts = 5 + i + 1
+            expected_success_rate = 5.0 / total_attempts
+            assert abs(stats["success_rate"] - expected_success_rate) < 0.001
+
+        # Test reset functionality
+        limiter.reset_stats()
+        reset_stats = limiter.get_stats()
+        assert reset_stats["acquire_count"] == 0
+        assert reset_stats["denied_count"] == 0
+        assert reset_stats["total_tokens_consumed"] == 0
+        assert reset_stats["success_rate"] == 0.0
+        # Configuration should remain unchanged
+        assert reset_stats["capacity"] == 10
+        assert reset_stats["refill_rate"] == 2.0
+        assert reset_stats["refill_interval"] == 1.0
+
+        # Test force refill functionality
+        limiter.set_tokens(3)  # Set to partial capacity
+        assert limiter.get_available_tokens() == 3
+
+        limiter.force_refill()  # Should refill to full capacity
+        assert limiter.get_available_tokens() == 10
+
+        # Test set_tokens boundary conditions
+        limiter.set_tokens(15)  # Above capacity
+        assert limiter.get_available_tokens() == 10  # Should be clamped to capacity
+
+        limiter.set_tokens(-5)  # Below zero
+        assert limiter.get_available_tokens() == 0  # Should be clamped to zero
+
+    @pytest.mark.asyncio
+    async def test_concurrent_operations_stress(self) -> None:
+        """Test rate limiter under concurrent stress conditions.
+
+        Test Description:
+        Verifies that the rate limiter maintains consistency and accuracy
+        under high concurrent load with many simultaneous operations.
+
+        Test Steps:
+        1. Create many concurrent acquisition tasks
+        2. Mix successful and failing operations
+        3. Verify final state consistency
+
+        Expected Results:
+        - Concurrent operations maintain consistency
+        - No race conditions in token accounting
+        - Statistics remain accurate under stress
+        """
+        limiter = TokenBucketRateLimiter(capacity=50, refill_rate=10.0, refill_interval=1.0, initial_tokens=50)
+
+        # Create many concurrent tasks requesting different token amounts
+        async def acquisition_task(tokens: int) -> bool:
+            return await limiter.acquire(tokens=tokens)
+
+        # Mix of different token requests to create various scenarios
+        tasks = []
+        for _ in range(20):
+            tasks.append(acquisition_task(1))  # Small requests
+        for _ in range(10):
+            tasks.append(acquisition_task(3))  # Medium requests
+        for _ in range(5):
+            tasks.append(acquisition_task(10))  # Large requests
+        for _ in range(3):
+            tasks.append(acquisition_task(25))  # Very large requests
+
+        # Execute all tasks concurrently
+        results = await asyncio.gather(*tasks)
+
+        # Verify results consistency
+        successful_requests = sum(1 for result in results if result)
+        failed_requests = sum(1 for result in results if not result)
+        total_requests = len(results)
+
+        assert successful_requests + failed_requests == total_requests
+
+        # Verify statistics match actual results
+        stats = limiter.get_stats()
+        assert stats["acquire_count"] == successful_requests
+        assert stats["denied_count"] == failed_requests
+
+        # Verify success rate calculation
+        expected_success_rate = successful_requests / total_requests if total_requests > 0 else 0.0
+        assert abs(stats["success_rate"] - expected_success_rate) < 0.001
+
+        # Verify token accounting remains consistent
+        assert stats["available_tokens"] >= 0
+        assert stats["available_tokens"] <= limiter.capacity
+
+        # Verify total tokens consumed is reasonable
+        assert stats["total_tokens_consumed"] <= limiter.capacity  # Can't consume more than started with

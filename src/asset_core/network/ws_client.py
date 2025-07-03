@@ -9,6 +9,7 @@ data streaming.
 
 import asyncio
 import builtins
+import contextlib
 import json
 from collections.abc import Callable
 from typing import Any
@@ -42,7 +43,7 @@ class RobustWebSocketClient:
         on_connect: Callable[[], None] | None = None,
         on_disconnect: Callable[[], None] | None = None,
         on_error: Callable[[Exception], None] | None = None,
-        reconnect_interval: int = 5,
+        reconnect_interval: float = 5.0,
         max_reconnect_attempts: int = 10,
         ping_interval: int = 30,
         ping_timeout: int = 10,
@@ -82,23 +83,34 @@ class RobustWebSocketClient:
         self._ws: ClientConnection | None = None
         self._running = False
         self._reconnect_count = 0
-        self._connection_task: asyncio.Task | None = None
-        self._receive_task: asyncio.Task | None = None
+        self._connection_task: asyncio.Task[None] | None = None
+        self._receive_task: asyncio.Task[None] | None = None
         self._connect_event = asyncio.Event()
 
-    async def connect(self) -> None:
+    async def connect(self, timeout: float = 30) -> None:
         """Establishes the WebSocket connection and starts the connection management loop.
 
         This method initiates the connection process, including handling initial
         connection attempts and setting up the background tasks for maintaining
         the connection and receiving messages.
 
+        Args:
+            timeout: The time in seconds to wait for the initial connection.
+
         Raises:
-            TimeoutError: If the initial connection cannot be established within a timeout period.
+            TimeoutError: If the initial connection cannot be established within the timeout period.
             ConnectionError: If there's a persistent issue preventing connection.
         """
         with TraceContext() as trace_id:
+            # TODO(Yuan): The check for self._running is not thread-safe.
+            # If multiple threads call connect() concurrently, it could lead to multiple
+            # connection loops being started. Consider adding a lock.
             if self._running:
+                try:
+                    await asyncio.wait_for(self._connect_event.wait(), timeout)
+                except builtins.TimeoutError:
+                    logger.error("WebSocket connection timeout while waiting for existing connection")
+                    raise TimeoutError("Failed to establish initial connection")
                 return
 
             logger.info("Starting WebSocket connection", trace_id=trace_id, url=self.url)
@@ -107,12 +119,18 @@ class RobustWebSocketClient:
             self._connection_task = asyncio.create_task(self._connection_loop())
 
             try:
-                await asyncio.wait_for(self._connect_event.wait(), timeout=30)
+                await asyncio.wait_for(self._connect_event.wait(), timeout=timeout)
                 logger.info("WebSocket connection established successfully", trace_id=trace_id)
-            except builtins.TimeoutError:
-                logger.error("WebSocket connection timeout", trace_id=trace_id)
+            except (builtins.TimeoutError, asyncio.CancelledError) as e:
+                if isinstance(e, builtins.TimeoutError):
+                    logger.error("WebSocket connection timeout", trace_id=trace_id)
+                else:
+                    logger.info("WebSocket connection attempt was cancelled", trace_id=trace_id)
+
                 await self.close()
-                raise TimeoutError("Failed to establish initial connection")
+                if isinstance(e, builtins.TimeoutError):
+                    raise TimeoutError("Failed to establish initial connection") from e
+                raise
 
     async def _connection_loop(self) -> None:
         """Manages the WebSocket connection lifecycle, including reconnection attempts.
@@ -316,7 +334,11 @@ class RobustWebSocketClient:
                 await self._connection_task
             except asyncio.CancelledError:
                 logger.debug("Connection task cancelled successfully")
-                pass
+
+        if self._receive_task and not self._receive_task.done():
+            self._receive_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._receive_task
 
         if self.is_connected:
             await self._disconnect()

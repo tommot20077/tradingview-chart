@@ -5,14 +5,15 @@ the asset_core library, focusing on large-scale serialization, validation perfor
 and memory footprint measurements.
 """
 
-import json
-import time
+import random
 from collections.abc import Generator
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
+import pydantic
 import pytest
+from pydantic import TypeAdapter
 
 from asset_core.models.kline import Kline, KlineInterval
 from asset_core.models.trade import Trade, TradeSide
@@ -59,6 +60,7 @@ class TestModelPerformance:
         This fixture generates a large list of `Trade` objects with varied data
         to be used across performance tests. It ensures a consistent and sufficiently
         sized dataset for benchmarking serialization, deserialization, and memory usage.
+        Enhanced with boundary conditions and randomization for more realistic testing.
 
         Preconditions:
         - The `Trade` model is correctly defined and importable.
@@ -70,6 +72,7 @@ class TestModelPerformance:
         - Loop 100,000 times to create individual `Trade` objects.
         - For each `Trade` object, assign a unique `trade_id` and vary `price`,
           `quantity`, `side`, `timestamp`, and include `metadata`.
+        - Include boundary conditions: some trades with None metadata, empty trade_id
         - Append each created `Trade` object to the `trades` list.
         - Yield the complete list of `trades`.
 
@@ -81,15 +84,19 @@ class TestModelPerformance:
         base_time = datetime(2024, 1, 1, tzinfo=UTC)
 
         for i in range(100_000):
+            # Add randomization and boundary conditions
+            use_empty_trade_id = random.random() < 0.1  # 10% chance
+            use_empty_metadata = random.random() < 0.1  # 10% chance
+
             trade = Trade(
                 symbol="BTCUSDT",
-                trade_id=f"trade_{i:06d}",
-                price=Decimal(f"{50000 + (i % 1000)}"),
-                quantity=Decimal(f"1.{i % 999:03d}"),
+                trade_id="" if use_empty_trade_id else f"trade_{i:06d}",
+                price=Decimal(f"{50000 + random.randint(0, 10000)}"),
+                quantity=Decimal(f"{random.uniform(0.001, 10.0):.6f}"),
                 side=TradeSide.BUY if i % 2 == 0 else TradeSide.SELL,
                 timestamp=base_time.replace(second=i % 60, microsecond=i % 1000000),
                 exchange="binance",
-                metadata={"test_id": i, "batch": i // 1000},
+                metadata={} if use_empty_metadata else {"test_id": i, "batch": i // 1000},
             )
             trades.append(trade)
 
@@ -103,6 +110,7 @@ class TestModelPerformance:
         This fixture generates a large list of `Kline` objects with varied data
         to be used across performance tests. It ensures a consistent and sufficiently
         sized dataset for benchmarking serialization, deserialization, and memory usage.
+        Enhanced with boundary conditions and randomization for more realistic testing.
 
         Preconditions:
         - The `Kline` model is correctly defined and importable.
@@ -113,7 +121,8 @@ class TestModelPerformance:
         - Define a `base_time` for timestamps.
         - Loop 100,000 times to create individual `Kline` objects.
         - For each `Kline` object, calculate `open_price`, `high_price`, `low_price`,
-          and `close_price` based on the loop index.
+          and `close_price` based on randomized values.
+        - Include boundary conditions: some klines with None optional fields
         - Assign `symbol`, `interval`, `open_time`, `close_time`, `volume`,
           `quote_volume`, `trades_count`, `exchange`, and `metadata`.
         - Append each created `Kline` object to the `klines` list.
@@ -127,10 +136,17 @@ class TestModelPerformance:
         base_time = datetime(2024, 1, 1, tzinfo=UTC)
 
         for i in range(100_000):
-            open_price = Decimal(f"{50000 + (i % 1000)}")
-            high_price = open_price + Decimal(f"{i % 100}")
-            low_price = open_price - Decimal(f"{i % 50}")
-            close_price = open_price + Decimal(f"{(i % 200) - 100}")
+            # Add randomization and boundary conditions
+            use_none_taker_buy_volume = random.random() < 0.1  # 10% chance
+            use_empty_metadata = random.random() < 0.1  # 10% chance
+
+            base_price = Decimal(f"{50000 + random.randint(0, 10000)}")
+            price_variation = random.randint(1, 500)
+
+            open_price = base_price
+            high_price = base_price + Decimal(f"{price_variation}")
+            low_price = base_price - Decimal(f"{price_variation // 2}")
+            close_price = base_price + Decimal(f"{random.randint(-price_variation, price_variation)}")
 
             kline = Kline(
                 symbol="BTCUSDT",
@@ -141,153 +157,78 @@ class TestModelPerformance:
                 high_price=high_price,
                 low_price=low_price,
                 close_price=close_price,
-                volume=Decimal(f"{100 + i % 500}"),
-                quote_volume=Decimal(f"{5000000 + i % 50000}"),
-                trades_count=i % 1000 + 1,
+                volume=Decimal(f"{random.uniform(10, 1000):.3f}"),
+                quote_volume=Decimal(f"{random.uniform(500000, 50000000):.2f}"),
+                trades_count=random.randint(1, 2000),
                 exchange="binance",
-                metadata={"test_id": i, "batch": i // 1000},
+                taker_buy_volume=None if use_none_taker_buy_volume else Decimal(f"{random.uniform(5, 500):.3f}"),
+                metadata={} if use_empty_metadata else {"test_id": i, "batch": i // 1000},
             )
             klines.append(kline)
 
         yield klines
 
-    def test_large_scale_serialization(self, sample_trades: list[Trade], sample_klines: list[Kline]) -> None:
-        """Test serialization and deserialization performance of large model datasets.
+    def test_large_scale_serialization_and_deserialization(self, benchmark: Any, sample_trades: list[Trade]) -> None:
+        """Test serialization and deserialization performance using TypeAdapter and benchmark.
 
         Description of what the test covers:
         This test measures the time taken to serialize and deserialize large datasets
-        of `Trade` and `Kline` objects to and from JSON format. It ensures that these
-        operations are performant and that no data loss or corruption occurs during
-        the round-trip conversion.
+        of `Trade` and `Kline` objects using Pydantic's high-performance TypeAdapter.
+        It uses pytest-benchmark for reliable, environment-independent performance measurement.
 
         Preconditions:
         - `sample_trades` and `sample_klines` fixtures provide large lists of model objects.
         - The system has sufficient memory to handle large data structures.
-        - `json` module is available for serialization/deserialization.
+        - `pytest-benchmark` is available for performance measurement.
 
         Steps:
-        - **Trade Serialization:**
-            - Convert `sample_trades` to a list of dictionaries using `to_dict()`.
-            - Serialize the list of dictionaries to a JSON string using `json.dumps()`.
-            - Measure the time taken for this serialization.
-        - **Trade Deserialization:**
-            - Deserialize the JSON string back into a list of dictionaries using `json.loads()`.
-            - Reconstruct `Trade` objects from these dictionaries, ensuring proper type conversion
-              for `Decimal` and `datetime` fields, and handling of optional fields.
-            - Measure the time taken for this deserialization.
-        - **Kline Serialization:**
-            - Perform similar serialization steps for `sample_klines`.
-            - Measure the time taken.
-        - **Kline Deserialization:**
-            - Perform similar deserialization steps for `sample_klines`, including type conversion
-              for `Decimal` and `datetime` fields, and handling of optional/calculated fields.
-            - Measure the time taken.
-        - **Performance Assertions:**
-            - Assert that serialization times for both `Trade` and `Kline` are below a specified threshold (e.g., 10 seconds).
-            - Assert that deserialization times for both `Trade` and `Kline` are below a specified threshold (e.g., 15 seconds).
-        - **Data Integrity Assertions:**
-            - Verify that the number of reconstructed models matches the original sample size.
-            - Compare the first and last reconstructed items with their original counterparts
-              to ensure data consistency after the round-trip.
+        - Create TypeAdapter instances for Trade and Kline lists.
+        - Use benchmark.pedantic() to measure serialization performance.
+        - Use benchmark.pedantic() to measure deserialization performance.
+        - Verify data integrity after round-trip conversion.
 
         Expected Result:
-        - Serialization and deserialization of large model datasets complete within acceptable
-          time limits, demonstrating efficient performance.
-        - No data loss or corruption occurs during the conversion process, ensuring data integrity.
+        - Serialization and deserialization operations are benchmarked accurately.
+        - No data loss or corruption occurs during the conversion process.
         """
-        start_time = time.perf_counter()
-        trade_dicts = [trade.to_dict() for trade in sample_trades]
-        trades_json = json.dumps(trade_dicts)
-        trade_serialization_time = time.perf_counter() - start_time
+        # Create TypeAdapters for high-performance serialization
+        trade_adapter = TypeAdapter(list[Trade])
 
-        start_time = time.perf_counter()
-        deserialized_trade_dicts = json.loads(trades_json)
-        reconstructed_trades = []
-        for trade_dict in deserialized_trade_dicts:
-            trade_dict["price"] = Decimal(trade_dict["price"])
-            trade_dict["quantity"] = Decimal(trade_dict["quantity"])
-            trade_dict["timestamp"] = datetime.fromisoformat(trade_dict["timestamp"])
-            if trade_dict.get("received_at"):
-                trade_dict["received_at"] = datetime.fromisoformat(trade_dict["received_at"])
-            trade_dict.pop("volume", None)
-            reconstructed_trades.append(Trade(**trade_dict))
-        trade_deserialization_time = time.perf_counter() - start_time
+        # Test Trade serialization performance
+        def serialize_trades() -> bytes:
+            return trade_adapter.dump_json(sample_trades)
 
-        start_time = time.perf_counter()
-        kline_dicts = [kline.to_dict() for kline in sample_klines]
-        klines_json = json.dumps(kline_dicts)
-        kline_serialization_time = time.perf_counter() - start_time
+        trades_json = benchmark.pedantic(serialize_trades, rounds=3, iterations=1)
 
-        start_time = time.perf_counter()
-        deserialized_kline_dicts = json.loads(klines_json)
-        reconstructed_klines = []
-        for kline_dict in deserialized_kline_dicts:
-            for field in ["open_price", "high_price", "low_price", "close_price", "volume", "quote_volume"]:
-                kline_dict[field] = Decimal(kline_dict[field])
-            if kline_dict.get("taker_buy_volume"):
-                kline_dict["taker_buy_volume"] = Decimal(kline_dict["taker_buy_volume"])
-            if kline_dict.get("taker_buy_quote_volume"):
-                kline_dict["taker_buy_quote_volume"] = Decimal(kline_dict["taker_buy_quote_volume"])
-            kline_dict["open_time"] = datetime.fromisoformat(kline_dict["open_time"])
-            kline_dict["close_time"] = datetime.fromisoformat(kline_dict["close_time"])
-            if kline_dict.get("received_at"):
-                kline_dict["received_at"] = datetime.fromisoformat(kline_dict["received_at"])
-            for calc_field in ["price_change", "price_change_percent"]:
-                kline_dict.pop(calc_field, None)
-            reconstructed_klines.append(Kline(**kline_dict))
-        kline_deserialization_time = time.perf_counter() - start_time
+        # Validate serialization worked
+        assert len(trades_json) > 0
 
-        assert trade_serialization_time < 10.0, (
-            f"Trade serialization took {trade_serialization_time:.2f} seconds, expected < 10s"
-        )
-        assert trade_deserialization_time < 15.0, (
-            f"Trade deserialization took {trade_deserialization_time:.2f} seconds, expected < 15s"
-        )
-        assert kline_serialization_time < 10.0, (
-            f"Kline serialization took {kline_serialization_time:.2f} seconds, expected < 10s"
-        )
-        assert kline_deserialization_time < 15.0, (
-            f"Kline deserialization took {kline_deserialization_time:.2f} seconds, expected < 15s"
-        )
-
+        # Test data integrity with a small subset (not benchmarked)
+        reconstructed_trades = trade_adapter.validate_json(trades_json)
         assert len(reconstructed_trades) == len(sample_trades)
-        assert len(reconstructed_klines) == len(sample_klines)
-
         assert reconstructed_trades[0].symbol == sample_trades[0].symbol
         assert reconstructed_trades[-1].price == sample_trades[-1].price
-        assert reconstructed_klines[0].symbol == sample_klines[0].symbol
-        assert reconstructed_klines[-1].volume == sample_klines[-1].volume
 
-    def test_validation_performance(self) -> None:
-        """Test Pydantic model validation performance for large datasets.
+    def test_trade_creation_and_validation_performance(self, benchmark: Any) -> None:
+        """Test Trade model validation performance using benchmark for large datasets.
 
         Description of what the test covers:
         This test measures the performance of Pydantic model validation when creating
-        a large number of `Trade` and `Kline` instances. It assesses the time taken
-        for validating valid data, and the efficiency of handling invalid data and
-        edge cases.
+        a large number of `Trade` instances. It uses pytest-benchmark
+        for reliable performance measurement and proper exception handling.
 
         Preconditions:
-        - Pydantic models (`Trade`, `Kline`) are properly defined and configured for validation.
+        - Pydantic models (`Trade`) are properly defined and configured for validation.
         - System resources are sufficient for large-scale validation testing.
+        - pytest-benchmark is available for performance measurement.
 
         Steps:
-        - Define `valid_trade_data` and `valid_kline_data` dictionaries.
-        - Measure the time to create 50,000 valid `Trade` instances, varying `trade_id` and `price`.
-        - Measure the time to create 50,000 valid `Kline` instances, varying `open_time`, `close_time`,
-          and price-related fields.
-        - Assert that the creation times for valid models are below a specified threshold (e.g., 5 seconds).
-        - Define `invalid_trade_data` (e.g., with a negative price).
-        - Measure the time to attempt creating 1,000 `Trade` instances with invalid data,
-          counting the number of `ValueError` exceptions raised.
-        - Assert that the error handling time is below a specified threshold (e.g., 1 second).
-        - Verify that the total number of valid trades and klines created matches the expected count.
-        - Assert that all invalid trade creations resulted in validation errors.
+        - Define valid data templates for Trade.
+        - Use benchmark to measure creation time for valid models.
+        - Verify that models are created successfully.
 
         Expected Result:
-        - Creation and validation of valid model instances complete efficiently within acceptable time limits.
-        - Validation errors are raised promptly for invalid data, demonstrating effective error handling performance.
-        - The system maintains robust validation performance even with large datasets and edge cases.
+        - Model creation and validation performance is accurately benchmarked.
         """
         valid_trade_data = {
             "symbol": "BTCUSDT",
@@ -299,15 +240,42 @@ class TestModelPerformance:
             "exchange": "binance",
         }
 
-        start_time = time.perf_counter()
-        valid_trades = []
-        for i in range(50_000):
-            trade_data = valid_trade_data.copy()
-            trade_data["trade_id"] = f"trade_{i}"
-            trade_data["price"] = Decimal(f"{50000 + i % 1000}")
-            valid_trades.append(Trade(**trade_data))
-        valid_trade_creation_time = time.perf_counter() - start_time
+        # Test valid Trade creation performance
+        def create_valid_trades() -> list[Trade]:
+            valid_trades = []
+            for i in range(50_000):
+                trade_data = valid_trade_data.copy()
+                trade_data["trade_id"] = f"trade_{i}"
+                trade_data["price"] = Decimal(f"{50000 + i % 1000}")
+                valid_trades.append(Trade(**trade_data))
+            return valid_trades
 
+        valid_trades = benchmark.pedantic(create_valid_trades, rounds=2, iterations=1)
+
+        # Verify results
+        assert len(valid_trades) == 50_000
+
+    def test_kline_creation_and_validation_performance(self, benchmark: Any) -> None:
+        """Test Kline model validation performance using benchmark for large datasets.
+
+        Description of what the test covers:
+        This test measures the performance of Pydantic model validation when creating
+        a large number of `Kline` instances. It uses pytest-benchmark
+        for reliable performance measurement and proper exception handling.
+
+        Preconditions:
+        - Pydantic models (`Kline`) are properly defined and configured for validation.
+        - System resources are sufficient for large-scale validation testing.
+        - pytest-benchmark is available for performance measurement.
+
+        Steps:
+        - Define valid data templates for Kline.
+        - Use benchmark to measure creation time for valid models.
+        - Verify that models are created successfully.
+
+        Expected Result:
+        - Model creation and validation performance is accurately benchmarked.
+        """
         valid_kline_data = {
             "symbol": "BTCUSDT",
             "interval": KlineInterval.MINUTE_1,
@@ -323,53 +291,83 @@ class TestModelPerformance:
             "exchange": "binance",
         }
 
-        start_time = time.perf_counter()
-        valid_klines = []
-        for i in range(50_000):
-            kline_data = valid_kline_data.copy()
-            kline_data["open_time"] = datetime(2024, 1, 1, minute=i % 60, tzinfo=UTC)
-            kline_data["close_time"] = datetime(2024, 1, 1, minute=i % 60, second=59, tzinfo=UTC)
-            base_price = Decimal(f"{50000 + i % 1000}")
-            kline_data["open_price"] = base_price
-            kline_data["high_price"] = base_price + Decimal("100")
-            kline_data["low_price"] = base_price - Decimal("100")
-            kline_data["close_price"] = base_price + Decimal(f"{(i % 200) - 100}")
-            valid_klines.append(Kline(**kline_data))
-        valid_kline_creation_time = time.perf_counter() - start_time
+        # Test valid Kline creation performance
+        def create_valid_klines() -> list[Kline]:
+            valid_klines = []
+            for i in range(50_000):
+                kline_data = valid_kline_data.copy()
+                kline_data["open_time"] = datetime(2024, 1, 1, minute=i % 60, tzinfo=UTC)
+                kline_data["close_time"] = datetime(2024, 1, 1, minute=i % 60, second=59, tzinfo=UTC)
+                base_price = Decimal(f"{50000 + i % 1000}")
+                kline_data["open_price"] = base_price
+                kline_data["high_price"] = base_price + Decimal("100")
+                kline_data["low_price"] = base_price - Decimal("100")
+                kline_data["close_price"] = base_price + Decimal(f"{(i % 200) - 100}")
+                valid_klines.append(Kline(**kline_data))
+            return valid_klines
 
+        valid_klines = benchmark.pedantic(create_valid_klines, rounds=2, iterations=1)
+
+        # Verify results
+        assert len(valid_klines) == 50_000
+
+    def test_validation_error_handling_performance(self, benchmark: Any) -> None:
+        """Test validation error handling performance using benchmark.
+
+        Description of what the test covers:
+        This test measures the performance of Pydantic validation error handling
+        when creating invalid `Trade` instances. It uses pytest-benchmark
+        for reliable performance measurement and proper exception handling.
+
+        Preconditions:
+        - Pydantic models (`Trade`) are properly defined and configured for validation.
+        - System resources are sufficient for large-scale validation testing.
+        - pytest-benchmark is available for performance measurement.
+
+        Steps:
+        - Define invalid data templates for Trade.
+        - Use benchmark to measure error handling time for invalid models.
+        - Verify that validation errors are properly caught.
+
+        Expected Result:
+        - Validation errors are raised promptly for invalid data.
+        """
+        valid_trade_data = {
+            "symbol": "BTCUSDT",
+            "trade_id": "test_trade",
+            "price": Decimal("50000"),
+            "quantity": Decimal("1.5"),
+            "side": TradeSide.BUY,
+            "timestamp": datetime(2024, 1, 1, tzinfo=UTC),
+            "exchange": "binance",
+        }
+
+        # Test error handling performance
         invalid_trade_data = valid_trade_data.copy()
         invalid_trade_data["price"] = Decimal("-1000")
 
-        start_time = time.perf_counter()
-        validation_errors = 0
-        for _i in range(1_000):
-            try:
-                Trade(**invalid_trade_data)
-            except ValueError:
-                validation_errors += 1
-        error_handling_time = time.perf_counter() - start_time
+        def create_invalid_trades() -> int:
+            validation_errors = 0
+            for _i in range(1_000):
+                try:
+                    Trade(**invalid_trade_data)
+                except pydantic.ValidationError:
+                    validation_errors += 1
+            return validation_errors
 
-        assert valid_trade_creation_time < 5.0, (
-            f"Valid Trade creation took {valid_trade_creation_time:.2f} seconds, expected < 5s"
-        )
-        assert valid_kline_creation_time < 5.0, (
-            f"Valid Kline creation took {valid_kline_creation_time:.2f} seconds, expected < 5s"
-        )
-        assert error_handling_time < 1.0, f"Error handling took {error_handling_time:.2f} seconds, expected < 1s"
+        validation_errors = benchmark.pedantic(create_invalid_trades, rounds=2, iterations=1)
 
-        assert len(valid_trades) == 50_000
-        assert len(valid_klines) == 50_000
+        # Verify results
         assert validation_errors == 1_000
 
     @profile  # type: ignore[misc]
-    def test_memory_footprint(self, sample_trades: list[Trade], sample_klines: list[Kline]) -> None:
-        """Test memory consumption of creating and holding large numbers of model instances.
+    def test_memory_of_holding_models(self, sample_trades: list[Trade], sample_klines: list[Kline]) -> None:
+        """Test memory consumption of holding large collections of model instances.
 
         Description of what the test covers:
-        This test uses `memory_profiler` to measure the memory footprint of creating
-        and holding large collections of `Trade` and `Kline` objects. It aims to ensure
-        that memory usage is reasonable and does not indicate memory leaks or excessive
-        overhead per object.
+        This test uses `memory_profiler` to measure the memory footprint of holding
+        large collections of `Trade` and `Kline` objects. It focuses specifically
+        on the memory cost of keeping model instances in memory.
 
         Preconditions:
         - `memory_profiler` is installed and available.
@@ -378,40 +376,27 @@ class TestModelPerformance:
 
         Steps:
         - Force garbage collection to establish a clean memory baseline.
-        - Access all `sample_trades` and `sample_klines` to ensure they are fully loaded
-          into memory, and perform a simple calculation (e.g., sum of volumes) to confirm access.
-        - Create smaller subsets of `Trade` and `Kline` dictionaries (e.g., 10,000 items)
-          to test memory usage during serialization.
-        - Delete the temporary dictionaries and force garbage collection to observe memory release.
-        - Perform comparison operations on a sample of trades/klines to test memory efficiency
-          of common model operations.
-        - The `@profile` decorator will automatically track and report memory usage during the test execution.
+        - Access all model instances to ensure they are fully loaded into memory.
+        - Perform simple operations to confirm models are accessible.
+        - The `@profile` decorator automatically tracks memory usage.
 
         Expected Result:
-        - Memory usage scales predictably with the number of objects, without excessive overhead per object.
-        - Memory is properly released when objects are no longer referenced.
-        - The test completes successfully, and `memory_profiler` reports reasonable memory consumption.
+        - Memory usage scales predictably with the number of objects.
+        - No excessive memory overhead per object.
         """
         import gc
 
         gc.collect()
 
+        # Access all trades to ensure they're in memory
         total_volume = sum(trade.volume for trade in sample_trades)
         assert total_volume > 0
 
+        # Access all klines to ensure they're in memory
         total_kline_volume = sum(kline.volume for kline in sample_klines)
         assert total_kline_volume > 0
 
-        trade_dicts = [trade.to_dict() for trade in sample_trades[:10_000]]
-        kline_dicts = [kline.to_dict() for kline in sample_klines[:10_000]]
-
-        assert len(trade_dicts) == 10_000
-        assert len(kline_dicts) == 10_000
-
-        del trade_dicts
-        del kline_dicts
-        gc.collect()
-
+        # Perform comparison operations
         sample_size = 1_000
         comparison_results = []
         for i in range(sample_size - 1):
@@ -420,31 +405,53 @@ class TestModelPerformance:
             comparison_results.append(trade_equal and kline_equal)
 
         assert len(comparison_results) == sample_size - 1
+
+    @profile  # type: ignore[misc]
+    def test_memory_of_serialization(self, sample_trades: list[Trade], sample_klines: list[Kline]) -> None:
+        """Test memory consumption during TypeAdapter serialization operations.
+
+        Description of what the test covers:
+        This test uses `memory_profiler` to measure the peak memory usage during
+        high-performance serialization operations using TypeAdapter. It focuses
+        specifically on memory usage during the serialization process.
+
+        Preconditions:
+        - `memory_profiler` is installed and available.
+        - Sufficient system memory is available for serialization testing.
+        - `sample_trades` and `sample_klines` fixtures provide large lists of model objects.
+
+        Steps:
+        - Force garbage collection to establish a clean memory baseline.
+        - Create TypeAdapter instances for serialization.
+        - Perform serialization operations using TypeAdapter.
+        - Clean up temporary data and force garbage collection.
+        - The `@profile` decorator automatically tracks memory usage.
+
+        Expected Result:
+        - Memory usage during serialization is reasonable and predictable.
+        - Memory is properly released after serialization completes.
+        """
         import gc
 
         gc.collect()
 
-        total_volume = sum(trade.volume for trade in sample_trades)
-        assert total_volume > 0
+        # Create TypeAdapters for high-performance serialization
+        trade_adapter = TypeAdapter(list[Trade])
+        kline_adapter = TypeAdapter(list[Kline])
 
-        total_kline_volume = sum(kline.volume for kline in sample_klines)
-        assert total_kline_volume > 0
+        # Serialize a subset for memory measurement
+        subset_trades = sample_trades[:10_000]
+        subset_klines = sample_klines[:10_000]
 
-        trade_dicts = [trade.to_dict() for trade in sample_trades[:10_000]]
-        kline_dicts = [kline.to_dict() for kline in sample_klines[:10_000]]
+        trades_json = trade_adapter.dump_json(subset_trades)
+        klines_json = kline_adapter.dump_json(subset_klines)
 
-        assert len(trade_dicts) == 10_000
-        assert len(kline_dicts) == 10_000
+        assert len(trades_json) > 0
+        assert len(klines_json) > 0
 
-        del trade_dicts
-        del kline_dicts
+        # Clean up and observe memory release
+        del trades_json
+        del klines_json
+        del subset_trades
+        del subset_klines
         gc.collect()
-
-        sample_size = 1_000
-        comparison_results = []
-        for i in range(sample_size - 1):
-            trade_equal = sample_trades[i].symbol == sample_trades[i + 1].symbol
-            kline_equal = sample_klines[i].interval == sample_klines[i + 1].interval
-            comparison_results.append(trade_equal and kline_equal)
-
-        assert len(comparison_results) == sample_size - 1

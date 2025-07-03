@@ -12,6 +12,9 @@ class BaseObservabilityConfig(BaseSettings):
     """
 
     model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
         str_strip_whitespace=True,
         extra="ignore",
     )
@@ -68,12 +71,13 @@ class BaseObservabilityConfig(BaseSettings):
             v: The log format string to validate.
 
         Returns:
-            The validated log format string.
+            The validated and normalized (lowercase) log format string.
 
         Raises:
             ValueError: If the log format is not one of the allowed values.
         """
         allowed = {"json", "text"}
-        if v not in allowed:
+        v_lower = v.lower()
+        if v_lower not in allowed:
             raise ValueError(f"log_format must be one of {allowed}")
-        return v
+        return v_lower

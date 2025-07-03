@@ -1,13 +1,12 @@
 from typing import Any
+from unittest import mock
 from unittest.mock import MagicMock
 
 import pytest
 from aiohttp import web
-from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram, Info, \
-    Summary
+from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram, Info, Summary
 
-from asset_core.observability.metrics import PrometheusMetricsRegistry, \
-    create_common_metrics
+from asset_core.observability.metrics import PrometheusMetricsRegistry, create_common_metrics
 
 
 @pytest.fixture
@@ -172,6 +171,85 @@ class TestPrometheusMetricsRegistry:
         assert response.charset == "utf-8"
         # Check the full Content-Type header includes the version
         assert "text/plain; version=0.0.4; charset=utf-8" in response.headers["Content-Type"]
+
+    def test_metric_creation_with_conflicting_type(
+        self, metrics_registry: PrometheusMetricsRegistry, mock_prometheus_client: MagicMock
+    ) -> None:
+        """Test that creating metrics with same name but different types returns existing metric."""
+        # Create a counter first
+        counter = metrics_registry.counter("test_metric", "A test metric")
+
+        # Trying to create a gauge with the same name should return the existing counter
+        # (since the implementation checks _metrics dict first)
+        gauge = metrics_registry.gauge("test_metric", "Another test metric")
+
+        # Should return the same object (the counter)
+        # Cast to Any to avoid type checking issues since the registry returns existing metrics
+        gauge_as_any: Any = gauge
+        assert gauge_as_any is counter
+
+        # Should not create a new Gauge since the metric already exists
+        assert not mock_prometheus_client.Gauge.called
+
+    def test_metric_creation_with_conflicting_labels(
+        self, metrics_registry: PrometheusMetricsRegistry, mock_prometheus_client: MagicMock
+    ) -> None:
+        """Test that creating metrics with same name but different labels returns existing metric."""
+        # Create a counter with specific labels
+        counter1 = metrics_registry.counter("test_metric", "A test metric", labels=["status"])
+
+        # Trying to create a counter with different labels should return the existing counter
+        # (since the implementation checks _metrics dict first)
+        counter2 = metrics_registry.counter("test_metric", "Another test metric", labels=["method"])
+
+        # Should return the same object
+        assert counter2 is counter1
+
+        # Counter should only be created once
+        assert mock_prometheus_client.Counter.call_count == 1
+
+    def test_invalid_metric_operations(self, metrics_registry: PrometheusMetricsRegistry) -> None:
+        """Test that invalid metric operations raise appropriate errors."""
+        # Create a counter
+        counter = metrics_registry.counter("test_counter", "A test counter")
+
+        # Mock the counter's inc method to raise ValueError for negative values
+        def mock_inc(value: float = 1) -> None:
+            if value < 0:
+                raise ValueError("Counter increment must be non-negative")
+            return None
+
+        # Use mock.patch to properly mock the method
+        with mock.patch.object(counter, "inc", side_effect=mock_inc):
+            # Test that incrementing by negative value raises ValueError
+            with pytest.raises(ValueError) as exc_info:
+                counter.inc(-1)
+            assert "must be non-negative" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_start_http_server_port_in_use(
+        self, metrics_registry: PrometheusMetricsRegistry, mocker: Any
+    ) -> None:
+        """Test that starting two servers on the same port raises OSError."""
+        mock_app = MagicMock(spec=web.Application)
+        mock_app.router = MagicMock()
+        mock_app_runner = MagicMock(spec=web.AppRunner)
+        mock_site = MagicMock(spec=web.TCPSite)
+
+        mocker.patch("aiohttp.web.Application", return_value=mock_app)
+        mocker.patch("aiohttp.web.AppRunner", return_value=mock_app_runner)
+        mocker.patch("aiohttp.web.TCPSite", return_value=mock_site)
+
+        # First server starts successfully
+        runner1 = await metrics_registry.start_http_server(port=8080)
+        assert runner1 == mock_app_runner
+
+        # Second server on the same port should raise OSError (address already in use)
+        mock_site.start.side_effect = OSError("Address already in use")
+
+        with pytest.raises(OSError) as exc_info:
+            await metrics_registry.start_http_server(port=8080)
+        assert "Address already in use" in str(exc_info.value)
 
 
 class TestCommonMetrics:

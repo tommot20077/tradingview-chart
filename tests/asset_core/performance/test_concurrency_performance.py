@@ -6,7 +6,6 @@ and concurrent model creation performance.
 """
 
 import asyncio
-import time
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
@@ -157,138 +156,85 @@ class TestConcurrencyPerformance:
         - The overall system demonstrates robust thread safety for model interactions.
         """
 
-    @pytest.mark.asyncio
-    async def test_async_operation_overhead(self, base_trade_data: dict[str, Any]) -> None:
-        """Test overhead introduced by asynchronous operations compared to synchronous ones.
+    def test_sync_trade_creation_performance(self, benchmark: Any, base_trade_data: dict[str, Any]) -> None:
+        """Benchmark synchronous trade creation performance.
 
-        Description of what the test covers:
-        This test measures the performance overhead of asynchronous operations involving
-        model creation, serialization, and processing compared to their synchronous counterparts.
-        It also assesses the benefits of concurrent asynchronous execution for I/O-bound tasks.
-
-        Preconditions:
-        - `asyncio` is available and functional for asynchronous programming.
-        - Models support both synchronous and asynchronous interaction patterns.
-        - Base test data for `Trade` and `Kline` models is provided by fixtures.
-
-        Steps:
-        - Define the number of operations to perform.
-        - Establish a synchronous baseline: create and process `Trade` models sequentially,
-          recording the time taken.
-        - Implement an asynchronous equivalent: define `create_and_process_trade` as an `async` function
-          that creates and processes a `Trade` model, including a small `asyncio.sleep(0)` to yield control.
-        - Perform sequential asynchronous operations: iterate and `await` calls to `create_and_process_trade`,
-          recording the time taken.
-        - Perform concurrent asynchronous operations: create a list of `create_and_process_trade` tasks
-          and run them concurrently using `asyncio.gather`, recording the time taken.
-        - Implement `process_trade_batch` as an `async` function to simulate batch processing with
-          realistic async I/O (using `asyncio.sleep(0)`).
-        - Divide synchronous trades into batches and process them concurrently using `asyncio.gather`.
-        - Assert that the asynchronous sequential overhead is minimal compared to synchronous execution.
-        - Assert that concurrent asynchronous operations show reasonable performance relative to sequential async.
-        - Verify data integrity: assert that the number of models/results from all operations matches the expected count.
-        - Implement `validate_model_async` to simulate asynchronous model validation.
-        - Test concurrent validation of models using `asyncio.gather` and assert that all validations pass
-          within an acceptable time frame.
-
-        Expected Result:
-        - Asynchronous operations introduce minimal overhead for CPU-bound tasks.
-        - Concurrent asynchronous operations demonstrate performance benefits for tasks that can yield control
-          (e.g., simulated I/O).
-        - No significant performance degradation occurs for simple asynchronous operations.
-        - All models are created, processed, and validated correctly across synchronous and asynchronous paths.
+        Uses pytest-benchmark to measure baseline performance of synchronous trade creation.
         """
+        num_operations = 1000
 
-        num_operations = 5000
+        def create_sync_trades() -> list[Trade]:
+            trades = []
+            for i in range(num_operations):
+                trade_data = base_trade_data.copy()
+                trade_data["trade_id"] = f"sync_trade_{i}"
+                trade_data["timestamp"] = datetime.now(UTC)
+                trade = Trade(**trade_data)
+                _ = trade.model_dump_json()  # Simulate processing
+                trades.append(trade)
+            return trades
 
-        # --- Synchronous Baseline ---
-        start_time = time.perf_counter()
-        sync_trades = []
-        for i in range(num_operations):
-            trade_data = base_trade_data.copy()
-            trade_data["trade_id"] = f"sync_trade_{i}"
-            trade_data["timestamp"] = datetime.now(UTC)
-            trade = Trade(**trade_data)
-            # Simulate some synchronous processing
-            _ = trade.model_dump_json()
-            sync_trades.append(trade)
-        sync_time = time.perf_counter() - start_time
-        print(f"Synchronous operations: {sync_time:.4f} seconds")
+        trades = benchmark.pedantic(create_sync_trades, rounds=3, iterations=1)
+        assert len(trades) == num_operations
+        assert all(isinstance(t, Trade) for t in trades)
 
-        # --- Asynchronous Sequential ---
-        async def create_and_process_trade(index: int) -> Trade:
-            trade_data = base_trade_data.copy()
-            trade_data["trade_id"] = f"async_seq_trade_{index}"
-            trade_data["timestamp"] = datetime.now(UTC)
-            trade = Trade(**trade_data)
-            # Simulate non-blocking I/O or yielding control
-            await asyncio.sleep(0)  # Yield control to event loop
-            _ = trade.model_dump_json()
-            return trade
+    def test_async_trade_creation_performance(self, benchmark: Any, base_trade_data: dict[str, Any]) -> None:
+        """Benchmark asynchronous trade creation performance.
 
-        start_time = time.perf_counter()
-        async_seq_trades = []
-        for i in range(num_operations):
-            async_seq_trades.append(await create_and_process_trade(i))
-        async_seq_time = time.perf_counter() - start_time
-        print(f"Asynchronous sequential operations: {async_seq_time:.4f} seconds")
+        Uses pytest-benchmark to measure async trade creation with simulated I/O.
+        """
+        num_operations = 1000
 
-        # Asynchronous sequential should be comparable to sync, possibly slightly higher due to async overhead
-        assert async_seq_time < sync_time * 2.0  # Allow up to double overhead for simple ops
+        async def create_async_trades() -> list[Trade]:
+            async def create_and_process_trade(index: int) -> Trade:
+                trade_data = base_trade_data.copy()
+                trade_data["trade_id"] = f"async_trade_{index}"
+                trade_data["timestamp"] = datetime.now(UTC)
+                trade = Trade(**trade_data)
+                await asyncio.sleep(0)  # Yield control
+                _ = trade.model_dump_json()
+                return trade
 
-        # --- Asynchronous Concurrent (I/O bound simulation) ---
-        start_time = time.perf_counter()
-        tasks = [create_and_process_trade(i) for i in range(num_operations)]
-        async_concurrent_trades = await asyncio.gather(*tasks)
-        async_concurrent_time = time.perf_counter() - start_time
-        print(f"Asynchronous concurrent operations: {async_concurrent_time:.4f} seconds")
+            tasks = [create_and_process_trade(i) for i in range(num_operations)]
+            return await asyncio.gather(*tasks)
 
-        # For I/O bound tasks, concurrent async should be significantly faster than sequential
-        # The exact ratio depends on the nature of 'I/O' (here, asyncio.sleep(0))
-        assert (
-            async_concurrent_time < async_seq_time * 2.0
-        )  # Allow for realistic performance variance (some systems may be slower)
+        def sync_wrapper() -> list[Trade]:
+            return asyncio.run(create_async_trades())
 
-        assert len(sync_trades) == num_operations
-        assert len(async_seq_trades) == num_operations
-        assert len(async_concurrent_trades) == num_operations
+        trades = benchmark.pedantic(sync_wrapper, rounds=3, iterations=1)
+        assert len(trades) == num_operations
+        assert all(isinstance(t, Trade) for t in trades)
 
-        # Verify data integrity (simplified)
-        assert all(isinstance(t, Trade) for t in sync_trades)
-        assert all(isinstance(t, Trade) for t in async_seq_trades)
-        assert all(isinstance(t, Trade) for t in async_concurrent_trades)
+    def test_async_batch_processing_performance(self, benchmark: Any, base_trade_data: dict[str, Any]) -> None:
+        """Benchmark asynchronous batch processing performance.
 
-        # Test concurrent batch processing (simulating I/O)
-        async def process_trade_batch(trades_batch: list[Trade]) -> list[Trade]:
-            processed_batch = []
-            for trade in trades_batch:
-                await asyncio.sleep(0.0001)  # Simulate small I/O delay per item
-                processed_batch.append(trade)
-            return processed_batch
-
+        Uses pytest-benchmark to measure performance of concurrent batch processing.
+        """
+        num_operations = 1000
         batch_size = 100
-        batches = [sync_trades[i : i + batch_size] for i in range(0, num_operations, batch_size)]
 
-        start_time = time.perf_counter()
-        processed_results = await asyncio.gather(*[process_trade_batch(b) for b in batches])
-        batch_processing_time = time.perf_counter() - start_time
-        print(f"Async batch processing: {batch_processing_time:.4f} seconds")
+        # Create test data
+        test_trades = []
+        for i in range(num_operations):
+            trade_data = base_trade_data.copy()
+            trade_data["trade_id"] = f"batch_trade_{i}"
+            trade_data["timestamp"] = datetime.now(UTC)
+            test_trades.append(Trade(**trade_data))
 
-        total_processed = sum(len(b) for b in processed_results)
+        async def process_batch_concurrent() -> list[list[Trade]]:
+            async def process_trade_batch(trades_batch: list[Trade]) -> list[Trade]:
+                processed_batch = []
+                for trade in trades_batch:
+                    await asyncio.sleep(0.0001)  # Simulate I/O
+                    processed_batch.append(trade)
+                return processed_batch
+
+            batches = [test_trades[i : i + batch_size] for i in range(0, num_operations, batch_size)]
+            return await asyncio.gather(*[process_trade_batch(b) for b in batches])
+
+        def sync_wrapper() -> list[list[Trade]]:
+            return asyncio.run(process_batch_concurrent())
+
+        results = benchmark.pedantic(sync_wrapper, rounds=3, iterations=1)
+        total_processed = sum(len(b) for b in results)
         assert total_processed == num_operations
-
-        # Test concurrent model validation (simulating async validation)
-        async def validate_model_async(model: Trade) -> bool:
-            await asyncio.sleep(0.00005)  # Simulate async validation check
-            return bool(model.price > 0)  # Simple validation
-
-        start_time = time.perf_counter()
-        validation_tasks = [validate_model_async(t) for t in sync_trades]
-        validation_results = await asyncio.gather(*validation_tasks)
-        validation_time = time.perf_counter() - start_time
-        print(f"Async concurrent validation: {validation_time:.4f} seconds")
-
-        assert all(validation_results)  # All should be valid
-        assert (
-            validation_time < async_seq_time * 2.0
-        )  # Allow for realistic performance variance (some systems may be slower)

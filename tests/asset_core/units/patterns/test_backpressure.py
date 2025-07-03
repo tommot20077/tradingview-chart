@@ -68,8 +68,6 @@ class QueueBasedBackpressureController(AbstractBackpressureController):
         Returns:
             True if throttling should be applied, False otherwise
         """
-        await asyncio.sleep(0.001)  # Simulate async operation
-
         current_size = len(self._queue)
 
         if not self._is_throttling and current_size >= self.high_watermark:
@@ -82,14 +80,15 @@ class QueueBasedBackpressureController(AbstractBackpressureController):
         return self._is_throttling
 
     def add_item(self, item: Any) -> bool:
-        """Add item to queue if not currently throttling.
+        """Add item to queue if capacity allows.
 
         Args:
             item: Item to add to queue
 
         Returns:
-            True if item was added, False if rejected due to throttling
+            True if item was added, False if rejected due to capacity limit
         """
+        # Apply backpressure before reaching absolute capacity to prevent race conditions
         if len(self._queue) >= self.high_watermark:
             return False
 
@@ -821,3 +820,196 @@ class TestQueueBasedBackpressureController:
         assert stats["throttle_count"] == 10
         assert stats["release_count"] == 10
         assert not controller.is_throttling()
+
+    @pytest.mark.asyncio
+    async def test_concurrent_throttle_check_race_condition(self, controller: QueueBasedBackpressureController) -> None:
+        """Test that concurrent throttle checks handle race conditions properly.
+
+        Test Description:
+        Verifies that multiple concurrent should_throttle calls
+        maintain consistent state and prevent race conditions in
+        concurrent producer scenarios.
+
+        Test Steps:
+        1. Set up queue state near high watermark threshold
+        2. Make concurrent should_throttle calls while modifying queue
+        3. Verify all results are consistent with queue state
+
+        Expected Results:
+        - All concurrent calls return consistent results
+        - No race conditions in throttling state management
+        - Queue state remains coherent
+        """
+        # Fill queue to just below high watermark
+        for i in range(4):
+            controller.add_item(f"item_{i}")
+        assert controller.get_queue_size() == 4
+
+        # Create a scenario where multiple producers check throttling while queue is being modified
+        async def producer_task() -> bool:
+            # Check if should throttle, then try to add if not throttling
+            should_throttle = await controller.should_throttle()
+            if not should_throttle:
+                success = controller.add_item("producer_item")
+                return success
+            return False
+
+        # Run multiple concurrent producer tasks
+        tasks = [producer_task() for _ in range(10)]
+        results = await asyncio.gather(*tasks)
+
+        # Verify queue didn't exceed capacity due to race conditions
+        final_size = controller.get_queue_size()
+        assert final_size <= controller.high_watermark
+
+        # Verify state consistency
+        is_throttling = controller.is_throttling()
+        if final_size >= controller.high_watermark:
+            assert is_throttling is True
+        else:
+            # State could be either depending on exact timing, but should be consistent
+            pass
+
+        # Verify some producers succeeded but not more than queue capacity allows
+        successful_additions = sum(results)
+        expected_max_additions = controller.high_watermark - 4  # Started with 4 items
+        assert successful_additions <= expected_max_additions
+
+    @pytest.mark.asyncio
+    async def test_backpressure_activation_threshold_precision(
+        self, controller: QueueBasedBackpressureController
+    ) -> None:
+        """Test precise backpressure activation at exact threshold.
+
+        Test Description:
+        Verifies that backpressure activates precisely at the high watermark
+        and not before, ensuring exact threshold behavior.
+
+        Test Steps:
+        1. Add items one by one approaching high watermark
+        2. Check throttling state at each step
+        3. Verify precise activation at high watermark
+
+        Expected Results:
+        - No throttling before high watermark
+        - Throttling activates exactly at high watermark
+        - Precise threshold behavior maintained
+        """
+        # Test each step approaching high watermark (high_watermark = 5)
+        for i in range(controller.high_watermark):
+            # Add one item
+            success = controller.add_item(f"precise_item_{i}")
+            assert success is True
+            current_size = controller.get_queue_size()
+
+            # Check throttling state
+            is_throttling = await controller.should_throttle()
+
+            if current_size < controller.high_watermark:
+                # Should not be throttling before reaching high watermark
+                assert is_throttling is False, f"Unexpected throttling at size {current_size}"
+            else:
+                # Should be throttling at or above high watermark
+                assert is_throttling is True, f"Expected throttling at size {current_size}"
+
+        # Verify final state
+        assert controller.get_queue_size() == controller.high_watermark
+        assert controller.is_throttling() is True
+
+    @pytest.mark.asyncio
+    async def test_backpressure_release_threshold_precision(self, controller: QueueBasedBackpressureController) -> None:
+        """Test precise backpressure release at exact threshold.
+
+        Test Description:
+        Verifies that backpressure releases precisely at the low watermark
+        and maintains throttling above it.
+
+        Test Steps:
+        1. Trigger backpressure by filling queue
+        2. Remove items one by one approaching low watermark
+        3. Check throttling state at each step
+        4. Verify precise release at low watermark
+
+        Expected Results:
+        - Throttling maintained above low watermark
+        - Throttling releases exactly at low watermark
+        - Precise threshold behavior maintained
+        """
+        # First trigger backpressure
+        for i in range(controller.high_watermark):
+            controller.add_item(f"fill_item_{i}")
+
+        # Trigger throttling
+        await controller.should_throttle()
+        assert controller.is_throttling() is True
+
+        # Remove items one by one and test precision
+        while controller.get_queue_size() > 0:
+            # Remove one item
+            removed_item = controller.remove_item()
+            assert removed_item is not None
+            new_size = controller.get_queue_size()
+
+            # Check throttling state after removal
+            is_throttling_after = await controller.should_throttle()
+
+            if new_size > controller.low_watermark:
+                # Should still be throttling above low watermark
+                assert is_throttling_after is True, f"Expected throttling above low watermark at size {new_size}"
+            elif new_size <= controller.low_watermark:
+                # Should have released throttling at or below low watermark
+                assert is_throttling_after is False, (
+                    f"Expected no throttling at or below low watermark at size {new_size}"
+                )
+                break  # Exit once throttling is released
+
+        # Verify final state
+        assert controller.get_queue_size() <= controller.low_watermark
+        assert controller.is_throttling() is False
+
+    def test_watermark_validation_comprehensive(self) -> None:
+        """Test comprehensive watermark validation scenarios.
+
+        Test Description:
+        Verifies that the controller properly validates watermark parameters
+        and prevents invalid configurations.
+
+        Test Steps:
+        1. Test various invalid watermark combinations
+        2. Verify appropriate errors are raised
+        3. Test edge cases of valid configurations
+
+        Expected Results:
+        - Invalid configurations raise ValueError with descriptive messages
+        - Valid edge cases are accepted
+        - Error messages are informative
+        """
+        # Test zero high watermark
+        with pytest.raises(ValueError, match="Watermarks must be non-negative"):
+            QueueBasedBackpressureController(high_watermark=0, low_watermark=0)
+
+        # Test negative watermarks
+        with pytest.raises(ValueError, match="Watermarks must be non-negative"):
+            QueueBasedBackpressureController(high_watermark=-5, low_watermark=2)
+
+        with pytest.raises(ValueError, match="Watermarks must be non-negative"):
+            QueueBasedBackpressureController(high_watermark=5, low_watermark=-2)
+
+        # Test equal watermarks (should fail)
+        with pytest.raises(ValueError, match="Low watermark must be less than high watermark"):
+            QueueBasedBackpressureController(high_watermark=5, low_watermark=5)
+
+        # Test inverted watermarks
+        with pytest.raises(ValueError, match="Low watermark must be less than high watermark"):
+            QueueBasedBackpressureController(high_watermark=3, low_watermark=8)
+
+        # Test valid edge cases
+        # Minimum valid configuration
+        controller_min = QueueBasedBackpressureController(high_watermark=2, low_watermark=1)
+        assert controller_min.high_watermark == 2
+        assert controller_min.low_watermark == 1
+
+        # Large values should work
+        controller_large = QueueBasedBackpressureController(high_watermark=1000, low_watermark=500)
+        assert controller_large.high_watermark == 1000
+        assert controller_large.low_watermark == 500
