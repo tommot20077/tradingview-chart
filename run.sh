@@ -188,7 +188,7 @@ run_tests() {
     fi
 }
 
-# Run linting
+# Run linting checks
 run_lint() {
     print_status "Running code quality checks..."
     check_deps

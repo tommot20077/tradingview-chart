@@ -8,183 +8,273 @@
 ## [asset-core 0.2.2] - 2025-07-05
 
 ### 增強
+
 - **全面測試框架**: 大規模擴展所有測試類別的覆蓋範圍
-  - 為配置、模型、網路和觀測性組件新增廣泛的整合測試
-  - 透過新的測試模組增強單元測試覆蓋率
-  - 改善測試組織和結構以提升可維護性
+    - 為配置、模型、網路和觀測性組件新增廣泛的整合測試
+    - 透過新的測試模組增強單元測試覆蓋率
+    - 改善測試組織和結構以提升可維護性
 - **核心架構精煉**: 對整個 asset_core 系統進行全面改善
-  - 透過改進的 ABOUTME 註釋增強程式碼文件
-  - 透過更好的驗證和錯誤處理精煉模型實作
-  - 優化配置管理和觀測性組件
+    - 透過改進的 ABOUTME 註釋增強程式碼文件
+    - 透過更好的驗證和錯誤處理精煉模型實作
+    - 優化配置管理和觀測性組件
 
 ### 改善
+
 - **程式碼品質**: 對 118 個檔案進行廣泛的程式碼格式化和風格改善
-  - 標準化程式碼格式化和導入組織
-  - 透過一致的風格增強可讀性
-  - 改善文件字串和內聯文件
+    - 標準化程式碼格式化和導入組織
+    - 透過一致的風格增強可讀性
+    - 改善文件字串和內聯文件
 - **測試基礎設施**: 測試能力的重大增強
-  - 為資料提供者、事件匯流排和儲存庫新增契約測試
-  - 增強測試配置和輔助工具
-  - 改善測試覆蓋率報告和分析
+    - 為資料提供者、事件匯流排和儲存庫新增契約測試
+    - 增強測試配置和輔助工具
+    - 改善測試覆蓋率報告和分析
 
 ### 基礎設施
+
 - **專案配置**: 更新建置和開發配置
-  - 透過更新的依賴項增強 `pyproject.toml`
-  - 改善 `.gitignore` 規則以提升檔案管理
-  - 版本更新至 0.2.2 並更新套件元資料
+    - 透過更新的依賴項增強 `pyproject.toml`
+    - 改善 `.gitignore` 規則以提升檔案管理
+    - 版本更新至 0.2.2 並更新套件元資料
 
 ### 開發體驗
+
 - **增強測試**: 開發者現在可以使用覆蓋系統所有方面的全面測試套件
 - **更好的程式碼組織**: 改善的程式碼結構和文件使程式碼庫更容易存取
 - **開發工具**: 增強測試和開發工作流程的工具支援
 
----
-
 ### Git 提交參考
-- 主要變更: [45e2db2](https://github.com/tommot20077/tradingview-chart/commit/45e2db259f61646d41ee2b428bf428f13200e9b0) - v0.2.2
+
+-
+主要變更: [18275b1](https://github.com/tommot20077/tradingview-chart/commit/18275b15287bb79ddecd0e6ac89ee9e9e640f4b7)  -
+feat(tests): 擴展測試覆蓋率並改善程式碼品質
+
+---
 
 ## [asset-core 0.2.1] - 2025-07-02
 
 ### 新增
+
 - **缺失的單元測試**: 為先前未測試的組件新增完整的單元測試：
-  - `tests/asset_core/units/network/test_ws_client.py`: WebSocket 客戶端單元測試
-  - `tests/asset_core/units/observability/test_logging.py`: 日誌系統單元測試
-  - `tests/asset_core/units/observability/test_metrics.py`: 指標系統單元測試
-- **測試覆蓋率分析**: 新增詳細的分析文件（`missing_tests.md`、`missing_tests_analysis.md`），識別缺失的測試案例和測試分類建議
+    - `tests/asset_core/units/network/test_ws_client.py`: WebSocket 客戶端單元測試
+    - `tests/asset_core/units/observability/test_logging.py`: 日誌系統單元測試
+    - `tests/asset_core/units/observability/test_metrics.py`: 指標系統單元測試
+- **測試覆蓋率分析**: 新增詳細的分析文件（`missing_tests.md`、`missing_tests_analysis.md`
+  ），識別缺失的測試案例和測試分類建議
 
 ### 增強
+
 - **核心架構**: 對所有 asset_core 模組進行全面改善（31 個檔案修改）
 - **程式碼文件**: 在整個程式碼庫中增強 ABOUTME 註解和內聯文件
 - **測試框架**: 大幅更新現有測試套件，提升覆蓋率和可靠性
 - **建置配置**: 更新專案依賴和開發工具配置
 
 ### 改善
+
 - **程式碼品質**: 對 91 個檔案進行廣泛的重構和程式碼格式改善
 - **測試組織**: 更好地分類單元測試與整合測試
 - **錯誤處理**: 增強整個系統的異常處理和驗證
 - **效能**: 優化資料模型和觀測性組件
 
 ### 基礎設施
+
 - **專案結構**: 持續完善統一 monorepo 結構
 - **測試工具**: 增強測試引擎，改善路徑處理和驗證
 - **開發流程**: 改善建置腳本和依賴管理
+
+-
+主要變更: [d813359](https://github.com/tommot20077/tradingview-chart/commit/d81335998cd50c161d3030350849fc12cf3cbd16) -
+feat(tests): 新增缺失的單元測試並增強測試覆蓋率
+
+---
+
+## [crypto-single 0.1.1] - 2025-07-03
+
+### 重構
+
+- **配置系統**: 全面重構 `SingleCryptoSettings` 類，為幾乎所有配置參數引入了廣泛的驗證規則，特別是針對生產環境。這包括對資料庫
+  URL、密鑰和 API 憑證的嚴格檢查。
+- **測試基礎設施**: 重組了整個測試套件，將所有測試移至根級 `tests/` 目錄，並刪除了
+  `crypto_single` 模組中的所有合約測試。這簡化了專案結構並符合標準實踐。
+- **CI/CD 管道**: 增強了 GitHub Actions 工作流程 (`ci.yml`)，以支援手動觸發 (
+  `workflow_dispatch`)、多版本 Python 測試 (3.8-3.12) 和選擇性測試執行（例如，單元、整合、僅品質檢查）。
+- **測試執行腳本**: 簡化了 `run.sh` 和 `test-engine.sh`，以直接使用 `pytest`
+  進行測試執行，移除了複雜的模組檢測邏輯並提高了可讀性。
+
+### 新增
+
+- **全面的單元測試**: 為 `asset_core` 添加了大量新的單元測試，涵蓋了先前未測試的領域，如
+  `ws_client`、`logging`、`metrics` 和 `storage` 儲存庫。
+- **增強的安全性驗證**: 為配置設定實現了眾多以安全為中心的驗證器，確保生產環境遵守嚴格的安全標準。
+
+### 移除
+
+- **遺留測試檔案**: 刪除了 `src/crypto_single/tests/` 中的所有合約和單元測試，這些測試已被根
+  `tests/` 目錄中新的、更全面的測試所取代。
+- **舊的配置備份**: 刪除了 `pyproject_backup.toml` 和 `pyproject_old.toml`，以清理專案根目錄。
+
+### 開發體驗
+
+- **提升配置安全性**: 新的驗證系統為開發者提供了關於配置錯誤的即時反饋，減少了執行時問題。
+- **靈活且更快的 CI**: 開發者現在可以手動觸發特定 Python 版本上的特定測試，從而加快了開發和驗證週期。
+- **簡化的專案導航**: 新的測試結構使得定位和管理應用程式不同部分的測試變得更加容易。
+
+-
+主要變更: [ad1fc02](https://github.com/tommot20077/tradingview-chart/commit/ad1fc021270dbf48fdfe75f4a481118be0bb9be1) -
+refactor(crypto-single): 重構配置系統和測試基礎設施
 
 ---
 
 ## [asset-core 0.2.0] - 2025-06-29
 
 ### 重構
-- **統一專案結構**: 將整個專案遷移到由單一根 `pyproject.toml` 和 `setuptools` 管理的統一 monorepo 結構。
-- **簡化模組佈局**: 將 `asset_core` 和 `crypto_single` 的目錄結構從巢狀（`module/module`）扁平化為單層（`module`），使導入路徑更清晰。
-- **集中化依賴管理**: 將所有專案依賴項整合到根 `pyproject.toml` 中，使用 `project.optional-dependencies` 來管理不同應用和開發環境的依賴。
+
+- **統一專案結構**: 將整個專案遷移到由單一根 `pyproject.toml` 和 `setuptools` 管理的統一
+  monorepo 結構。
+- **簡化模組佈局**: 將 `asset_core` 和 `crypto_single` 的目錄結構從巢狀（`module/module`
+  ）扁平化為單層（`module`），使導入路徑更清晰。
+- **集中化依賴管理**: 將所有專案依賴項整合到根 `pyproject.toml` 中，使用
+  `project.optional-dependencies` 來管理不同應用和開發環境的依賴。
 - **統一測試目錄**: 將所有測試移至根目錄下的 `tests/` 目錄，並按模組進行組織，以實現集中的測試管理和執行。
 
 ### 移除
-- **模組級 `pyproject.toml`**: 刪除了 `asset_core` 和 `crypto_single` 中各自的 `pyproject.toml` 檔案。
-- **冗餘的 `PYTHONPATH` 配置**: 從 `test-engine.sh` 中移除了手動設置 `PYTHONPATH` 的部分，因為現在由統一的建置處理。
+
+- **模組級 `pyproject.toml`**: 刪除了 `asset_core` 和 `crypto_single` 中各自的
+  `pyproject.toml` 檔案。
+- **冗餘的 `PYTHONPATH` 配置**: 從 `test-engine.sh` 中移除了手動設置 `PYTHONPATH`
+  的部分，因為現在由統一的建置處理。
 
 ### 開發體驗
+
 - **簡化依賴管理**: 開發者現在可以從單一的 `pyproject.toml` 檔案管理所有依賴。
 - **提升專案可維護性**: 統一的結構使管理配置、運行測試和建置專案變得更加容易。
 - **更清晰的程式碼庫**: 扁平化的模組結構和集中的測試改善了程式碼的組織和可讀性。
 
----
-
 ### Git 提交參考
-- 主要變更: [f7715db](https://github.com/tommot20077/tradingview-chart/commit/f7715db8581bdd8376967b383578d7b85e84e95e) - refactor(build): 統一專案結構並遷移至 setuptools
+
+-
+主要變更: [f256589](https://github.com/tommot20077/tradingview-chart/commit/f2565896bf4998165c7296bb1cc7cf8d9d30f996) -
+refactor(build): 統一專案結構並遷移至 setuptools
+
+---
 
 ## [asset-core 0.1.2] - 2025-06-29
 
+
 ### 新增
+
 - **端對端 (E2E) 測試套件**:
-  - `test_data_flow_integration.py`: 測試從數據提供者到事件系統再到儲存庫的完整數據流。
-  - `test_system_resilience.py`: 測試系統在故障、斷線和資源耗盡等壓力下的彈性和恢復能力。
+    - `test_data_flow_integration.py`: 測試從數據提供者到事件系統再到儲存庫的完整數據流。
+    - `test_system_resilience.py`: 測試系統在故障、斷線和資源耗盡等壓力下的彈性和恢復能力。
 - **性能測試套件**:
-  - `test_model_performance.py`: 測試 `Trade` 和 `Kline` 模型在大規模數據下的序列化、驗證性能和記憶體佔用。
-  - `test_concurrency_performance.py`: 測試模型在多線程和異步環境下的併發性能和線程安全性。
+    - `test_model_performance.py`: 測試 `Trade` 和 `Kline` 模型在大規模數據下的序列化、驗證性能和記憶體佔用。
+    - `test_concurrency_performance.py`: 測試模型在多線程和異步環境下的併發性能和線程安全性。
 - **安全性測試套件**:
-  - `test_input_sanitization.py`: 驗證系統對 SQL 注入、XSS 和路徑遍歷等惡意輸入的防禦能力。
-  - `test_sensitive_data_handling.py`: 確保 API 金鑰、個人資訊等敏感數據在日誌和輸出中被正確遮罩。
+    - `test_input_sanitization.py`: 驗證系統對 SQL 注入、XSS 和路徑遍歷等惡意輸入的防禦能力。
+    - `test_sensitive_data_handling.py`: 確保 API 金鑰、個人資訊等敏感數據在日誌和輸出中被正確遮罩。
 
 ### 改進
+
 - **測試引擎 (`test-engine.sh`)**:
-  - **路徑處理增強**: 自動正規化測試路徑，支援從專案根目錄執行特定模組的測試 (例如 `./run.sh test src/asset_core/tests/units`)。
-  - **路徑驗證**: 新增對測試路徑格式的驗證，提供清晰的錯誤提示，引導用戶使用正確的格式。
-  - **PYTHONPATH 自動設定**: 執行測試前自動將 `src` 下的所有模組加入 `PYTHONPATH`，簡化了測試程式碼中的導入語句。
+    - **路徑處理增強**: 自動正規化測試路徑，支援從專案根目錄執行特定模組的測試 (例如
+      `./run.sh test src/asset_core/tests/units`)。
+    - **路徑驗證**: 新增對測試路徑格式的驗證，提供清晰的錯誤提示，引導用戶使用正確的格式。
+    - **PYTHONPATH 自動設定**: 執行測試前自動將 `src` 下的所有模組加入 `PYTHONPATH`
+      ，簡化了測試程式碼中的導入語句。
 - **測試程式碼可讀性**:
-  - 由於 `PYTHONPATH` 的改進，`asset_core` 模組內的所有測試導入路徑從 `from src.asset_core.asset_core...` 簡化為 `from asset_core...`，提升了程式碼的簡潔性。
+    - 由於 `PYTHONPATH` 的改進，`asset_core` 模組內的所有測試導入路徑從
+      `from src.asset_core.asset_core...` 簡化為 `from asset_core...`，提升了程式碼的簡潔性。
 - **測試文檔**:
-  - 為所有新增的 E2E、性能和安全性測試案例添加了符合專案規範的詳細 docstring，解釋了測試的覆蓋範圍、前提、步驟和預期結果。
+    - 為所有新增的 E2E、性能和安全性測試案例添加了符合專案規範的詳細
+      docstring，解釋了測試的覆蓋範圍、前提、步驟和預期結果。
 
 ### 修復
-- **導入路徑問題**: 解決了在 `asset_core` 測試中無法直接使用 `import asset_core` 的問題，使測試環境與實際運行環境更一致。
+
+- **導入路徑問題**: 解決了在 `asset_core` 測試中無法直接使用 `import asset_core`
+  的問題，使測試環境與實際運行環境更一致。
 
 ### 開發體驗
+
 - **測試便利性**: 開發者現在可以更直觀地指定測試目標，並獲得更清晰的指引。
 - **程式碼品質**: 擴展的測試覆蓋範圍顯著提升了系統的穩定性、性能和安全性。
 - **程式碼一致性**: 簡化的導入路徑使測試程式碼更加標準化和易於維護。
 
----
-
 ### Git 提交參考
-- 主要變更: [3c559fd](https://github.com/tommot20077/tradingview-chart/commit/3c559fd1bb30af37659887f999e9769eb9f6cd58) - feat(testing): enhance test engine and expand test coverage
+
+-
+主要變更: [97b3b04](https://github.com/tommot20077/tradingview-chart/commit/97b3b047bab3652db013ea8d28585899d289498e) -
+feat(testing): 新增全面的測試套件並改進測試引擎
+
+---
 
 ## [asset-core 0.1.1] - 2025-06-27
 
 ### 新增
+
 - **完整專案文件系統**: 建立 開發指南
 - **進階儲存測試套件**: 新增高級儲存功能測試
 - **crypto_single 應用基礎**: 建立第一個具體應用程式
 
 ### 改進
+
 - **資料模型精度提升**: Kline 模型全面增強
 - **觀測性系統優化**: 日誌和監控功能全面升級
 - **例外處理機制強化**: 錯誤處理和恢復能力提升
 - **配置系統簡化**: 移除冗餘配置選項
 
 ### 修復
+
 - **程式碼風格統一**: 全面標準化程式碼格式
 - **測試覆蓋增強**: 提升測試品質和覆蓋範圍
 
 ### 開發體驗
+
 - **文檔完整性**: 開發者現在擁有完整的專案開發指南
 - **程式碼一致性**: 統一的程式碼格式提升團隊協作效率
 - **維護便利性**: 簡化的配置系統降低維護複雜度
 - **測試可靠性**: 增強的測試套件確保系統穩定性
 
+### Git 提交參考
+
+-
+主要變更: [c1ff891](https://github.com/tommot20077/tradingview-chart/commit/c1ff8911ab0adf9cb75874a282d1715da8561a0c) -
+docs: 新增完整專案文件並改善程式碼格式
+
 ---
 
-### Git 提交參考
-- 主要變更: [c1ff891](https://github.com/tommot20077/tradingview-chart/commit/c1ff8911ab0adf9cb75874a282d1715da8561a0c) - docs: 新增完整專案文件並改善程式碼格式
-
-## [0.1.0] - 2025-06-26
+## [asset-core 0.1.0] - 2025-06-26
 
 ### 新增
+
 - **核心交易資料基礎設施**: 建立完整的金融數據處理平台
 - **完整的資料模型系統**: 專業級金融資料結構
 - **企業級觀測性平台**: 全方位系統監控和調試
 - **高效能儲存抽象層**: 彈性的資料持久化方案
 
 ### 核心功能模組
+
 - **配置管理系統**: 基於 Pydantic 的統一配置框架
 - **事件系統**: 類型安全的事件處理架構
 - **網路通訊層**: 穩定的 WebSocket 連線管理
 - **例外處理框架**: 層次化的錯誤管理
 
 ### 開發和運維支援
+
 - **完整的 CI/CD 管道**: 自動化開發流程
 - **開發工具生態**: 提升開發效率的完整工具鏈
 - **測試框架**: 多層級的品質保證體系
 
 ### 設計模式和最佳實踐
+
 - **架構原則**: 確保系統可擴展性和可維護性
 - **程式碼品質**: 採用現代 Python 開發標準
 
 ### 範例和文檔
+
 - **實用程式碼範例**: 展示最佳使用方式
 - **完整安裝指南**: 詳細的環境設定說明
 
 ### 技術特點
+
 - **現代化架構**: 採用最新的 Python 技術棧
 - **企業級穩定性**: 完整的錯誤處理和恢復機制
 - **高效能設計**: 非同步處理和批次實作最佳化
@@ -192,13 +282,15 @@
 - **監控友善**: 完整的觀測性支援，便於生產環境運維
 
 ### 開發者影響
+
 - **現代化工具鏈**: 提供完整的開發、測試、部署支援
 - **清晰的架構指導**: 分層設計原則確保程式碼組織清晰
 - **豐富的範例**: 實用的程式碼範例加速開發進度
 - **完整的測試覆蓋**: 多層級測試確保程式碼品質
 - **靈活的擴展機制**: 支援各種自訂需求和未來擴展
 
----
-
 ### Git 提交參考
-- 主要變更: [cf44928](https://github.com/tommot20077/tradingview-chart/commit/cf4492823362be226c022de17831cfcbad89a44b) - feat: 重新架構測試框架並現代化核心系統
+
+-
+主要變更: [cf44928](https://github.com/tommot20077/tradingview-chart/commit/cf4492823362be226c022de17831cfcbad89a44b) -
+feat: 重新架構測試框架並現代化核心系統

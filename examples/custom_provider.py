@@ -15,9 +15,9 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from src.asset_core.asset_core.models.kline import Kline, KlineInterval
-from src.asset_core.asset_core.models.trade import Trade, TradeSide
-from src.asset_core.asset_core.providers.base import AbstractDataProvider
+from asset_core.models.kline import Kline, KlineInterval
+from asset_core.models.trade import Trade, TradeSide
+from asset_core.providers.base import AbstractDataProvider
 
 
 class CSVDataProvider(AbstractDataProvider):

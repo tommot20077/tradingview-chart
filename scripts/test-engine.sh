@@ -157,7 +157,7 @@ check_uv() {
 # Run quality checks (linting and type checking)
 run_quality_checks() {
     print_status "Running Quality Checks"
-    echo "======================"
+    echo "======================="
     
     # Run linting
     print_status "Running linting (ruff check)"

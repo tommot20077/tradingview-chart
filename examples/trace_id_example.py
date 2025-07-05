@@ -12,18 +12,18 @@ This example shows how trace IDs are automatically propagated through:
 import asyncio
 from datetime import datetime
 
-from src.asset_core.asset_core.exceptions import (
+from asset_core.exceptions import (
     CoreError,
     DataValidationError,
     install_global_exception_handler,
     uninstall_global_exception_handler,
 )
-from src.asset_core.asset_core.observability.logging import (
+from asset_core.observability.logging import (
     TraceableLogger,
     log_exception_with_context,
     setup_logging,
 )
-from src.asset_core.asset_core.observability.trace_id import (
+from asset_core.observability.trace_id import (
     TraceContext,
     TraceIdMiddleware,
     ensure_trace_id,
